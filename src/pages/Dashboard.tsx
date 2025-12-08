@@ -1,0 +1,253 @@
+import { useState } from "react";
+import { Link } from "react-router-dom";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { 
+  Globe, 
+  Wallet, 
+  ShoppingCart, 
+  TrendingUp, 
+  Plus,
+  LayoutDashboard,
+  Package,
+  History,
+  Settings,
+  Users,
+  LogOut,
+  Bell,
+  ChevronRight,
+  Clock,
+  CheckCircle2,
+  AlertCircle
+} from "lucide-react";
+
+const sidebarItems = [
+  { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard", active: true },
+  { icon: ShoppingCart, label: "New Order", href: "/dashboard/order" },
+  { icon: Package, label: "My Orders", href: "/dashboard/orders" },
+  { icon: History, label: "Transactions", href: "/dashboard/transactions" },
+  { icon: Wallet, label: "Add Funds", href: "/dashboard/funds" },
+  { icon: Users, label: "Reseller Panel", href: "/dashboard/reseller", badge: "PRO" },
+  { icon: Settings, label: "Settings", href: "/dashboard/settings" },
+];
+
+const recentOrders = [
+  { id: "#ORD-7829", service: "Instagram Followers", quantity: "5,000", status: "completed", date: "2 hours ago" },
+  { id: "#ORD-7828", service: "YouTube Views", quantity: "10,000", status: "processing", date: "5 hours ago" },
+  { id: "#ORD-7827", service: "Telegram Members", quantity: "2,500", status: "completed", date: "1 day ago" },
+  { id: "#ORD-7826", service: "TikTok Likes", quantity: "8,000", status: "pending", date: "1 day ago" },
+];
+
+const Dashboard = () => {
+  const [balance] = useState(125.50);
+  const [totalOrders] = useState(47);
+  const [spentThisMonth] = useState(890.00);
+  const [region] = useState("United States");
+
+  return (
+    <div className="min-h-screen bg-background flex">
+      {/* Sidebar */}
+      <aside className="hidden lg:flex flex-col w-64 border-r border-border/50 bg-card/30">
+        {/* Logo */}
+        <div className="p-6 border-b border-border/50">
+          <Link to="/" className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-primary to-primary-glow flex items-center justify-center">
+              <Globe className="h-5 w-5 text-primary-foreground" />
+            </div>
+            <div className="flex flex-col">
+              <span className="font-display text-lg font-bold text-foreground">GLAVIOR</span>
+              <span className="text-[10px] font-medium text-primary tracking-widest">SOCIAL</span>
+            </div>
+          </Link>
+        </div>
+
+        {/* Navigation */}
+        <nav className="flex-1 p-4 space-y-1">
+          {sidebarItems.map((item) => (
+            <Link
+              key={item.label}
+              to={item.href}
+              className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                item.active 
+                  ? "bg-primary/10 text-primary border border-primary/20" 
+                  : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+              }`}
+            >
+              <item.icon className="h-5 w-5" />
+              <span className="font-medium">{item.label}</span>
+              {item.badge && (
+                <Badge variant="gold" className="ml-auto text-[10px]">{item.badge}</Badge>
+              )}
+            </Link>
+          ))}
+        </nav>
+
+        {/* User Section */}
+        <div className="p-4 border-t border-border/50">
+          <div className="flex items-center gap-3 px-4 py-3">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center text-primary-foreground font-bold">
+              JD
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-medium text-foreground truncate">John Doe</p>
+              <p className="text-xs text-muted-foreground truncate">john@example.com</p>
+            </div>
+          </div>
+          <Button variant="ghost" size="sm" className="w-full justify-start text-muted-foreground mt-2">
+            <LogOut className="h-4 w-4 mr-2" />
+            Sign Out
+          </Button>
+        </div>
+      </aside>
+
+      {/* Main Content */}
+      <main className="flex-1 overflow-auto">
+        {/* Header */}
+        <header className="sticky top-0 z-40 border-b border-border/50 bg-background/80 backdrop-blur-xl">
+          <div className="flex items-center justify-between px-6 py-4">
+            <div>
+              <h1 className="font-display text-2xl font-bold text-foreground">Dashboard</h1>
+              <p className="text-sm text-muted-foreground">Welcome back, John</p>
+            </div>
+            <div className="flex items-center gap-4">
+              <Button variant="glass" size="icon" className="relative">
+                <Bell className="h-5 w-5" />
+                <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-destructive text-[10px] flex items-center justify-center text-destructive-foreground">3</span>
+              </Button>
+              <Badge variant="cyan" className="hidden sm:flex items-center gap-2">
+                <Globe className="h-3 w-3" />
+                {region}
+              </Badge>
+            </div>
+          </div>
+        </header>
+
+        <div className="p-6 space-y-6">
+          {/* Stats Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <Card variant="glass" className="group">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+                    <Wallet className="h-6 w-6 text-primary" />
+                  </div>
+                  <Button variant="ghost" size="sm" className="text-primary">
+                    <Plus className="h-4 w-4 mr-1" />
+                    Add
+                  </Button>
+                </div>
+                <p className="text-sm text-muted-foreground mb-1">Wallet Balance</p>
+                <p className="text-3xl font-bold text-gradient-cyan">${balance.toFixed(2)}</p>
+              </CardContent>
+            </Card>
+
+            <Card variant="glass">
+              <CardContent className="p-6">
+                <div className="w-12 h-12 rounded-xl bg-accent/10 flex items-center justify-center mb-4">
+                  <ShoppingCart className="h-6 w-6 text-accent" />
+                </div>
+                <p className="text-sm text-muted-foreground mb-1">Total Orders</p>
+                <p className="text-3xl font-bold text-foreground">{totalOrders}</p>
+              </CardContent>
+            </Card>
+
+            <Card variant="glass">
+              <CardContent className="p-6">
+                <div className="w-12 h-12 rounded-xl bg-emerald-500/10 flex items-center justify-center mb-4">
+                  <TrendingUp className="h-6 w-6 text-emerald-500" />
+                </div>
+                <p className="text-sm text-muted-foreground mb-1">Spent This Month</p>
+                <p className="text-3xl font-bold text-foreground">${spentThisMonth.toFixed(2)}</p>
+              </CardContent>
+            </Card>
+
+            <Card variant="glass">
+              <CardContent className="p-6">
+                <div className="w-12 h-12 rounded-xl bg-secondary flex items-center justify-center mb-4">
+                  <Globe className="h-6 w-6 text-muted-foreground" />
+                </div>
+                <p className="text-sm text-muted-foreground mb-1">Your Region</p>
+                <p className="text-xl font-bold text-foreground">{region}</p>
+                <p className="text-xs text-primary">Tier A Pricing</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Quick Actions & Recent Orders */}
+          <div className="grid lg:grid-cols-3 gap-6">
+            {/* Quick Actions */}
+            <Card variant="glass">
+              <CardHeader>
+                <CardTitle className="text-lg">Quick Actions</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <Button variant="hero" className="w-full justify-between">
+                  New Order
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+                <Button variant="gold" className="w-full justify-between">
+                  Add Funds
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+                <Button variant="glass" className="w-full justify-between">
+                  View All Services
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </CardContent>
+            </Card>
+
+            {/* Recent Orders */}
+            <Card variant="glass" className="lg:col-span-2">
+              <CardHeader className="flex-row items-center justify-between">
+                <CardTitle className="text-lg">Recent Orders</CardTitle>
+                <Button variant="ghost" size="sm" className="text-primary">
+                  View All
+                </Button>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {recentOrders.map((order) => (
+                    <div key={order.id} className="flex items-center justify-between p-4 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors">
+                      <div className="flex items-center gap-4">
+                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                          order.status === 'completed' ? 'bg-emerald-500/10' :
+                          order.status === 'processing' ? 'bg-primary/10' : 'bg-accent/10'
+                        }`}>
+                          {order.status === 'completed' ? (
+                            <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                          ) : order.status === 'processing' ? (
+                            <Clock className="h-5 w-5 text-primary" />
+                          ) : (
+                            <AlertCircle className="h-5 w-5 text-accent" />
+                          )}
+                        </div>
+                        <div>
+                          <p className="font-medium text-foreground">{order.service}</p>
+                          <p className="text-sm text-muted-foreground">{order.id} • {order.quantity}</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <Badge 
+                          variant={
+                            order.status === 'completed' ? 'success' :
+                            order.status === 'processing' ? 'cyan' : 'gold'
+                          }
+                        >
+                          {order.status}
+                        </Badge>
+                        <p className="text-xs text-muted-foreground mt-1">{order.date}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+};
+
+export default Dashboard;
