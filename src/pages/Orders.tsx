@@ -18,7 +18,8 @@ import {
   Copy,
   Filter,
   Download,
-  ShoppingCart
+  ShoppingCart,
+  Zap
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -30,6 +31,7 @@ const statusConfig: Record<string, { label: string; variant: "default" | "second
   pending: { label: "Pending", variant: "outline", icon: AlertCircle },
   cancelled: { label: "Cancelled", variant: "destructive", icon: XCircle },
   partial: { label: "Partial", variant: "secondary", icon: AlertCircle },
+  in_progress: { label: "In Progress", variant: "secondary", icon: Zap },
 };
 
 const Orders = () => {
@@ -45,8 +47,54 @@ const Orders = () => {
   useEffect(() => {
     if (user) {
       fetchOrders();
+      setupRealtimeSubscription();
     }
+
+    return () => {
+      // Cleanup subscription
+      supabase.removeAllChannels();
+    };
   }, [user]);
+
+  const setupRealtimeSubscription = () => {
+    if (!user) return;
+
+    const channel = supabase
+      .channel('orders-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'orders',
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          console.log('Order update received:', payload);
+          
+          if (payload.eventType === 'INSERT') {
+            setOrders(prev => [payload.new as any, ...prev]);
+            toast({
+              title: "New Order",
+              description: `Order #${(payload.new as any).order_number} has been created.`,
+            });
+          } else if (payload.eventType === 'UPDATE') {
+            setOrders(prev => prev.map(order => 
+              order.id === payload.new.id ? { ...order, ...payload.new } : order
+            ));
+            toast({
+              title: "Order Updated",
+              description: `Order #${(payload.new as any).order_number} status changed to ${(payload.new as any).status}.`,
+            });
+          } else if (payload.eventType === 'DELETE') {
+            setOrders(prev => prev.filter(order => order.id !== payload.old.id));
+          }
+        }
+      )
+      .subscribe();
+
+    return channel;
+  };
 
   const fetchOrders = async () => {
     if (!user) return;
@@ -71,15 +119,15 @@ const Orders = () => {
   };
 
   const filteredOrders = orders.filter(order => {
-    const matchesSearch = order.order_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          order.link.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = order.order_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          order.link?.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = statusFilter === "all" || order.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
 
   const handleRefresh = async (orderId: string) => {
     setRefreshing(orderId);
-    // Simulate status refresh
+    // Simulate status refresh from provider
     setTimeout(() => {
       setRefreshing(null);
       toast({
@@ -142,6 +190,40 @@ const Orders = () => {
   return (
     <DashboardLayout title="Orders" subtitle="Track and manage your orders">
       <div className="space-y-6 animate-fade-in">
+        {/* Stats Summary */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <Card className="border-border/30 bg-card/60">
+            <CardContent className="p-4">
+              <p className="text-xs text-muted-foreground">Total Orders</p>
+              <p className="text-2xl font-display font-bold">{orders.length}</p>
+            </CardContent>
+          </Card>
+          <Card className="border-border/30 bg-card/60">
+            <CardContent className="p-4">
+              <p className="text-xs text-muted-foreground">Pending</p>
+              <p className="text-2xl font-display font-bold text-yellow-500">
+                {orders.filter(o => o.status === 'pending').length}
+              </p>
+            </CardContent>
+          </Card>
+          <Card className="border-border/30 bg-card/60">
+            <CardContent className="p-4">
+              <p className="text-xs text-muted-foreground">Processing</p>
+              <p className="text-2xl font-display font-bold text-blue-500">
+                {orders.filter(o => o.status === 'processing' || o.status === 'in_progress').length}
+              </p>
+            </CardContent>
+          </Card>
+          <Card className="border-border/30 bg-card/60">
+            <CardContent className="p-4">
+              <p className="text-xs text-muted-foreground">Completed</p>
+              <p className="text-2xl font-display font-bold text-success">
+                {orders.filter(o => o.status === 'completed').length}
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+
         {/* Filters */}
         <Card className="border-border/30 bg-card/60 backdrop-blur-sm">
           <CardContent className="p-4">
@@ -165,6 +247,7 @@ const Orders = () => {
                     <SelectItem value="all">All Status</SelectItem>
                     <SelectItem value="pending">Pending</SelectItem>
                     <SelectItem value="processing">Processing</SelectItem>
+                    <SelectItem value="in_progress">In Progress</SelectItem>
                     <SelectItem value="completed">Completed</SelectItem>
                     <SelectItem value="partial">Partial</SelectItem>
                     <SelectItem value="cancelled">Cancelled</SelectItem>
@@ -178,6 +261,15 @@ const Orders = () => {
             </div>
           </CardContent>
         </Card>
+
+        {/* Realtime Indicator */}
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-success"></span>
+          </span>
+          Live updates enabled
+        </div>
 
         {/* Orders Table */}
         <Card className="border-border/30 bg-card/60 backdrop-blur-sm overflow-hidden">
@@ -241,13 +333,13 @@ const Orders = () => {
                               <ExternalLink className="h-3 w-3 flex-shrink-0" />
                               <span className="truncate">{order.link}</span>
                             </a>
-                            <p className="text-xs text-muted-foreground mt-1">Qty: {order.quantity.toLocaleString()}</p>
+                            <p className="text-xs text-muted-foreground mt-1">Qty: {order.quantity?.toLocaleString()}</p>
                           </td>
                           <td className="p-4 hidden md:table-cell">
                             <div className="space-y-1.5">
                               <div className="flex items-center justify-between text-xs">
                                 <span className="text-muted-foreground">
-                                  {(order.quantity - (order.remains || 0)).toLocaleString()} / {order.quantity.toLocaleString()}
+                                  {(order.quantity - (order.remains || 0)).toLocaleString()} / {order.quantity?.toLocaleString()}
                                 </span>
                                 <span className="text-primary font-mono">{progress}%</span>
                               </div>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,9 @@ import {
   AlertCircle
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
+import { useNavigate } from "react-router-dom";
 
 const categories = [
   { id: "instagram", name: "Instagram" },
@@ -32,20 +35,10 @@ const categories = [
   { id: "twitter", name: "X (Twitter)" },
 ];
 
-const services = [
-  { id: 1, category: "instagram", name: "Instagram Followers - Premium", price: 2.50, min: 100, max: 50000, speed: "5K/day", refill: true },
-  { id: 2, category: "instagram", name: "Instagram Likes - Real", price: 1.20, min: 50, max: 100000, speed: "10K/day", refill: false },
-  { id: 3, category: "instagram", name: "Instagram Views - Reels", price: 0.40, min: 100, max: 1000000, speed: "50K/day", refill: false },
-  { id: 4, category: "youtube", name: "YouTube Views - High Retention", price: 4.00, min: 500, max: 100000, speed: "10K/day", refill: false },
-  { id: 5, category: "youtube", name: "YouTube Subscribers", price: 10.00, min: 100, max: 10000, speed: "1K/day", refill: true },
-  { id: 6, category: "tiktok", name: "TikTok Followers", price: 3.50, min: 100, max: 50000, speed: "5K/day", refill: true },
-  { id: 7, category: "telegram", name: "Telegram Members", price: 6.00, min: 100, max: 50000, speed: "3K/day", refill: false },
-  { id: 8, category: "twitter", name: "X Followers - Premium", price: 5.00, min: 100, max: 25000, speed: "2K/day", refill: true },
-];
-
 const NewOrder = () => {
   const [selectedCategory, setSelectedCategory] = useState("");
   const [selectedService, setSelectedService] = useState("");
+  const [services, setServices] = useState<any[]>([]);
   const [link, setLink] = useState("");
   const [quantity, setQuantity] = useState("");
   const [dripFeed, setDripFeed] = useState(false);
@@ -54,18 +47,77 @@ const NewOrder = () => {
   const [autoRefill, setAutoRefill] = useState(false);
   const [massOrderText, setMassOrderText] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [priceMultiplier, setPriceMultiplier] = useState(1);
+  const [loadingServices, setLoadingServices] = useState(true);
   const { toast } = useToast();
+  const { user, profile, wallet, refreshProfile } = useAuth();
+  const navigate = useNavigate();
 
-  const filteredServices = services.filter(s => !selectedCategory || s.category === selectedCategory);
-  const currentService = services.find(s => s.id.toString() === selectedService);
+  useEffect(() => {
+    fetchServices();
+    fetchRegionalMultiplier();
+  }, [profile]);
 
-  const calculateTotal = () => {
-    if (!currentService || !quantity) return 0;
-    const qty = parseInt(quantity) || 0;
-    return (currentService.price * qty / 1000).toFixed(2);
+  const fetchServices = async () => {
+    setLoadingServices(true);
+    const { data, error } = await supabase
+      .from('services')
+      .select('*')
+      .eq('is_active', true)
+      .order('service_id', { ascending: true });
+
+    if (data) {
+      setServices(data);
+    }
+    setLoadingServices(false);
   };
 
-  const handleSingleOrder = () => {
+  const fetchRegionalMultiplier = async () => {
+    if (!profile?.country_code) return;
+
+    // Get the regional pricing for this user's country (done silently)
+    const { data: regions } = await supabase
+      .from('regional_pricing')
+      .select('*');
+
+    if (regions) {
+      for (const region of regions) {
+        if (region.countries?.includes(profile.country_code)) {
+          setPriceMultiplier(Number(region.multiplier));
+          break;
+        }
+      }
+    }
+  };
+
+  const filteredServices = services.filter(s => !selectedCategory || s.platform?.toLowerCase() === selectedCategory);
+  const currentService = services.find(s => s.id === selectedService);
+
+  // Calculate price with hidden regional multiplier
+  const calculateDisplayPrice = (basePrice: number) => {
+    return (Number(basePrice) * priceMultiplier).toFixed(2);
+  };
+
+  const calculateTotal = () => {
+    if (!currentService || !quantity) return "0.00";
+    const qty = parseInt(quantity) || 0;
+    const basePrice = Number(currentService.base_price);
+    // Apply hidden regional multiplier
+    const adjustedPrice = basePrice * priceMultiplier;
+    return ((adjustedPrice * qty) / 1000).toFixed(2);
+  };
+
+  const handleSingleOrder = async () => {
+    if (!user) {
+      toast({
+        title: "Not Authenticated",
+        description: "Please sign in to place an order.",
+        variant: "destructive",
+      });
+      navigate('/auth');
+      return;
+    }
+
     if (!selectedService || !link || !quantity) {
       toast({
         title: "Missing Information",
@@ -75,20 +127,90 @@ const NewOrder = () => {
       return;
     }
 
+    const qty = parseInt(quantity) || 0;
+    if (currentService && (qty < currentService.min_quantity || qty > currentService.max_quantity)) {
+      toast({
+        title: "Invalid Quantity",
+        description: `Quantity must be between ${currentService.min_quantity} and ${currentService.max_quantity}.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const totalPrice = parseFloat(calculateTotal());
+    const balance = Number(wallet?.balance || 0);
+
+    if (totalPrice > balance) {
+      toast({
+        title: "Insufficient Balance",
+        description: `You need $${totalPrice.toFixed(2)} but only have $${balance.toFixed(2)}. Please add funds.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsSubmitting(true);
-    setTimeout(() => {
-      setIsSubmitting(false);
+
+    try {
+      // Create order - order_number is auto-generated by database
+      const { data: order, error: orderError } = await supabase
+        .from('orders')
+        .insert({
+          user_id: user.id,
+          service_id: selectedService,
+          link: link,
+          quantity: qty,
+          price: totalPrice,
+          status: 'pending',
+          order_number: `ORD-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
+          dripfeed: dripFeed,
+          dripfeed_interval: dripFeed ? parseInt(dripFeedInterval) || 60 : null,
+          auto_refill: autoRefill,
+        })
+        .select()
+        .single();
+
+      if (orderError) throw orderError;
+
+      // Create transaction
+      await supabase
+        .from('transactions')
+        .insert({
+          user_id: user.id,
+          type: 'order',
+          amount: -totalPrice,
+          status: 'completed',
+          description: `Order #${order.order_number}`,
+          reference_id: order.id,
+        });
+
+      // Refresh wallet balance
+      await refreshProfile();
+
       toast({
         title: "Order Placed Successfully!",
-        description: `Order #ORD-${Math.floor(Math.random() * 10000)} has been submitted.`,
+        description: `Order #${order.order_number} has been submitted.`,
       });
+
       setLink("");
       setQuantity("");
       setSelectedService("");
-    }, 1500);
+      setDripFeed(false);
+      setAutoRefill(false);
+
+    } catch (error: any) {
+      console.error('Order error:', error);
+      toast({
+        title: "Order Failed",
+        description: error.message || "Failed to place order. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleMassOrder = () => {
+  const handleMassOrder = async () => {
     if (!massOrderText.trim()) {
       toast({
         title: "No Orders",
@@ -98,21 +220,83 @@ const NewOrder = () => {
       return;
     }
 
-    setIsSubmitting(true);
-    setTimeout(() => {
-      setIsSubmitting(false);
-      const lines = massOrderText.trim().split("\n").filter(l => l.trim());
+    if (!user) {
       toast({
-        title: "Mass Order Submitted!",
-        description: `${lines.length} orders have been queued for processing.`,
+        title: "Not Authenticated",
+        description: "Please sign in to place orders.",
+        variant: "destructive",
       });
-      setMassOrderText("");
-    }, 2000);
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    const lines = massOrderText.trim().split("\n").filter(l => l.trim());
+    let successCount = 0;
+    let failedCount = 0;
+
+    for (const line of lines) {
+      const parts = line.split("|").map(p => p.trim());
+      if (parts.length >= 3) {
+        const [serviceId, orderLink, orderQuantity] = parts;
+        const service = services.find(s => s.service_id.toString() === serviceId);
+        
+        if (service) {
+          const qty = parseInt(orderQuantity);
+          const basePrice = Number(service.base_price);
+          const orderPrice = ((basePrice * priceMultiplier * qty) / 1000);
+
+          try {
+            await supabase
+              .from('orders')
+              .insert({
+                user_id: user.id,
+                service_id: service.id,
+                link: orderLink,
+                quantity: qty,
+                price: orderPrice,
+                status: 'pending',
+                order_number: `ORD-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
+              });
+            successCount++;
+          } catch {
+            failedCount++;
+          }
+        } else {
+          failedCount++;
+        }
+      }
+    }
+
+    await refreshProfile();
+
+    toast({
+      title: "Mass Order Submitted!",
+      description: `${successCount} orders placed successfully. ${failedCount > 0 ? `${failedCount} failed.` : ''}`,
+    });
+
+    setMassOrderText("");
+    setIsSubmitting(false);
   };
 
   return (
     <DashboardLayout title="New Order" subtitle="Place single or bulk orders">
       <div className="max-w-4xl mx-auto space-y-6 animate-fade-in">
+        {/* Balance Display */}
+        <Card className="border-primary/20 bg-gradient-to-r from-primary/5 to-accent/5">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div>
+              <p className="text-sm text-muted-foreground">Available Balance</p>
+              <p className="text-2xl font-display font-bold text-gradient-cyan">
+                ${Number(wallet?.balance || 0).toFixed(2)}
+              </p>
+            </div>
+            <Button variant="outline" onClick={() => navigate('/dashboard/funds')}>
+              Add Funds
+            </Button>
+          </CardContent>
+        </Card>
+
         <Tabs defaultValue="single" className="w-full">
           <TabsList className="grid w-full grid-cols-2 bg-secondary/30 p-1">
             <TabsTrigger value="single" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-medium">
@@ -154,14 +338,16 @@ const NewOrder = () => {
                   <Label>Service</Label>
                   <Select value={selectedService} onValueChange={setSelectedService}>
                     <SelectTrigger className="bg-secondary/30 border-border/30">
-                      <SelectValue placeholder="Select a service" />
+                      <SelectValue placeholder={loadingServices ? "Loading services..." : "Select a service"} />
                     </SelectTrigger>
                     <SelectContent>
                       {filteredServices.map((service) => (
-                        <SelectItem key={service.id} value={service.id.toString()}>
+                        <SelectItem key={service.id} value={service.id}>
                           <div className="flex items-center justify-between w-full gap-4">
                             <span>{service.name}</span>
-                            <span className="text-primary font-mono text-xs">${service.price}/1K</span>
+                            <span className="text-primary font-mono text-xs">
+                              ${calculateDisplayPrice(service.base_price)}/1K
+                            </span>
                           </div>
                         </SelectItem>
                       ))}
@@ -173,15 +359,17 @@ const NewOrder = () => {
                 {currentService && (
                   <div className="p-4 rounded-lg bg-secondary/20 border border-border/30 space-y-3 animate-fade-in">
                     <div className="flex flex-wrap gap-3">
-                      <Badge variant="outline" className="gap-1">
-                        <Zap className="h-3 w-3 text-primary" />
-                        {currentService.speed}
-                      </Badge>
+                      {currentService.speed_estimate && (
+                        <Badge variant="outline" className="gap-1">
+                          <Zap className="h-3 w-3 text-primary" />
+                          {currentService.speed_estimate}
+                        </Badge>
+                      )}
                       <Badge variant="outline" className="gap-1">
                         <Hash className="h-3 w-3" />
-                        Min: {currentService.min} - Max: {currentService.max.toLocaleString()}
+                        Min: {currentService.min_quantity} - Max: {currentService.max_quantity?.toLocaleString()}
                       </Badge>
-                      {currentService.refill && (
+                      {currentService.refill_supported && (
                         <Badge variant="outline" className="gap-1 text-success border-success/30">
                           <RefreshCw className="h-3 w-3" />
                           Drop protection included
@@ -218,58 +406,60 @@ const NewOrder = () => {
                       value={quantity}
                       onChange={(e) => setQuantity(e.target.value)}
                       className="pl-10 bg-secondary/30 border-border/30"
-                      min={currentService?.min || 0}
-                      max={currentService?.max || 0}
+                      min={currentService?.min_quantity || 0}
+                      max={currentService?.max_quantity || 0}
                     />
                   </div>
                   {currentService && (
                     <p className="text-xs text-muted-foreground">
-                      Min: {currentService.min.toLocaleString()} - Max: {currentService.max.toLocaleString()}
+                      Min: {currentService.min_quantity?.toLocaleString()} - Max: {currentService.max_quantity?.toLocaleString()}
                     </p>
                   )}
                 </div>
 
                 {/* Drip-Feed */}
-                <div className="space-y-4 p-4 rounded-lg bg-secondary/10 border border-border/30">
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label className="flex items-center gap-2">
-                        <Clock className="h-4 w-4 text-primary" />
-                        Drip-Feed
-                      </Label>
-                      <p className="text-xs text-muted-foreground">Gradually deliver over time</p>
+                {currentService?.dripfeed_supported && (
+                  <div className="space-y-4 p-4 rounded-lg bg-secondary/10 border border-border/30">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label className="flex items-center gap-2">
+                          <Clock className="h-4 w-4 text-primary" />
+                          Drip-Feed
+                        </Label>
+                        <p className="text-xs text-muted-foreground">Gradually deliver over time</p>
+                      </div>
+                      <Switch checked={dripFeed} onCheckedChange={setDripFeed} />
                     </div>
-                    <Switch checked={dripFeed} onCheckedChange={setDripFeed} />
-                  </div>
 
-                  {dripFeed && (
-                    <div className="grid grid-cols-2 gap-4 pt-2 animate-fade-in">
-                      <div className="space-y-2">
-                        <Label className="text-xs">Number of Runs</Label>
-                        <Input
-                          type="number"
-                          placeholder="10"
-                          value={dripFeedRuns}
-                          onChange={(e) => setDripFeedRuns(e.target.value)}
-                          className="bg-secondary/30 border-border/30"
-                        />
+                    {dripFeed && (
+                      <div className="grid grid-cols-2 gap-4 pt-2 animate-fade-in">
+                        <div className="space-y-2">
+                          <Label className="text-xs">Number of Runs</Label>
+                          <Input
+                            type="number"
+                            placeholder="10"
+                            value={dripFeedRuns}
+                            onChange={(e) => setDripFeedRuns(e.target.value)}
+                            className="bg-secondary/30 border-border/30"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-xs">Interval (minutes)</Label>
+                          <Input
+                            type="number"
+                            placeholder="60"
+                            value={dripFeedInterval}
+                            onChange={(e) => setDripFeedInterval(e.target.value)}
+                            className="bg-secondary/30 border-border/30"
+                          />
+                        </div>
                       </div>
-                      <div className="space-y-2">
-                        <Label className="text-xs">Interval (minutes)</Label>
-                        <Input
-                          type="number"
-                          placeholder="60"
-                          value={dripFeedInterval}
-                          onChange={(e) => setDripFeedInterval(e.target.value)}
-                          className="bg-secondary/30 border-border/30"
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Auto-Refill */}
-                {currentService?.refill && (
+                {currentService?.refill_supported && (
                   <div className="flex items-center justify-between p-4 rounded-lg bg-success/5 border border-success/20">
                     <div className="space-y-0.5">
                       <Label className="flex items-center gap-2">
@@ -302,7 +492,9 @@ const NewOrder = () => {
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Price per 1K</span>
-                    <span className="text-foreground">${currentService?.price.toFixed(2) || "0.00"}</span>
+                    <span className="text-foreground">
+                      ${currentService ? calculateDisplayPrice(currentService.base_price) : "0.00"}
+                    </span>
                   </div>
                   <div className="border-t border-border/30 my-3" />
                   <div className="flex justify-between items-center">
@@ -315,7 +507,7 @@ const NewOrder = () => {
                 <Button 
                   className="w-full mt-6 h-12 text-base font-semibold" 
                   onClick={handleSingleOrder}
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || !currentService || !link || !quantity}
                 >
                   {isSubmitting ? (
                     <>

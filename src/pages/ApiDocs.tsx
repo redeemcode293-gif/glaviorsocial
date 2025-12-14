@@ -161,16 +161,15 @@ const ApiDocs = () => {
   const [apiKey, setApiKey] = useState("");
   const [showKey, setShowKey] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
-  const [loading, setLoading] = useState(true);
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
 
   useEffect(() => {
     if (user) {
+      // Generate API key based on user ID
       const keyHash = btoa(user.id).substring(0, 32);
       setApiKey(`sk_live_${keyHash}`);
     }
-    setLoading(false);
   }, [user]);
 
   const handleCopyKey = () => {
@@ -274,7 +273,7 @@ echo $response;`;
 const data = await response.json();
 console.log(data);`;
 
-  if (loading) {
+  if (authLoading) {
     return (
       <DashboardLayout title="API Documentation" subtitle="Integrate with our powerful API">
         <div className="space-y-6">
