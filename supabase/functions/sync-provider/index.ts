@@ -131,21 +131,32 @@ serve(async (req) => {
         // Determine platform from category
         let platform = 'Other';
         const categoryLower = (service.category || '').toLowerCase();
-        if (categoryLower.includes('instagram')) platform = 'Instagram';
-        else if (categoryLower.includes('youtube')) platform = 'YouTube';
-        else if (categoryLower.includes('tiktok')) platform = 'TikTok';
-        else if (categoryLower.includes('telegram')) platform = 'Telegram';
-        else if (categoryLower.includes('twitter') || categoryLower.includes('x ')) platform = 'X';
-        else if (categoryLower.includes('facebook')) platform = 'Facebook';
-        else if (categoryLower.includes('spotify')) platform = 'Spotify';
-        else if (categoryLower.includes('discord')) platform = 'Discord';
+        const serviceName = (service.name || '').toLowerCase();
+        
+        if (categoryLower.includes('instagram') || serviceName.includes('instagram')) platform = 'Instagram';
+        else if (categoryLower.includes('youtube') || serviceName.includes('youtube')) platform = 'YouTube';
+        else if (categoryLower.includes('tiktok') || serviceName.includes('tiktok')) platform = 'TikTok';
+        else if (categoryLower.includes('telegram') || serviceName.includes('telegram')) platform = 'Telegram';
+        else if (categoryLower.includes('twitter') || categoryLower.includes('x ') || serviceName.includes('twitter')) platform = 'X';
+        else if (categoryLower.includes('facebook') || serviceName.includes('facebook')) platform = 'Facebook';
+        else if (categoryLower.includes('spotify') || serviceName.includes('spotify')) platform = 'Spotify';
+        else if (categoryLower.includes('discord') || serviceName.includes('discord')) platform = 'Discord';
+        else if (categoryLower.includes('twitch') || serviceName.includes('twitch')) platform = 'Twitch';
+        else if (categoryLower.includes('snapchat') || serviceName.includes('snapchat')) platform = 'Snapchat';
+        else if (categoryLower.includes('whatsapp') || serviceName.includes('whatsapp')) platform = 'WhatsApp';
+        else if (categoryLower.includes('threads') || serviceName.includes('threads')) platform = 'Threads';
+        else if (categoryLower.includes('linkedin') || serviceName.includes('linkedin')) platform = 'LinkedIn';
+        else if (categoryLower.includes('pinterest') || serviceName.includes('pinterest')) platform = 'Pinterest';
+
+        // Generate unique internal service ID (different from provider's)
+        const internalServiceId = Math.floor(100000 + Math.random() * 900000);
 
         const serviceData = {
           name: service.name,
-          description: service.name,
+          description: service.description || service.name || 'No description available',
           platform,
           category: service.category || 'General',
-          service_id: parseInt(service.service) || Math.floor(Math.random() * 100000),
+          service_id: internalServiceId,
           provider_id: providerId,
           provider_service_id: String(service.service),
           provider_price: parseFloat(service.rate) || 0,

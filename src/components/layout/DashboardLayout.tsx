@@ -28,15 +28,15 @@ import { useAuth } from "@/hooks/useAuth";
 
 const sidebarItems = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
-  { icon: ShoppingCart, label: "New Order", href: "/new-order" },
-  { icon: Package, label: "Orders", href: "/orders" },
-  { icon: RefreshCw, label: "Refills", href: "/refills" },
-  { icon: Wallet, label: "Add Funds", href: "/add-funds" },
-  { icon: Store, label: "Reseller Panel", href: "/reseller-panel" },
-  { icon: Users, label: "Refer & Earn", href: "/referrals", badge: "NEW" },
-  { icon: Code2, label: "API", href: "/api-docs", badge: "PRO" },
-  { icon: Megaphone, label: "Updates", href: "/updates" },
-  { icon: HelpCircle, label: "Support", href: "/support" },
+  { icon: ShoppingCart, label: "New Order", href: "/dashboard/order" },
+  { icon: Package, label: "Orders", href: "/dashboard/orders" },
+  { icon: RefreshCw, label: "Refills", href: "/dashboard/refills" },
+  { icon: Wallet, label: "Add Funds", href: "/dashboard/funds" },
+  { icon: Store, label: "Reseller Panel", href: "/dashboard/reseller" },
+  { icon: Users, label: "Refer & Earn", href: "/dashboard/referrals", badge: "NEW" },
+  { icon: Code2, label: "API", href: "/dashboard/api", badge: "PRO" },
+  { icon: Megaphone, label: "Updates", href: "/dashboard/updates" },
+  { icon: HelpCircle, label: "Support", href: "/dashboard/support" },
 ];
 
 interface DashboardLayoutProps {
@@ -145,7 +145,7 @@ export const DashboardLayout = ({ children, title, subtitle }: DashboardLayoutPr
             <Button 
               size="sm" 
               className="w-full mt-2 h-7 text-xs"
-              onClick={() => navigate("/add-funds")}
+              onClick={() => navigate("/dashboard/funds")}
             >
               <Wallet className="h-3 w-3 mr-1" />
               Add Funds
@@ -208,7 +208,7 @@ export const DashboardLayout = ({ children, title, subtitle }: DashboardLayoutPr
         {/* User Section */}
         <div className="p-3 border-t border-border/30">
           <Link 
-            to="/settings"
+            to="/dashboard/settings"
             className="flex items-center gap-3 px-3 py-2 rounded-md text-sm text-muted-foreground hover:bg-secondary/50 hover:text-foreground transition-colors"
           >
             <Settings className="h-4 w-4" />
