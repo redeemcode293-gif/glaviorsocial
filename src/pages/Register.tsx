@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { Globe, Mail, Lock, ArrowRight, Eye, EyeOff, User, MapPin } from "lucide-react";
+import { Mail, Lock, ArrowRight, Eye, EyeOff, User } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 const Register = () => {
   const [showPassword, setShowPassword] = useState(false);
@@ -15,12 +15,33 @@ const Register = () => {
     password: "",
     confirmPassword: "",
   });
-  const [detectedCountry] = useState("United States");
-  const [pricingTier] = useState("Tier A");
+  const [isLoading, setIsLoading] = useState(false);
+  const navigate = useNavigate();
+  const { toast } = useToast();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Handle registration logic
+    
+    if (formData.password !== formData.confirmPassword) {
+      toast({
+        title: "Passwords don't match",
+        description: "Please make sure your passwords match.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsLoading(true);
+    
+    // Simulate registration
+    setTimeout(() => {
+      setIsLoading(false);
+      toast({
+        title: "Account created!",
+        description: "Welcome to Glavior Social.",
+      });
+      navigate("/dashboard");
+    }, 1000);
   };
 
   return (
@@ -28,44 +49,30 @@ const Register = () => {
       {/* Background Effects */}
       <div className="absolute inset-0 bg-hero-glow" />
       <div className="absolute inset-0 cyber-grid opacity-20" />
-      <div className="absolute top-1/4 right-1/4 w-64 h-64 bg-primary/10 rounded-full blur-[100px]" />
-      <div className="absolute bottom-1/4 left-1/4 w-96 h-96 bg-accent/10 rounded-full blur-[120px]" />
+      <div className="absolute top-1/4 right-1/4 w-64 h-64 bg-primary/5 rounded-full blur-[100px]" />
+      <div className="absolute bottom-1/4 left-1/4 w-96 h-96 bg-accent/5 rounded-full blur-[120px]" />
 
       <div className="w-full max-w-md relative z-10">
         {/* Logo */}
-        <Link to="/" className="flex items-center justify-center gap-3 mb-8">
-          <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-primary to-primary-glow flex items-center justify-center">
-            <Globe className="h-6 w-6 text-primary-foreground" />
+        <Link to="/" className="flex items-center justify-center gap-2 mb-8">
+          <div className="h-10 w-10 rounded-md bg-gradient-to-br from-primary to-accent flex items-center justify-center">
+            <span className="font-display text-sm font-bold text-primary-foreground">GS</span>
           </div>
-          <div className="flex flex-col">
-            <span className="font-display text-2xl font-bold text-foreground">GLAVIOR</span>
-            <span className="text-xs font-medium text-primary tracking-widest">SOCIAL</span>
+          <div className="flex flex-col leading-none">
+            <span className="font-display text-xl font-bold tracking-wider text-foreground">GLAVIOR</span>
+            <span className="text-[9px] font-semibold text-primary tracking-[0.2em]">SOCIAL</span>
           </div>
         </Link>
 
-        <Card variant="glass" className="border-border/50">
+        <Card className="border-border/30 bg-card/80 backdrop-blur-xl">
           <CardHeader className="text-center pb-4">
-            <CardTitle className="text-2xl">Create Account</CardTitle>
-            <CardDescription>Join 50,000+ creators worldwide</CardDescription>
+            <CardTitle className="font-display text-xl">Create Account</CardTitle>
+            <CardDescription>Join thousands of creators worldwide</CardDescription>
           </CardHeader>
           <CardContent>
-            {/* Region Detection Notice */}
-            <div className="mb-6 p-3 rounded-lg bg-primary/5 border border-primary/20">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <MapPin className="h-4 w-4 text-primary" />
-                  <span className="text-sm text-foreground">{detectedCountry}</span>
-                </div>
-                <Badge variant="cyan" className="text-[10px]">{pricingTier}</Badge>
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Regional pricing will be applied to your account
-              </p>
-            </div>
-
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="name">Full Name</Label>
+                <Label htmlFor="name" className="text-sm">Full Name</Label>
                 <div className="relative">
                   <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
@@ -74,13 +81,14 @@ const Register = () => {
                     placeholder="John Doe"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="pl-10 bg-secondary/50 border-border/50"
+                    className="pl-10 bg-secondary/30 border-border/30"
+                    required
                   />
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email" className="text-sm">Email</Label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
@@ -89,13 +97,14 @@ const Register = () => {
                     placeholder="you@example.com"
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="pl-10 bg-secondary/50 border-border/50"
+                    className="pl-10 bg-secondary/30 border-border/30"
+                    required
                   />
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
+                <Label htmlFor="password" className="text-sm">Password</Label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
@@ -104,7 +113,8 @@ const Register = () => {
                     placeholder="••••••••"
                     value={formData.password}
                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    className="pl-10 pr-10 bg-secondary/50 border-border/50"
+                    className="pl-10 pr-10 bg-secondary/30 border-border/30"
+                    required
                   />
                   <button
                     type="button"
@@ -117,7 +127,7 @@ const Register = () => {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="confirmPassword">Confirm Password</Label>
+                <Label htmlFor="confirmPassword" className="text-sm">Confirm Password</Label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
@@ -126,13 +136,14 @@ const Register = () => {
                     placeholder="••••••••"
                     value={formData.confirmPassword}
                     onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                    className="pl-10 bg-secondary/50 border-border/50"
+                    className="pl-10 bg-secondary/30 border-border/30"
+                    required
                   />
                 </div>
               </div>
 
-              <Button variant="hero" className="w-full" type="submit">
-                Create Account
+              <Button className="w-full" type="submit" disabled={isLoading}>
+                {isLoading ? "Creating account..." : "Create Account"}
                 <ArrowRight className="h-4 w-4 ml-2" />
               </Button>
             </form>
