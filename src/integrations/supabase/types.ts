@@ -139,6 +139,7 @@ export type Database = {
       }
       orders: {
         Row: {
+          applied_multiplier: number | null
           auto_refill: boolean | null
           created_at: string
           dripfeed: boolean | null
@@ -153,9 +154,11 @@ export type Database = {
           start_count: number | null
           status: string
           updated_at: string
+          user_country_code: string | null
           user_id: string
         }
         Insert: {
+          applied_multiplier?: number | null
           auto_refill?: boolean | null
           created_at?: string
           dripfeed?: boolean | null
@@ -170,9 +173,11 @@ export type Database = {
           start_count?: number | null
           status?: string
           updated_at?: string
+          user_country_code?: string | null
           user_id: string
         }
         Update: {
+          applied_multiplier?: number | null
           auto_refill?: boolean | null
           created_at?: string
           dripfeed?: boolean | null
@@ -187,12 +192,78 @@ export type Database = {
           start_count?: number | null
           status?: string
           updated_at?: string
+          user_country_code?: string | null
           user_id?: string
         }
         Relationships: [
           {
             foreignKeyName: "orders_service_id_fkey"
             columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "services"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      panel_services: {
+        Row: {
+          auto_refill_supported: boolean | null
+          category: string
+          created_at: string
+          description: string | null
+          dripfeed_supported: boolean | null
+          id: string
+          is_visible: boolean | null
+          max_quantity: number
+          min_quantity: number
+          name: string
+          platform: string
+          price: number
+          provider_service_uuid: string | null
+          refill_supported: boolean | null
+          service_id: number
+          updated_at: string
+        }
+        Insert: {
+          auto_refill_supported?: boolean | null
+          category: string
+          created_at?: string
+          description?: string | null
+          dripfeed_supported?: boolean | null
+          id?: string
+          is_visible?: boolean | null
+          max_quantity?: number
+          min_quantity?: number
+          name: string
+          platform: string
+          price: number
+          provider_service_uuid?: string | null
+          refill_supported?: boolean | null
+          service_id: number
+          updated_at?: string
+        }
+        Update: {
+          auto_refill_supported?: boolean | null
+          category?: string
+          created_at?: string
+          description?: string | null
+          dripfeed_supported?: boolean | null
+          id?: string
+          is_visible?: boolean | null
+          max_quantity?: number
+          min_quantity?: number
+          name?: string
+          platform?: string
+          price?: number
+          provider_service_uuid?: string | null
+          refill_supported?: boolean | null
+          service_id?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "panel_services_provider_service_uuid_fkey"
+            columns: ["provider_service_uuid"]
             isOneToOne: false
             referencedRelation: "services"
             referencedColumns: ["id"]

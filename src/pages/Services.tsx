@@ -71,24 +71,24 @@ const getPlatformIcon = (platform: string) => {
   return icons[platform] || Star;
 };
 
-interface Service {
+interface PanelService {
   id: string;
+  service_id: number;
   name: string;
   description: string | null;
   platform: string;
   category: string;
-  base_price: number;
+  price: number;
   min_quantity: number;
   max_quantity: number;
-  speed_estimate: string | null;
-  refill_supported: boolean | null;
-  service_id: number;
+  refill_supported: boolean;
+  dripfeed_supported: boolean;
 }
 
 const Services = () => {
   const [selectedPlatform, setSelectedPlatform] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
-  const [services, setServices] = useState<Service[]>([]);
+  const [services, setServices] = useState<PanelService[]>([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
@@ -98,10 +98,11 @@ const Services = () => {
 
   const fetchServices = async () => {
     try {
+      // Fetch panel_services (user-facing abstraction layer)
       const { data, error } = await supabase
-        .from('services')
+        .from('panel_services')
         .select('*')
-        .eq('is_active', true)
+        .eq('is_visible', true)
         .order('platform')
         .order('name');
 
@@ -119,7 +120,8 @@ const Services = () => {
     const matchesSearch = 
       service.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (service.description?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false) ||
-      service.category.toLowerCase().includes(searchQuery.toLowerCase());
+      service.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      service.service_id.toString().includes(searchQuery);
     return matchesPlatform && matchesSearch;
   });
 
@@ -143,17 +145,17 @@ const Services = () => {
               <span className="text-gradient-cyan"> Growth Services</span>
             </h1>
             <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-              Region-optimized pricing applied automatically based on your location
+              Glavior Social provides scalable social media solutions through a unified platform
             </p>
           </div>
 
           {/* Filters */}
           <div className="flex flex-col gap-4 mb-8">
             {/* Search */}
-            <div className="relative max-w-md mx-auto w-full">
+            <div className="relative max-w-lg mx-auto w-full">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search services by name, description, or category..."
+                placeholder="Search by name, ID, category..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-10 bg-secondary/50 border-border/50"
@@ -189,7 +191,7 @@ const Services = () => {
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {filteredServices.map((service) => {
                   const PlatformIcon = getPlatformIcon(service.platform);
-                  const pricePerK = Number(service.base_price) || 0;
+                  const pricePerK = Number(service.price) || 0;
                   
                   return (
                     <Card key={service.id} variant="glass" className="group hover:border-primary/30 transition-all duration-300">
@@ -214,13 +216,13 @@ const Services = () => {
                         <div className="grid grid-cols-2 gap-3 text-xs">
                           <div className="flex items-center gap-2 text-muted-foreground">
                             <Zap className="h-3 w-3 text-primary" />
-                            <span>{service.speed_estimate || 'Fast delivery'}</span>
+                            <span>Fast delivery</span>
                           </div>
                           <div className="flex items-center gap-2 text-muted-foreground">
                             {service.refill_supported ? (
                               <>
                                 <RefreshCw className="h-3 w-3 text-emerald-500" />
-                                <span>Managed Refill</span>
+                                <span>Drop Protection</span>
                               </>
                             ) : (
                               <span>No Refill</span>
