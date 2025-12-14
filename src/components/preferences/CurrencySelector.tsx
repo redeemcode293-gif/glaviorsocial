@@ -72,7 +72,7 @@ export const CurrencySelector = () => {
       <DialogTrigger asChild>
         <Button variant="ghost" size="sm" className="h-8 gap-1.5 px-2 hover:bg-secondary/50">
           <DollarSign className="h-3.5 w-3.5 text-muted-foreground" />
-          <span className="text-sm font-medium">{selected.flag} {selected.code}</span>
+          <span className="text-sm font-medium">{selected.code}</span>
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
