@@ -3,10 +3,13 @@ import { Badge } from "@/components/ui/badge";
 import { Link } from "react-router-dom";
 import { ArrowRight, Shield, Zap, Globe, TrendingUp } from "lucide-react";
 import { PlatformBadge, getPlatformColor, getPlatformIcon } from "@/components/ui/platform-icons";
+import { useLocalization } from "@/contexts/LocalizationContext";
 
 const floatingPlatforms = ["Instagram", "YouTube", "TikTok", "Telegram", "X"];
 
 export const HeroSection = () => {
+  const { t } = useLocalization();
+  
   return (
     <section className="relative min-h-screen flex items-center justify-center overflow-hidden pt-16">
       {/* Background Effects */}
@@ -54,37 +57,35 @@ export const HeroSection = () => {
             <Badge variant="glow" className="px-4 py-1.5 text-sm">
               <span className="flex items-center gap-2">
                 <span className="h-2 w-2 rounded-full bg-primary animate-pulse" />
-                Trusted by 50,000+ Creators Worldwide
+                {t("Trusted by 50,000+ Creators Worldwide")}
               </span>
             </Badge>
           </div>
 
           {/* Main Heading */}
           <h1 className="font-display text-5xl md:text-7xl lg:text-8xl font-bold mb-6 animate-fade-in animation-delay-100">
-            <span className="text-foreground">Global Social</span>
+            <span className="text-foreground">{t("Global Social")}</span>
             <br />
-            <span className="text-gradient-cyan">Authority</span>
-            <span className="text-foreground"> Infrastructure</span>
+            <span className="text-gradient-cyan">{t("Authority")}</span>
+            <span className="text-foreground"> {t("Infrastructure")}</span>
           </h1>
 
           {/* Subheading */}
           <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-10 animate-fade-in animation-delay-200">
-            The world's most powerful SMM platform. Region-optimized pricing, 
-            instant delivery, and enterprise-grade reliability for Instagram, 
-            YouTube, Telegram, X and more.
+            {t("The world's most powerful SMM platform. Region-optimized pricing, instant delivery, and enterprise-grade reliability for Instagram, YouTube, Telegram, X and more.")}
           </p>
 
           {/* CTA Buttons */}
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-16 animate-fade-in animation-delay-300">
             <Button variant="hero" size="xl" asChild className="glow-cyan">
               <Link to="/register" className="flex items-center gap-2">
-                Start Growing Now
+                {t("Start Growing Now")}
                 <ArrowRight className="h-5 w-5" />
               </Link>
             </Button>
             <Button variant="glass" size="xl" asChild>
               <Link to="/services">
-                View Services
+                {t("View Services")}
               </Link>
             </Button>
           </div>
@@ -96,28 +97,28 @@ export const HeroSection = () => {
                 <Shield className="h-5 w-5 text-primary" />
               </div>
               <div className="text-2xl font-bold text-foreground counter-glow">99.9%</div>
-              <div className="text-xs text-muted-foreground">Uptime SLA</div>
+              <div className="text-xs text-muted-foreground">{t("Uptime SLA")}</div>
             </div>
             <div className="glass-card p-4 text-center hover:border-primary/30 transition-colors">
               <div className="flex items-center justify-center mb-2">
                 <Zap className="h-5 w-5 text-accent" />
               </div>
               <div className="text-2xl font-bold text-foreground">50M+</div>
-              <div className="text-xs text-muted-foreground">Orders Delivered</div>
+              <div className="text-xs text-muted-foreground">{t("Orders Delivered")}</div>
             </div>
             <div className="glass-card p-4 text-center hover:border-primary/30 transition-colors">
               <div className="flex items-center justify-center mb-2">
                 <Globe className="h-5 w-5 text-primary" />
               </div>
               <div className="text-2xl font-bold text-foreground">180+</div>
-              <div className="text-xs text-muted-foreground">Countries</div>
+              <div className="text-xs text-muted-foreground">{t("Countries")}</div>
             </div>
             <div className="glass-card p-4 text-center hover:border-primary/30 transition-colors">
               <div className="flex items-center justify-center mb-2">
                 <TrendingUp className="h-5 w-5 text-accent" />
               </div>
               <div className="text-2xl font-bold text-foreground">24/7</div>
-              <div className="text-xs text-muted-foreground">Auto-Delivery</div>
+              <div className="text-xs text-muted-foreground">{t("Auto-Delivery")}</div>
             </div>
           </div>
         </div>

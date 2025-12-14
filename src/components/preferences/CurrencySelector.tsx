@@ -1,9 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Search, Check, DollarSign } from "lucide-react";
+import { useLocalization } from "@/contexts/LocalizationContext";
 
 interface Currency {
   code: string;
@@ -46,19 +47,12 @@ const currencies: Currency[] = [
 export const CurrencySelector = () => {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const [selected, setSelected] = useState<Currency>(currencies[0]);
+  const { currency, setCurrency } = useLocalization();
+  
+  const selected = currencies.find(c => c.code === currency) || currencies[0];
 
-  useEffect(() => {
-    const saved = localStorage.getItem("preferredCurrency");
-    if (saved) {
-      const currency = currencies.find(c => c.code === saved);
-      if (currency) setSelected(currency);
-    }
-  }, []);
-
-  const handleSelect = (currency: Currency) => {
-    setSelected(currency);
-    localStorage.setItem("preferredCurrency", currency.code);
+  const handleSelect = (curr: Currency) => {
+    setCurrency(curr.code);
     setOpen(false);
   };
 
@@ -95,26 +89,26 @@ export const CurrencySelector = () => {
         
         <ScrollArea className="h-[300px] pr-4 mt-2">
           <div className="space-y-1">
-            {filtered.map((currency) => (
+            {filtered.map((curr) => (
               <button
-                key={currency.code}
-                onClick={() => handleSelect(currency)}
+                key={curr.code}
+                onClick={() => handleSelect(curr)}
                 className={`w-full flex items-center justify-between p-3 rounded-lg transition-colors ${
-                  selected.code === currency.code
+                  selected.code === curr.code
                     ? "bg-primary/10 border border-primary/30"
                     : "hover:bg-secondary/50"
                 }`}
               >
                 <div className="flex items-center gap-3">
-                  <span className="text-2xl">{currency.flag}</span>
+                  <span className="text-2xl">{curr.flag}</span>
                   <div className="text-left">
-                    <p className="text-sm font-medium">{currency.name}</p>
-                    <p className="text-xs text-muted-foreground">{currency.code}</p>
+                    <p className="text-sm font-medium">{curr.name}</p>
+                    <p className="text-xs text-muted-foreground">{curr.code}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-lg font-mono text-muted-foreground">{currency.symbol}</span>
-                  {selected.code === currency.code && (
+                  <span className="text-lg font-mono text-muted-foreground">{curr.symbol}</span>
+                  {selected.code === curr.code && (
                     <Check className="h-4 w-4 text-primary" />
                   )}
                 </div>

@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/hooks/useAuth";
+import { LocalizationProvider } from "@/contexts/LocalizationContext";
 import Index from "./pages/Index";
 import Services from "./pages/Services";
 import Dashboard from "./pages/Dashboard";
@@ -28,8 +29,9 @@ const queryClient = new QueryClient();
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
-      <TooltipProvider>
-        <Toaster />
+      <LocalizationProvider>
+        <TooltipProvider>
+          <Toaster />
         <Sonner />
         <BrowserRouter>
           <Routes>
@@ -67,9 +69,10 @@ const App = () => (
             {/* Catch-all - redirect to home */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
-          <AIChatbot />
-        </BrowserRouter>
-      </TooltipProvider>
+            <AIChatbot />
+          </BrowserRouter>
+        </TooltipProvider>
+      </LocalizationProvider>
     </AuthProvider>
   </QueryClientProvider>
 );

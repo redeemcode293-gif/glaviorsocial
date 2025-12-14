@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Search, Check, Languages } from "lucide-react";
+import { useLocalization } from "@/contexts/LocalizationContext";
 
 interface Language {
   code: string;
@@ -44,19 +45,12 @@ const languages: Language[] = [
 export const LanguageSelector = () => {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const [selected, setSelected] = useState<Language>(languages[0]);
+  const { language, setLanguage } = useLocalization();
+  
+  const selected = languages.find(l => l.code === language) || languages[0];
 
-  useEffect(() => {
-    const saved = localStorage.getItem("preferredLanguage");
-    if (saved) {
-      const language = languages.find(l => l.code === saved);
-      if (language) setSelected(language);
-    }
-  }, []);
-
-  const handleSelect = (language: Language) => {
-    setSelected(language);
-    localStorage.setItem("preferredLanguage", language.code);
+  const handleSelect = (lang: Language) => {
+    setLanguage(lang.code);
     setOpen(false);
   };
 
@@ -94,24 +88,24 @@ export const LanguageSelector = () => {
         
         <ScrollArea className="h-[300px] pr-4 mt-2">
           <div className="space-y-1">
-            {filtered.map((language) => (
+            {filtered.map((lang) => (
               <button
-                key={language.code}
-                onClick={() => handleSelect(language)}
+                key={lang.code}
+                onClick={() => handleSelect(lang)}
                 className={`w-full flex items-center justify-between p-3 rounded-lg transition-colors ${
-                  selected.code === language.code
+                  selected.code === lang.code
                     ? "bg-primary/10 border border-primary/30"
                     : "hover:bg-secondary/50"
                 }`}
               >
                 <div className="flex items-center gap-3">
-                  <span className="text-2xl">{language.flag}</span>
+                  <span className="text-2xl">{lang.flag}</span>
                   <div className="text-left">
-                    <p className="text-sm font-medium">{language.name}</p>
-                    <p className="text-xs text-muted-foreground">{language.nativeName}</p>
+                    <p className="text-sm font-medium">{lang.name}</p>
+                    <p className="text-xs text-muted-foreground">{lang.nativeName}</p>
                   </div>
                 </div>
-                {selected.code === language.code && (
+                {selected.code === lang.code && (
                   <Check className="h-4 w-4 text-primary" />
                 )}
               </button>
