@@ -41,6 +41,48 @@ export type Database = {
         }
         Relationships: []
       }
+      api_providers: {
+        Row: {
+          api_key: string
+          api_url: string
+          balance: number | null
+          created_at: string
+          currency: string | null
+          id: string
+          last_sync_at: string | null
+          name: string
+          priority: number | null
+          status: string | null
+          updated_at: string
+        }
+        Insert: {
+          api_key: string
+          api_url: string
+          balance?: number | null
+          created_at?: string
+          currency?: string | null
+          id?: string
+          last_sync_at?: string | null
+          name: string
+          priority?: number | null
+          status?: string | null
+          updated_at?: string
+        }
+        Update: {
+          api_key?: string
+          api_url?: string
+          balance?: number | null
+          created_at?: string
+          currency?: string | null
+          id?: string
+          last_sync_at?: string | null
+          name?: string
+          priority?: number | null
+          status?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       orders: {
         Row: {
           auto_refill: boolean | null
@@ -306,6 +348,9 @@ export type Database = {
           min_quantity: number
           name: string
           platform: string
+          provider_id: string | null
+          provider_price: number | null
+          provider_service_id: string | null
           refill_supported: boolean | null
           service_id: number
           speed_estimate: string | null
@@ -323,6 +368,9 @@ export type Database = {
           min_quantity?: number
           name: string
           platform: string
+          provider_id?: string | null
+          provider_price?: number | null
+          provider_service_id?: string | null
           refill_supported?: boolean | null
           service_id: number
           speed_estimate?: string | null
@@ -340,12 +388,23 @@ export type Database = {
           min_quantity?: number
           name?: string
           platform?: string
+          provider_id?: string | null
+          provider_price?: number | null
+          provider_service_id?: string | null
           refill_supported?: boolean | null
           service_id?: number
           speed_estimate?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "services_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: false
+            referencedRelation: "api_providers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       support_tickets: {
         Row: {

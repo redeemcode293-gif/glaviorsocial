@@ -1,1 +1,7 @@
 project_id = "uekvulsybwxvwpqaymoa"
+
+[functions.detect-country]
+verify_jwt = false
+
+[functions.sync-provider]
+verify_jwt = false
