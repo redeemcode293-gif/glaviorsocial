@@ -35,9 +35,11 @@ const Admin = () => {
     activeServices: 0
   });
   const [users, setUsers] = useState<any[]>([]);
+  const [wallets, setWallets] = useState<Record<string, any>>({});
   const [services, setServices] = useState<any[]>([]);
   const [orders, setOrders] = useState<any[]>([]);
   const [regionalPricing, setRegionalPricing] = useState<any[]>([]);
+  const [userCountByRegion, setUserCountByRegion] = useState<Record<string, number>>({});
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -98,6 +100,29 @@ const Admin = () => {
       .order('created_at', { ascending: false })
       .limit(50);
     setUsers(usersData || []);
+
+    // Fetch wallets for all users
+    if (usersData && usersData.length > 0) {
+      const userIds = usersData.map(u => u.user_id);
+      const { data: walletsData } = await supabase
+        .from('wallets')
+        .select('*')
+        .in('user_id', userIds);
+      
+      const walletsMap: Record<string, any> = {};
+      walletsData?.forEach(w => {
+        walletsMap[w.user_id] = w;
+      });
+      setWallets(walletsMap);
+    }
+
+    // Calculate user count by country code for regional pricing
+    const countByCountry: Record<string, number> = {};
+    usersData?.forEach(u => {
+      const code = u.country_code || 'XX';
+      countByCountry[code] = (countByCountry[code] || 0) + 1;
+    });
+    setUserCountByRegion(countByCountry);
 
     // Fetch services
     const { data: servicesData } = await supabase
@@ -278,50 +303,56 @@ const Admin = () => {
                         <tr className="border-b border-border/30">
                           <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">User</th>
                           <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Country</th>
-                          <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Country Code</th>
+                          <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Balance</th>
                           <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">VIP Tier</th>
                           <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Joined</th>
                           <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Actions</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {users.map((user) => (
-                          <tr key={user.id} className="border-b border-border/20 hover:bg-secondary/10">
-                            <td className="p-3">
-                              <div>
-                                <p className="font-medium text-foreground">{user.full_name || 'N/A'}</p>
-                                <p className="text-sm text-muted-foreground">{user.email}</p>
-                              </div>
-                            </td>
-                            <td className="p-3">
-                              <span className="text-sm">{user.country || 'Not detected'}</span>
-                            </td>
-                            <td className="p-3">
-                              <Badge variant="outline">{user.country_code || 'XX'}</Badge>
-                            </td>
-                            <td className="p-3">
-                              <Badge variant="secondary">{user.vip_tier || 'Standard'}</Badge>
-                            </td>
-                            <td className="p-3">
-                              <span className="text-sm text-muted-foreground">
-                                {new Date(user.created_at).toLocaleDateString()}
-                              </span>
-                            </td>
-                            <td className="p-3">
-                              <div className="flex items-center gap-1">
-                                <Button variant="ghost" size="icon" className="h-8 w-8">
-                                  <Eye className="h-4 w-4" />
-                                </Button>
-                                <Button variant="ghost" size="icon" className="h-8 w-8">
-                                  <Edit className="h-4 w-4" />
-                                </Button>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive">
-                                  <Ban className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
+                        {users.map((user) => {
+                          const userWallet = wallets[user.user_id];
+                          return (
+                            <tr key={user.id} className="border-b border-border/20 hover:bg-secondary/10">
+                              <td className="p-3">
+                                <div>
+                                  <p className="font-medium text-foreground">{user.full_name || user.email?.split('@')[0] || 'N/A'}</p>
+                                  <p className="text-sm text-muted-foreground">{user.email}</p>
+                                </div>
+                              </td>
+                              <td className="p-3">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm">{user.country || 'Unknown'}</span>
+                                  <Badge variant="outline" className="text-xs">{user.country_code || 'XX'}</Badge>
+                                </div>
+                              </td>
+                              <td className="p-3">
+                                <span className="font-mono text-success">${Number(userWallet?.balance || 0).toFixed(2)}</span>
+                              </td>
+                              <td className="p-3">
+                                <Badge variant="secondary">{user.vip_tier || 'Standard'}</Badge>
+                              </td>
+                              <td className="p-3">
+                                <span className="text-sm text-muted-foreground">
+                                  {new Date(user.created_at).toLocaleDateString()}
+                                </span>
+                              </td>
+                              <td className="p-3">
+                                <div className="flex items-center gap-1">
+                                  <Button variant="ghost" size="icon" className="h-8 w-8">
+                                    <Eye className="h-4 w-4" />
+                                  </Button>
+                                  <Button variant="ghost" size="icon" className="h-8 w-8">
+                                    <Edit className="h-4 w-4" />
+                                  </Button>
+                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive">
+                                    <Ban className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -473,50 +504,60 @@ const Admin = () => {
                   </div>
                 ) : (
                   <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {regionalPricing.map((region) => (
-                      <Card key={region.id} className="border-border/30">
-                        <CardContent className="p-4">
-                          <div className="flex items-center justify-between mb-3">
-                            <div>
-                              <p className="font-medium text-foreground">{region.region_name}</p>
-                              <p className="text-xs text-muted-foreground">{region.region_code}</p>
+                    {regionalPricing.map((region) => {
+                      // Calculate user count for this region
+                      const regionUserCount = region.countries?.reduce((count: number, code: string) => {
+                        return count + (userCountByRegion[code] || 0);
+                      }, 0) || 0;
+
+                      return (
+                        <Card key={region.id} className="border-border/30 hover:border-primary/30 transition-colors">
+                          <CardContent className="p-4">
+                            <div className="flex items-center justify-between mb-3">
+                              <div>
+                                <p className="font-medium text-foreground">{region.region_name}</p>
+                                <p className="text-xs text-muted-foreground">{region.region_code}</p>
+                              </div>
+                              <div className="text-right">
+                                <Badge variant="outline" className="font-mono">{region.multiplier}x</Badge>
+                                <p className="text-xs text-muted-foreground mt-1">{regionUserCount} users</p>
+                              </div>
                             </div>
-                            <Badge variant="outline">{region.multiplier}x</Badge>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Input
-                              type="number"
-                              step="0.05"
-                              min="0.5"
-                              max="5"
-                              defaultValue={region.multiplier}
-                              className="bg-secondary/30 border-border/30 text-sm"
-                              onBlur={(e) => {
-                                const newValue = parseFloat(e.target.value);
-                                if (newValue !== region.multiplier) {
-                                  updateRegionalPricing(region.id, newValue);
-                                }
-                              }}
-                            />
-                            <Button variant="outline" size="icon" className="h-9 w-9">
-                              <Save className="h-4 w-4" />
-                            </Button>
-                          </div>
-                          <div className="mt-2 flex flex-wrap gap-1">
-                            {region.countries?.slice(0, 5).map((code: string) => (
-                              <Badge key={code} variant="secondary" className="text-xs">
-                                {code}
-                              </Badge>
-                            ))}
-                            {region.countries?.length > 5 && (
-                              <Badge variant="secondary" className="text-xs">
-                                +{region.countries.length - 5}
-                              </Badge>
-                            )}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))}
+                            <div className="flex items-center gap-2">
+                              <Input
+                                type="number"
+                                step="0.05"
+                                min="0.5"
+                                max="5"
+                                defaultValue={region.multiplier}
+                                className="bg-secondary/30 border-border/30 text-sm"
+                                onBlur={(e) => {
+                                  const newValue = parseFloat(e.target.value);
+                                  if (newValue !== region.multiplier) {
+                                    updateRegionalPricing(region.id, newValue);
+                                  }
+                                }}
+                              />
+                              <Button variant="outline" size="icon" className="h-9 w-9">
+                                <Save className="h-4 w-4" />
+                              </Button>
+                            </div>
+                            <div className="mt-3 flex flex-wrap gap-1">
+                              {region.countries?.slice(0, 6).map((code: string) => (
+                                <Badge key={code} variant="secondary" className="text-xs">
+                                  {code}
+                                </Badge>
+                              ))}
+                              {region.countries?.length > 6 && (
+                                <Badge variant="secondary" className="text-xs">
+                                  +{region.countries.length - 6}
+                                </Badge>
+                              )}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
                   </div>
                 )}
               </CardContent>

@@ -30,17 +30,33 @@ const ResellerPanel = () => {
   const [panelData, setPanelData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [saving, setSaving] = useState(false);
   const { toast } = useToast();
 
-  // Form states
+  // Form states for creation
   const [panelName, setPanelName] = useState("");
   const [subdomain, setSubdomain] = useState("");
   const [customDomain, setCustomDomain] = useState("");
   const [pricingMargin, setPricingMargin] = useState("20");
 
+  // Form states for settings
+  const [editPanelName, setEditPanelName] = useState("");
+  const [editPricingMargin, setEditPricingMargin] = useState("");
+  const [editCustomDomain, setEditCustomDomain] = useState("");
+  const [editLogoUrl, setEditLogoUrl] = useState("");
+
   useEffect(() => {
     checkPanel();
   }, []);
+
+  useEffect(() => {
+    if (panelData) {
+      setEditPanelName(panelData.panel_name || "");
+      setEditPricingMargin(panelData.pricing_margin?.toString() || "20");
+      setEditCustomDomain(panelData.custom_domain || "");
+      setEditLogoUrl(panelData.logo_url || "");
+    }
+  }, [panelData]);
 
   const checkPanel = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -101,6 +117,42 @@ const ResellerPanel = () => {
       }
     }
     setCreating(false);
+  };
+
+  const saveSettings = async () => {
+    if (!panelData?.id) return;
+    
+    setSaving(true);
+    const { error } = await supabase
+      .from('reseller_panels')
+      .update({
+        panel_name: editPanelName,
+        pricing_margin: parseFloat(editPricingMargin),
+        custom_domain: editCustomDomain || null,
+        logo_url: editLogoUrl || null,
+      })
+      .eq('id', panelData.id);
+
+    if (error) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    } else {
+      setPanelData({
+        ...panelData,
+        panel_name: editPanelName,
+        pricing_margin: parseFloat(editPricingMargin),
+        custom_domain: editCustomDomain || null,
+        logo_url: editLogoUrl || null,
+      });
+      toast({
+        title: "Settings Saved",
+        description: "Your panel settings have been updated",
+      });
+    }
+    setSaving(false);
   };
 
   const copyToClipboard = (text: string) => {
@@ -398,22 +450,50 @@ const ResellerPanel = () => {
                 <div className="grid md:grid-cols-2 gap-6">
                   <div className="space-y-2">
                     <Label>Panel Name</Label>
-                    <Input defaultValue={panelData?.panel_name} className="bg-secondary/30 border-border/30" />
+                    <Input 
+                      value={editPanelName} 
+                      onChange={(e) => setEditPanelName(e.target.value)}
+                      className="bg-secondary/30 border-border/30" 
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label>Pricing Margin (%)</Label>
-                    <Input type="number" defaultValue={panelData?.pricing_margin} className="bg-secondary/30 border-border/30" />
+                    <Input 
+                      type="number" 
+                      value={editPricingMargin} 
+                      onChange={(e) => setEditPricingMargin(e.target.value)}
+                      className="bg-secondary/30 border-border/30" 
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label>Custom Domain</Label>
-                    <Input defaultValue={panelData?.custom_domain || ''} placeholder="panel.yourdomain.com" className="bg-secondary/30 border-border/30" />
+                    <Input 
+                      value={editCustomDomain} 
+                      onChange={(e) => setEditCustomDomain(e.target.value)}
+                      placeholder="panel.yourdomain.com" 
+                      className="bg-secondary/30 border-border/30" 
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label>Logo URL</Label>
-                    <Input defaultValue={panelData?.logo_url || ''} placeholder="https://..." className="bg-secondary/30 border-border/30" />
+                    <Input 
+                      value={editLogoUrl} 
+                      onChange={(e) => setEditLogoUrl(e.target.value)}
+                      placeholder="https://..." 
+                      className="bg-secondary/30 border-border/30" 
+                    />
                   </div>
                 </div>
-                <Button>Save Changes</Button>
+                <Button onClick={saveSettings} disabled={saving}>
+                  {saving ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin mr-2" />
+                      Saving...
+                    </>
+                  ) : (
+                    "Save Changes"
+                  )}
+                </Button>
               </CardContent>
             </Card>
           </TabsContent>
