@@ -1,19 +1,33 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Globe, Mail, Lock, ArrowRight, Eye, EyeOff } from "lucide-react";
+import { Mail, Lock, ArrowRight, Eye, EyeOff } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const navigate = useNavigate();
+  const { toast } = useToast();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Handle login logic
+    setIsLoading(true);
+    
+    // Simulate login
+    setTimeout(() => {
+      setIsLoading(false);
+      toast({
+        title: "Welcome back!",
+        description: "Successfully signed in to your account.",
+      });
+      navigate("/dashboard");
+    }, 1000);
   };
 
   return (
@@ -21,30 +35,30 @@ const Login = () => {
       {/* Background Effects */}
       <div className="absolute inset-0 bg-hero-glow" />
       <div className="absolute inset-0 cyber-grid opacity-20" />
-      <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-primary/10 rounded-full blur-[100px]" />
-      <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-accent/10 rounded-full blur-[120px]" />
+      <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-primary/5 rounded-full blur-[100px]" />
+      <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-accent/5 rounded-full blur-[120px]" />
 
       <div className="w-full max-w-md relative z-10">
         {/* Logo */}
-        <Link to="/" className="flex items-center justify-center gap-3 mb-8">
-          <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-primary to-primary-glow flex items-center justify-center">
-            <Globe className="h-6 w-6 text-primary-foreground" />
+        <Link to="/" className="flex items-center justify-center gap-2 mb-8">
+          <div className="h-10 w-10 rounded-md bg-gradient-to-br from-primary to-accent flex items-center justify-center">
+            <span className="font-display text-sm font-bold text-primary-foreground">GS</span>
           </div>
-          <div className="flex flex-col">
-            <span className="font-display text-2xl font-bold text-foreground">GLAVIOR</span>
-            <span className="text-xs font-medium text-primary tracking-widest">SOCIAL</span>
+          <div className="flex flex-col leading-none">
+            <span className="font-display text-xl font-bold tracking-wider text-foreground">GLAVIOR</span>
+            <span className="text-[9px] font-semibold text-primary tracking-[0.2em]">SOCIAL</span>
           </div>
         </Link>
 
-        <Card variant="glass" className="border-border/50">
+        <Card className="border-border/30 bg-card/80 backdrop-blur-xl">
           <CardHeader className="text-center pb-4">
-            <CardTitle className="text-2xl">Welcome Back</CardTitle>
-            <CardDescription>Sign in to access your dashboard</CardDescription>
+            <CardTitle className="font-display text-xl">Welcome Back</CardTitle>
+            <CardDescription>Sign in to your account</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email" className="text-sm">Email</Label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
@@ -53,14 +67,15 @@ const Login = () => {
                     placeholder="you@example.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="pl-10 bg-secondary/50 border-border/50"
+                    className="pl-10 bg-secondary/30 border-border/30"
+                    required
                   />
                 </div>
               </div>
 
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="password">Password</Label>
+                  <Label htmlFor="password" className="text-sm">Password</Label>
                   <Link to="/forgot-password" className="text-xs text-primary hover:underline">
                     Forgot password?
                   </Link>
@@ -73,7 +88,8 @@ const Login = () => {
                     placeholder="••••••••"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="pl-10 pr-10 bg-secondary/50 border-border/50"
+                    className="pl-10 pr-10 bg-secondary/30 border-border/30"
+                    required
                   />
                   <button
                     type="button"
@@ -85,8 +101,8 @@ const Login = () => {
                 </div>
               </div>
 
-              <Button variant="hero" className="w-full" type="submit">
-                Sign In
+              <Button className="w-full" type="submit" disabled={isLoading}>
+                {isLoading ? "Signing in..." : "Sign In"}
                 <ArrowRight className="h-4 w-4 ml-2" />
               </Button>
             </form>

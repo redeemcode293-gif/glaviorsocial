@@ -14,8 +14,9 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
-        display: ['Space Grotesk', 'Inter', 'system-ui', 'sans-serif'],
+        sans: ['Exo 2', 'system-ui', 'sans-serif'],
+        display: ['Orbitron', 'Exo 2', 'system-ui', 'sans-serif'],
+        mono: ['Oxanium', 'Courier New', 'monospace'],
       },
       colors: {
         border: "hsl(var(--border))",
@@ -44,6 +45,14 @@ export default {
           DEFAULT: "hsl(var(--accent))",
           foreground: "hsl(var(--accent-foreground))",
           glow: "hsl(var(--accent-glow))",
+        },
+        success: {
+          DEFAULT: "hsl(var(--success))",
+          foreground: "hsl(var(--success-foreground))",
+        },
+        warning: {
+          DEFAULT: "hsl(var(--warning))",
+          foreground: "hsl(var(--warning-foreground))",
         },
         popover: {
           DEFAULT: "hsl(var(--popover))",
@@ -95,21 +104,33 @@ export default {
           from: { transform: "translateX(100%)" },
           to: { transform: "translateX(0)" },
         },
+        "slide-in-left": {
+          from: { transform: "translateX(-100%)" },
+          to: { transform: "translateX(0)" },
+        },
         "glow-pulse": {
-          "0%, 100%": { boxShadow: "0 0 20px hsl(180 100% 50% / 0.3)" },
-          "50%": { boxShadow: "0 0 40px hsl(180 100% 50% / 0.5)" },
+          "0%, 100%": { boxShadow: "0 0 20px hsl(185 100% 50% / 0.3)" },
+          "50%": { boxShadow: "0 0 40px hsl(185 100% 50% / 0.5)" },
         },
         "float": {
           "0%, 100%": { transform: "translateY(0)" },
           "50%": { transform: "translateY(-10px)" },
         },
         "shimmer": {
-          from: { backgroundPosition: "-200% 0" },
-          to: { backgroundPosition: "200% 0" },
+          from: { transform: "translateX(-100%)" },
+          to: { transform: "translateX(100%)" },
         },
         "count-up": {
           from: { opacity: "0", transform: "translateY(10px)" },
           to: { opacity: "1", transform: "translateY(0)" },
+        },
+        "blink": {
+          "0%, 50%, 100%": { opacity: "1" },
+          "25%, 75%": { opacity: "0" },
+        },
+        "typing": {
+          from: { width: "0" },
+          to: { width: "100%" },
         },
       },
       animation: {
@@ -119,16 +140,20 @@ export default {
         "fade-in-up": "fade-in-up 0.8s ease-out forwards",
         "scale-in": "scale-in 0.4s ease-out forwards",
         "slide-in-right": "slide-in-right 0.3s ease-out",
+        "slide-in-left": "slide-in-left 0.3s ease-out",
         "glow-pulse": "glow-pulse 2s ease-in-out infinite",
         "float": "float 3s ease-in-out infinite",
         "shimmer": "shimmer 2s linear infinite",
         "count-up": "count-up 0.5s ease-out forwards",
+        "blink": "blink 1s step-end infinite",
+        "typing": "typing 2s steps(30, end)",
       },
       backgroundImage: {
         "gradient-radial": "radial-gradient(var(--tw-gradient-stops))",
         "gradient-conic": "conic-gradient(from 180deg at 50% 50%, var(--tw-gradient-stops))",
-        "hero-glow": "radial-gradient(ellipse 80% 50% at 50% -20%, hsl(180 100% 50% / 0.15), transparent)",
-        "card-shine": "linear-gradient(135deg, transparent 40%, hsl(180 100% 50% / 0.03) 50%, transparent 60%)",
+        "hero-glow": "radial-gradient(ellipse 80% 50% at 50% -20%, hsl(185 100% 50% / 0.12), transparent)",
+        "hero-glow-purple": "radial-gradient(ellipse 60% 40% at 80% 20%, hsl(270 100% 65% / 0.08), transparent)",
+        "card-shine": "linear-gradient(135deg, transparent 40%, hsl(185 100% 50% / 0.03) 50%, transparent 60%)",
       },
     },
   },
