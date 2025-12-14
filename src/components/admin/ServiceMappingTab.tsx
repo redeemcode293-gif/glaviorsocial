@@ -325,12 +325,12 @@ export const ServiceMappingTab = () => {
       <div className="space-y-2">
         <Label>Link to Provider Service</Label>
         <Select 
-          value={formData.provider_service_uuid} 
-          onValueChange={(v) => setFormData({ ...formData, provider_service_uuid: v })}
+          value={formData.provider_service_uuid || "none"} 
+          onValueChange={(v) => setFormData({ ...formData, provider_service_uuid: v === "none" ? "" : v })}
         >
           <SelectTrigger><SelectValue placeholder="Select provider service..." /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="">No mapping (manual)</SelectItem>
+            <SelectItem value="none">No mapping (manual)</SelectItem>
             {providerServices.map(ps => {
               const provider = providers.find(p => p.id === ps.provider_id);
               return (
