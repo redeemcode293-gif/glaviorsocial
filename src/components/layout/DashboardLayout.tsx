@@ -16,15 +16,13 @@ import {
   HelpCircle,
   Settings,
   LogOut,
-  Bell,
-  ChevronRight,
   Menu,
-  X,
   Shield,
   Store,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { NotificationPopover } from "@/components/notifications/NotificationPopover";
 
 const sidebarItems = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
@@ -242,10 +240,7 @@ export const DashboardLayout = ({ children, title, subtitle }: DashboardLayoutPr
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="ghost" size="icon" className="relative h-8 w-8">
-                <Bell className="h-4 w-4" />
-                <span className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-destructive" />
-              </Button>
+              <NotificationPopover />
               <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-md bg-secondary/50 border border-border/30">
                 <div className="h-6 w-6 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center text-[10px] font-bold text-primary-foreground">
                   {getUserInitials()}

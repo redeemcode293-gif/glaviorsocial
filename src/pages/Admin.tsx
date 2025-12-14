@@ -950,7 +950,10 @@ const Admin = () => {
             <Card className="border-border/30 bg-card/60">
               <CardHeader>
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-lg font-display">Order Management</CardTitle>
+                  <div>
+                    <CardTitle className="text-lg font-display">Order Management</CardTitle>
+                    <CardDescription>View orders with applied multipliers and user country</CardDescription>
+                  </div>
                   <Button variant="outline" size="icon" onClick={fetchAdminData}>
                     <RefreshCw className="h-4 w-4" />
                   </Button>
@@ -969,8 +972,10 @@ const Admin = () => {
                         <tr className="border-b border-border/30">
                           <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Order ID</th>
                           <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Link</th>
-                          <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Quantity</th>
+                          <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Qty</th>
                           <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Price</th>
+                          <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Country</th>
+                          <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Multiplier</th>
                           <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Status</th>
                           <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Date</th>
                         </tr>
@@ -978,19 +983,33 @@ const Admin = () => {
                       <tbody>
                         {orders.map((order) => (
                           <tr key={order.id} className="border-b border-border/20 hover:bg-secondary/10">
-                            <td className="p-3 font-mono text-sm">{order.order_number}</td>
+                            <td className="p-3 font-mono text-sm text-primary">{order.order_number}</td>
                             <td className="p-3">
-                              <p className="text-sm truncate max-w-[200px]">{order.link}</p>
+                              <p className="text-sm truncate max-w-[180px]" title={order.link}>{order.link}</p>
                             </td>
-                            <td className="p-3">{order.quantity.toLocaleString()}</td>
-                            <td className="p-3 font-mono">${Number(order.price).toFixed(2)}</td>
+                            <td className="p-3 font-mono text-sm">{order.quantity.toLocaleString()}</td>
+                            <td className="p-3 font-mono text-sm text-success">${Number(order.price).toFixed(2)}</td>
                             <td className="p-3">
-                              <Badge variant={order.status === 'completed' ? 'success' : 'secondary'}>
+                              {order.user_country_code ? (
+                                <Badge variant="outline" className="font-mono text-xs">
+                                  {order.user_country_code}
+                                </Badge>
+                              ) : (
+                                <span className="text-muted-foreground text-xs">—</span>
+                              )}
+                            </td>
+                            <td className="p-3">
+                              <Badge variant={Number(order.applied_multiplier) > 1.5 ? 'default' : 'secondary'} className="font-mono text-xs">
+                                {Number(order.applied_multiplier || 1).toFixed(2)}x
+                              </Badge>
+                            </td>
+                            <td className="p-3">
+                              <Badge variant={order.status === 'completed' ? 'success' : order.status === 'processing' ? 'cyan' : 'secondary'}>
                                 {order.status}
                               </Badge>
                             </td>
-                            <td className="p-3 text-sm text-muted-foreground">
-                              {new Date(order.created_at).toLocaleString()}
+                            <td className="p-3 text-xs text-muted-foreground">
+                              {new Date(order.created_at).toLocaleDateString()}
                             </td>
                           </tr>
                         ))}
