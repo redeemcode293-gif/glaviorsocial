@@ -23,6 +23,9 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { NotificationPopover } from "@/components/notifications/NotificationPopover";
+import { useLocalization } from "@/contexts/LocalizationContext";
+import { LanguageSelector } from "@/components/preferences/LanguageSelector";
+import { CurrencySelector } from "@/components/preferences/CurrencySelector";
 
 const sidebarItems = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
@@ -47,6 +50,7 @@ export const DashboardLayout = ({ children, title, subtitle }: DashboardLayoutPr
   const location = useLocation();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { t, formatPrice } = useLocalization();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [balance, setBalance] = useState(0);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -138,15 +142,15 @@ export const DashboardLayout = ({ children, title, subtitle }: DashboardLayoutPr
         {/* Balance Card */}
         <div className="p-4">
           <div className="p-3 rounded-lg bg-gradient-to-r from-primary/10 to-accent/10 border border-primary/20">
-            <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Balance</p>
-            <p className="font-display text-xl font-bold text-primary">${balance.toFixed(2)}</p>
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">{t("Balance")}</p>
+            <p className="font-display text-xl font-bold text-primary">{formatPrice(balance)}</p>
             <Button 
               size="sm" 
               className="w-full mt-2 h-7 text-xs"
               onClick={() => navigate("/dashboard/funds")}
             >
               <Wallet className="h-3 w-3 mr-1" />
-              Add Funds
+              {t("Add Funds")}
             </Button>
           </div>
         </div>
@@ -166,7 +170,7 @@ export const DashboardLayout = ({ children, title, subtitle }: DashboardLayoutPr
                 }`}
               >
                 <item.icon className="h-4 w-4" />
-                <span className="flex-1">{item.label}</span>
+                <span className="flex-1">{t(item.label)}</span>
                 {item.badge && (
                   <Badge 
                     variant="outline" 
@@ -194,9 +198,9 @@ export const DashboardLayout = ({ children, title, subtitle }: DashboardLayoutPr
                 }`}
               >
                 <Shield className="h-4 w-4" />
-                <span className="flex-1">Admin Panel</span>
+                <span className="flex-1">{t("Admin Panel")}</span>
                 <Badge variant="destructive" className="text-[9px] px-1.5 py-0">
-                  ADMIN
+                  {t("ADMIN")}
                 </Badge>
               </Link>
             )}
@@ -210,14 +214,14 @@ export const DashboardLayout = ({ children, title, subtitle }: DashboardLayoutPr
             className="flex items-center gap-3 px-3 py-2 rounded-md text-sm text-muted-foreground hover:bg-secondary/50 hover:text-foreground transition-colors"
           >
             <Settings className="h-4 w-4" />
-            <span>Settings</span>
+            <span>{t("Settings")}</span>
           </Link>
           <button
             onClick={handleLogout}
             className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
           >
             <LogOut className="h-4 w-4" />
-            <span>Sign Out</span>
+            <span>{t("Sign Out")}</span>
           </button>
         </div>
       </aside>
@@ -240,17 +244,19 @@ export const DashboardLayout = ({ children, title, subtitle }: DashboardLayoutPr
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <LanguageSelector />
+              <CurrencySelector />
               <NotificationPopover />
               <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-md bg-secondary/50 border border-border/30">
                 <div className="h-6 w-6 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center text-[10px] font-bold text-primary-foreground">
                   {getUserInitials()}
                 </div>
                 <span className="text-sm font-medium truncate max-w-[120px]">
-                  {userEmail || "User"}
+                  {userEmail || t("User")}
                 </span>
                 {isAdmin && (
                   <Badge variant="destructive" className="text-[8px] px-1 py-0">
-                    Admin
+                    {t("Admin")}
                   </Badge>
                 )}
               </div>
