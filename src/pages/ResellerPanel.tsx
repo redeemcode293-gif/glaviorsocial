@@ -14,16 +14,16 @@ import {
   Plus,
   ExternalLink,
   Copy,
-  Palette,
-  Link2,
   TrendingUp,
   ShoppingCart,
   Crown,
   Sparkles,
-  Check
+  Check,
+  Save
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useLocalization } from "@/contexts/LocalizationContext";
 
 const ResellerPanel = () => {
   const [hasPanel, setHasPanel] = useState(false);
@@ -32,6 +32,7 @@ const ResellerPanel = () => {
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
+  const { t, formatPrice } = useLocalization();
 
   // Form states for creation
   const [panelName, setPanelName] = useState("");
@@ -78,8 +79,8 @@ const ResellerPanel = () => {
   const createPanel = async () => {
     if (!panelName || !subdomain) {
       toast({
-        title: "Missing Information",
-        description: "Please fill in panel name and subdomain",
+        title: t("Missing Information"),
+        description: t("Please fill in panel name and subdomain"),
         variant: "destructive",
       });
       return;
@@ -103,7 +104,7 @@ const ResellerPanel = () => {
 
       if (error) {
         toast({
-          title: "Error",
+          title: t("Error"),
           description: error.message,
           variant: "destructive",
         });
@@ -111,8 +112,8 @@ const ResellerPanel = () => {
         setHasPanel(true);
         setPanelData(data);
         toast({
-          title: "Panel Created!",
-          description: "Your reseller panel is now active",
+          title: t("Panel Created!"),
+          description: t("Your reseller panel is now active"),
         });
       }
     }
@@ -135,7 +136,7 @@ const ResellerPanel = () => {
 
     if (error) {
       toast({
-        title: "Error",
+        title: t("Error"),
         description: error.message,
         variant: "destructive",
       });
@@ -148,8 +149,8 @@ const ResellerPanel = () => {
         logo_url: editLogoUrl || null,
       });
       toast({
-        title: "Settings Saved",
-        description: "Your panel settings have been updated",
+        title: t("Settings Saved"),
+        description: t("Your panel settings have been updated"),
       });
     }
     setSaving(false);
@@ -158,14 +159,14 @@ const ResellerPanel = () => {
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
     toast({
-      title: "Copied!",
-      description: "Link copied to clipboard",
+      title: t("Copied!"),
+      description: t("Link copied to clipboard"),
     });
   };
 
   if (loading) {
     return (
-      <DashboardLayout title="Reseller Panel" subtitle="Create and manage your white-label SMM panel">
+      <DashboardLayout title={t("Reseller Panel")} subtitle={t("Create and manage your white-label SMM panel")}>
         <div className="flex items-center justify-center py-20">
           <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
         </div>
@@ -175,47 +176,45 @@ const ResellerPanel = () => {
 
   if (!hasPanel) {
     return (
-      <DashboardLayout title="Reseller Panel" subtitle="Create your own branded SMM panel">
-        <div className="space-y-6 animate-fade-in">
+      <DashboardLayout title={t("Reseller Panel")} subtitle={t("Create your own branded SMM panel")}>
+        <div className="space-y-4 md:space-y-6 animate-fade-in">
           {/* Hero Section */}
           <Card className="border-primary/20 bg-gradient-to-br from-primary/5 via-accent/5 to-primary/5 overflow-hidden relative">
             <div className="absolute inset-0 bg-hero-glow opacity-30" />
-            <CardContent className="p-8 relative">
-              <div className="flex flex-col lg:flex-row items-center gap-8">
+            <CardContent className="p-4 md:p-8 relative">
+              <div className="flex flex-col lg:flex-row items-center gap-6 md:gap-8">
                 <div className="flex-1 text-center lg:text-left">
                   <Badge variant="gold" className="mb-4">
                     <Crown className="h-3 w-3 mr-1" />
-                    PRO Feature
+                    {t("PRO Feature")}
                   </Badge>
-                  <h2 className="text-3xl font-display font-bold text-foreground mb-4">
-                    Launch Your Own <span className="text-gradient-cyan">SMM Panel</span>
+                  <h2 className="text-2xl md:text-3xl font-display font-bold text-foreground mb-4">
+                    {t("Launch Your Own")} <span className="text-gradient-cyan">{t("SMM Panel")}</span>
                   </h2>
-                  <p className="text-muted-foreground max-w-xl mb-6">
-                    Create a fully white-labeled SMM panel with your branding. Set your own prices, 
-                    manage your customers, and earn profit on every order. All services are powered by 
-                    Glavior Social's infrastructure.
+                  <p className="text-sm md:text-base text-muted-foreground max-w-xl mb-6">
+                    {t("Create a fully white-labeled SMM panel with your branding. Set your own prices, manage your customers, and earn profit on every order.")}
                   </p>
-                  <div className="flex flex-wrap gap-4 justify-center lg:justify-start">
-                    <div className="flex items-center gap-2 text-sm">
+                  <div className="flex flex-wrap gap-3 md:gap-4 justify-center lg:justify-start">
+                    <div className="flex items-center gap-2 text-xs md:text-sm">
                       <Check className="h-4 w-4 text-success" />
-                      <span>Custom Branding</span>
+                      <span>{t("Custom Branding")}</span>
                     </div>
-                    <div className="flex items-center gap-2 text-sm">
+                    <div className="flex items-center gap-2 text-xs md:text-sm">
                       <Check className="h-4 w-4 text-success" />
-                      <span>Set Your Margins</span>
+                      <span>{t("Set Your Margins")}</span>
                     </div>
-                    <div className="flex items-center gap-2 text-sm">
+                    <div className="flex items-center gap-2 text-xs md:text-sm">
                       <Check className="h-4 w-4 text-success" />
-                      <span>Custom Domain</span>
+                      <span>{t("Custom Domain")}</span>
                     </div>
-                    <div className="flex items-center gap-2 text-sm">
+                    <div className="flex items-center gap-2 text-xs md:text-sm">
                       <Check className="h-4 w-4 text-success" />
-                      <span>24/7 Support</span>
+                      <span>{t("24/7 Support")}</span>
                     </div>
                   </div>
                 </div>
-                <div className="w-48 h-48 rounded-2xl bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
-                  <Globe className="h-24 w-24 text-primary animate-pulse" />
+                <div className="w-32 h-32 md:w-48 md:h-48 rounded-2xl bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center flex-shrink-0">
+                  <Globe className="h-16 w-16 md:h-24 md:w-24 text-primary animate-pulse" />
                 </div>
               </div>
             </CardContent>
@@ -224,26 +223,26 @@ const ResellerPanel = () => {
           {/* Create Panel Form */}
           <Card className="border-border/30 bg-card/60 backdrop-blur-sm">
             <CardHeader>
-              <CardTitle className="text-xl font-display flex items-center gap-2">
+              <CardTitle className="text-lg md:text-xl font-display flex items-center gap-2">
                 <Sparkles className="h-5 w-5 text-primary" />
-                Create Your Panel
+                {t("Create Your Panel")}
               </CardTitle>
-              <CardDescription>Fill in the details to launch your reseller panel</CardDescription>
+              <CardDescription>{t("Fill in the details to launch your reseller panel")}</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid md:grid-cols-2 gap-6">
+            <CardContent className="space-y-4 md:space-y-6">
+              <div className="grid sm:grid-cols-2 gap-4 md:gap-6">
                 <div className="space-y-2">
-                  <Label htmlFor="panelName">Panel Name *</Label>
+                  <Label htmlFor="panelName">{t("Panel Name")} *</Label>
                   <Input
                     id="panelName"
-                    placeholder="My SMM Panel"
+                    placeholder={t("My SMM Panel")}
                     value={panelName}
                     onChange={(e) => setPanelName(e.target.value)}
                     className="bg-secondary/30 border-border/30"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="subdomain">Subdomain *</Label>
+                  <Label htmlFor="subdomain">{t("Subdomain")} *</Label>
                   <div className="flex">
                     <Input
                       id="subdomain"
@@ -252,13 +251,13 @@ const ResellerPanel = () => {
                       onChange={(e) => setSubdomain(e.target.value.toLowerCase().replace(/[^a-z0-9]/g, ''))}
                       className="bg-secondary/30 border-border/30 rounded-r-none"
                     />
-                    <div className="px-4 flex items-center bg-secondary/50 border border-l-0 border-border/30 rounded-r-lg text-sm text-muted-foreground">
+                    <div className="px-3 md:px-4 flex items-center bg-secondary/50 border border-l-0 border-border/30 rounded-r-lg text-xs md:text-sm text-muted-foreground whitespace-nowrap">
                       .glavior.social
                     </div>
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="customDomain">Custom Domain (Optional)</Label>
+                  <Label htmlFor="customDomain">{t("Custom Domain")} ({t("Optional")})</Label>
                   <Input
                     id="customDomain"
                     placeholder="panel.yourdomain.com"
@@ -268,7 +267,7 @@ const ResellerPanel = () => {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="margin">Pricing Margin (%)</Label>
+                  <Label htmlFor="margin">{t("Pricing Margin")} (%)</Label>
                   <Input
                     id="margin"
                     type="number"
@@ -279,24 +278,24 @@ const ResellerPanel = () => {
                     onChange={(e) => setPricingMargin(e.target.value)}
                     className="bg-secondary/30 border-border/30"
                   />
-                  <p className="text-xs text-muted-foreground">Your profit percentage on each sale</p>
+                  <p className="text-xs text-muted-foreground">{t("Your profit percentage on each sale")}</p>
                 </div>
               </div>
               
               <Button 
                 onClick={createPanel} 
                 disabled={creating}
-                className="w-full md:w-auto"
+                className="w-full sm:w-auto"
               >
                 {creating ? (
                   <>
                     <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin mr-2" />
-                    Creating...
+                    {t("Creating...")}
                   </>
                 ) : (
                   <>
                     <Plus className="h-4 w-4 mr-2" />
-                    Create Panel
+                    {t("Create Panel")}
                   </>
                 )}
               </Button>
@@ -309,20 +308,20 @@ const ResellerPanel = () => {
 
   // Panel exists - show dashboard
   return (
-    <DashboardLayout title="Reseller Panel" subtitle="Manage your white-label SMM panel">
-      <div className="space-y-6 animate-fade-in">
+    <DashboardLayout title={t("Reseller Panel")} subtitle={t("Manage your white-label SMM panel")}>
+      <div className="space-y-4 md:space-y-6 animate-fade-in">
         {/* Panel Stats */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
           <Card className="border-border/30 bg-card/60 backdrop-blur-sm">
-            <CardContent className="p-6">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
-                  <Globe className="h-6 w-6 text-primary" />
+            <CardContent className="p-4 md:p-6">
+              <div className="flex items-center gap-3 md:gap-4">
+                <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+                  <Globe className="h-5 w-5 md:h-6 md:w-6 text-primary" />
                 </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Panel Status</p>
-                  <Badge variant={panelData?.is_active ? "success" : "secondary"}>
-                    {panelData?.is_active ? "Active" : "Inactive"}
+                <div className="min-w-0">
+                  <p className="text-xs md:text-sm text-muted-foreground">{t("Panel Status")}</p>
+                  <Badge variant={panelData?.is_active ? "success" : "secondary"} className="mt-1">
+                    {panelData?.is_active ? t("Active") : t("Inactive")}
                   </Badge>
                 </div>
               </div>
@@ -330,42 +329,42 @@ const ResellerPanel = () => {
           </Card>
           
           <Card className="border-border/30 bg-card/60 backdrop-blur-sm">
-            <CardContent className="p-6">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-xl bg-accent/10 flex items-center justify-center">
-                  <Users className="h-6 w-6 text-accent" />
+            <CardContent className="p-4 md:p-6">
+              <div className="flex items-center gap-3 md:gap-4">
+                <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-accent/10 flex items-center justify-center flex-shrink-0">
+                  <Users className="h-5 w-5 md:h-6 md:w-6 text-accent" />
                 </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Total Users</p>
-                  <p className="text-2xl font-display font-bold text-foreground">0</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          
-          <Card className="border-border/30 bg-card/60 backdrop-blur-sm">
-            <CardContent className="p-6">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-xl bg-success/10 flex items-center justify-center">
-                  <ShoppingCart className="h-6 w-6 text-success" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Total Orders</p>
-                  <p className="text-2xl font-display font-bold text-foreground">0</p>
+                <div className="min-w-0">
+                  <p className="text-xs md:text-sm text-muted-foreground">{t("Total Users")}</p>
+                  <p className="text-lg md:text-2xl font-display font-bold text-foreground">0</p>
                 </div>
               </div>
             </CardContent>
           </Card>
           
           <Card className="border-border/30 bg-card/60 backdrop-blur-sm">
-            <CardContent className="p-6">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-xl bg-gold/10 flex items-center justify-center">
-                  <DollarSign className="h-6 w-6 text-gold" />
+            <CardContent className="p-4 md:p-6">
+              <div className="flex items-center gap-3 md:gap-4">
+                <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-success/10 flex items-center justify-center flex-shrink-0">
+                  <ShoppingCart className="h-5 w-5 md:h-6 md:w-6 text-success" />
                 </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Total Earnings</p>
-                  <p className="text-2xl font-display font-bold text-foreground">$0.00</p>
+                <div className="min-w-0">
+                  <p className="text-xs md:text-sm text-muted-foreground">{t("Total Orders")}</p>
+                  <p className="text-lg md:text-2xl font-display font-bold text-foreground">0</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card className="border-border/30 bg-card/60 backdrop-blur-sm">
+            <CardContent className="p-4 md:p-6">
+              <div className="flex items-center gap-3 md:gap-4">
+                <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-gold/10 flex items-center justify-center flex-shrink-0">
+                  <DollarSign className="h-5 w-5 md:h-6 md:w-6 text-gold" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs md:text-sm text-muted-foreground">{t("Total Earnings")}</p>
+                  <p className="text-lg md:text-2xl font-display font-bold text-foreground">{formatPrice(0)}</p>
                 </div>
               </div>
             </CardContent>
@@ -373,36 +372,36 @@ const ResellerPanel = () => {
         </div>
 
         {/* Panel Details */}
-        <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className="bg-secondary/30">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="settings">Settings</TabsTrigger>
-            <TabsTrigger value="services">Services</TabsTrigger>
+        <Tabs defaultValue="overview" className="space-y-4 md:space-y-6">
+          <TabsList className="bg-secondary/30 w-full sm:w-auto flex">
+            <TabsTrigger value="overview" className="flex-1 sm:flex-none">{t("Overview")}</TabsTrigger>
+            <TabsTrigger value="settings" className="flex-1 sm:flex-none">{t("Settings")}</TabsTrigger>
+            <TabsTrigger value="services" className="flex-1 sm:flex-none">{t("Services")}</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview">
             <Card className="border-border/30 bg-card/60 backdrop-blur-sm">
               <CardHeader>
-                <CardTitle className="text-lg font-display">Panel Information</CardTitle>
+                <CardTitle className="text-base md:text-lg font-display">{t("Panel Information")}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div className="p-4 rounded-lg bg-secondary/20">
-                    <p className="text-sm text-muted-foreground mb-1">Panel Name</p>
+                <div className="grid sm:grid-cols-2 gap-3 md:gap-4">
+                  <div className="p-3 md:p-4 rounded-lg bg-secondary/20">
+                    <p className="text-xs md:text-sm text-muted-foreground mb-1">{t("Panel Name")}</p>
                     <p className="font-medium text-foreground">{panelData?.panel_name}</p>
                   </div>
-                  <div className="p-4 rounded-lg bg-secondary/20">
-                    <p className="text-sm text-muted-foreground mb-1">Pricing Margin</p>
+                  <div className="p-3 md:p-4 rounded-lg bg-secondary/20">
+                    <p className="text-xs md:text-sm text-muted-foreground mb-1">{t("Pricing Margin")}</p>
                     <p className="font-medium text-foreground">{panelData?.pricing_margin}%</p>
                   </div>
-                  <div className="p-4 rounded-lg bg-secondary/20">
-                    <p className="text-sm text-muted-foreground mb-1">Panel URL</p>
+                  <div className="p-3 md:p-4 rounded-lg bg-secondary/20">
+                    <p className="text-xs md:text-sm text-muted-foreground mb-1">{t("Panel URL")}</p>
                     <div className="flex items-center gap-2">
-                      <p className="font-mono text-sm text-primary">{panelData?.subdomain}.glavior.social</p>
+                      <p className="font-mono text-xs md:text-sm text-primary truncate">{panelData?.subdomain}.glavior.social</p>
                       <Button 
                         variant="ghost" 
                         size="icon" 
-                        className="h-6 w-6"
+                        className="h-6 w-6 flex-shrink-0"
                         onClick={() => copyToClipboard(`https://${panelData?.subdomain}.glavior.social`)}
                       >
                         <Copy className="h-3 w-3" />
@@ -410,14 +409,14 @@ const ResellerPanel = () => {
                     </div>
                   </div>
                   {panelData?.custom_domain && (
-                    <div className="p-4 rounded-lg bg-secondary/20">
-                      <p className="text-sm text-muted-foreground mb-1">Custom Domain</p>
+                    <div className="p-3 md:p-4 rounded-lg bg-secondary/20">
+                      <p className="text-xs md:text-sm text-muted-foreground mb-1">{t("Custom Domain")}</p>
                       <div className="flex items-center gap-2">
-                        <p className="font-mono text-sm text-primary">{panelData?.custom_domain}</p>
+                        <p className="font-mono text-xs md:text-sm text-primary truncate">{panelData?.custom_domain}</p>
                         <Button 
                           variant="ghost" 
                           size="icon" 
-                          className="h-6 w-6"
+                          className="h-6 w-6 flex-shrink-0"
                           onClick={() => copyToClipboard(`https://${panelData?.custom_domain}`)}
                         >
                           <Copy className="h-3 w-3" />
@@ -427,14 +426,14 @@ const ResellerPanel = () => {
                   )}
                 </div>
                 
-                <div className="flex gap-2 pt-4">
-                  <Button>
+                <div className="flex flex-col sm:flex-row gap-2 pt-4">
+                  <Button className="w-full sm:w-auto">
                     <ExternalLink className="h-4 w-4 mr-2" />
-                    Visit Panel
+                    {t("Visit Panel")}
                   </Button>
-                  <Button variant="outline">
+                  <Button variant="outline" className="w-full sm:w-auto">
                     <Settings className="h-4 w-4 mr-2" />
-                    Manage Panel
+                    {t("Manage Panel")}
                   </Button>
                 </div>
               </CardContent>
@@ -444,54 +443,64 @@ const ResellerPanel = () => {
           <TabsContent value="settings">
             <Card className="border-border/30 bg-card/60 backdrop-blur-sm">
               <CardHeader>
-                <CardTitle className="text-lg font-display">Panel Settings</CardTitle>
+                <CardTitle className="text-base md:text-lg font-display">{t("Panel Settings")}</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="grid md:grid-cols-2 gap-6">
+              <CardContent className="space-y-4 md:space-y-6">
+                <div className="grid sm:grid-cols-2 gap-4 md:gap-6">
                   <div className="space-y-2">
-                    <Label>Panel Name</Label>
-                    <Input 
-                      value={editPanelName} 
+                    <Label htmlFor="editPanelName">{t("Panel Name")}</Label>
+                    <Input
+                      id="editPanelName"
+                      value={editPanelName}
                       onChange={(e) => setEditPanelName(e.target.value)}
-                      className="bg-secondary/30 border-border/30" 
+                      className="bg-secondary/30 border-border/30"
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>Pricing Margin (%)</Label>
-                    <Input 
-                      type="number" 
-                      value={editPricingMargin} 
+                    <Label htmlFor="editMargin">{t("Pricing Margin")} (%)</Label>
+                    <Input
+                      id="editMargin"
+                      type="number"
+                      min="5"
+                      max="100"
+                      value={editPricingMargin}
                       onChange={(e) => setEditPricingMargin(e.target.value)}
-                      className="bg-secondary/30 border-border/30" 
+                      className="bg-secondary/30 border-border/30"
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>Custom Domain</Label>
-                    <Input 
-                      value={editCustomDomain} 
+                    <Label htmlFor="editDomain">{t("Custom Domain")}</Label>
+                    <Input
+                      id="editDomain"
+                      value={editCustomDomain}
                       onChange={(e) => setEditCustomDomain(e.target.value)}
-                      placeholder="panel.yourdomain.com" 
-                      className="bg-secondary/30 border-border/30" 
+                      placeholder="panel.yourdomain.com"
+                      className="bg-secondary/30 border-border/30"
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>Logo URL</Label>
-                    <Input 
-                      value={editLogoUrl} 
+                    <Label htmlFor="editLogo">{t("Logo URL")}</Label>
+                    <Input
+                      id="editLogo"
+                      value={editLogoUrl}
                       onChange={(e) => setEditLogoUrl(e.target.value)}
-                      placeholder="https://..." 
-                      className="bg-secondary/30 border-border/30" 
+                      placeholder="https://..."
+                      className="bg-secondary/30 border-border/30"
                     />
                   </div>
                 </div>
-                <Button onClick={saveSettings} disabled={saving}>
+                
+                <Button onClick={saveSettings} disabled={saving} className="w-full sm:w-auto">
                   {saving ? (
                     <>
                       <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin mr-2" />
-                      Saving...
+                      {t("Saving...")}
                     </>
                   ) : (
-                    "Save Changes"
+                    <>
+                      <Save className="h-4 w-4 mr-2" />
+                      {t("Save Settings")}
+                    </>
                   )}
                 </Button>
               </CardContent>
@@ -501,13 +510,19 @@ const ResellerPanel = () => {
           <TabsContent value="services">
             <Card className="border-border/30 bg-card/60 backdrop-blur-sm">
               <CardHeader>
-                <CardTitle className="text-lg font-display">Available Services</CardTitle>
-                <CardDescription>All Glavior Social services are automatically available on your panel</CardDescription>
+                <CardTitle className="text-base md:text-lg font-display">{t("Available Services")}</CardTitle>
+                <CardDescription>
+                  {t("All services from Glavior Social are automatically available on your panel")}
+                </CardDescription>
               </CardHeader>
               <CardContent>
-                <p className="text-muted-foreground text-center py-8">
-                  Services are synced automatically from Glavior Social. Your pricing margin will be applied on top of base prices.
-                </p>
+                <div className="text-center py-8 md:py-12">
+                  <TrendingUp className="h-10 w-10 md:h-12 md:w-12 mx-auto text-muted-foreground/50 mb-4" />
+                  <p className="text-muted-foreground">{t("Services are automatically synced")}</p>
+                  <p className="text-xs md:text-sm text-muted-foreground/70 mt-1">
+                    {t("Your customers will see all available services with your custom pricing margin applied")}
+                  </p>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
