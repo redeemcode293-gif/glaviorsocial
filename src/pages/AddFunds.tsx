@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
   Wallet,
   CreditCard,
@@ -33,11 +34,49 @@ const cryptoAddresses = {
   usdt: { network: "TRC20", address: "TYdB1j8sCL8dpNkP5QK9cAh7H3mwKVYrZy" },
   btc: { network: "Bitcoin", address: "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh" },
   sol: { network: "Solana", address: "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU" },
+  eth: { network: "ERC20", address: "0x742d35Cc6634C0532925a3b844Bc9e7595f5Bc12" },
+  ltc: { network: "Litecoin", address: "ltc1q8c6fshw2dlwun7ekn9qwf37cu2rn755upcp6el" },
+  bnb: { network: "BEP20", address: "0x742d35Cc6634C0532925a3b844Bc9e7595f5Bc12" },
+  trx: { network: "TRC20", address: "TYdB1j8sCL8dpNkP5QK9cAh7H3mwKVYrZy" },
 };
+
+const currencies = [
+  { code: "USD", symbol: "$", name: "US Dollar" },
+  { code: "EUR", symbol: "€", name: "Euro" },
+  { code: "GBP", symbol: "£", name: "British Pound" },
+  { code: "INR", symbol: "₹", name: "Indian Rupee" },
+  { code: "AED", symbol: "د.إ", name: "UAE Dirham" },
+  { code: "SAR", symbol: "﷼", name: "Saudi Riyal" },
+  { code: "AUD", symbol: "A$", name: "Australian Dollar" },
+  { code: "CAD", symbol: "C$", name: "Canadian Dollar" },
+  { code: "NGN", symbol: "₦", name: "Nigerian Naira" },
+  { code: "PKR", symbol: "₨", name: "Pakistani Rupee" },
+  { code: "BDT", symbol: "৳", name: "Bangladeshi Taka" },
+  { code: "IDR", symbol: "Rp", name: "Indonesian Rupiah" },
+  { code: "PHP", symbol: "₱", name: "Philippine Peso" },
+  { code: "MYR", symbol: "RM", name: "Malaysian Ringgit" },
+  { code: "BRL", symbol: "R$", name: "Brazilian Real" },
+  { code: "MXN", symbol: "$", name: "Mexican Peso" },
+  { code: "ZAR", symbol: "R", name: "South African Rand" },
+  { code: "KES", symbol: "KSh", name: "Kenyan Shilling" },
+  { code: "EGP", symbol: "£", name: "Egyptian Pound" },
+  { code: "TRY", symbol: "₺", name: "Turkish Lira" },
+  { code: "RUB", symbol: "₽", name: "Russian Ruble" },
+  { code: "THB", symbol: "฿", name: "Thai Baht" },
+  { code: "VND", symbol: "₫", name: "Vietnamese Dong" },
+  { code: "KRW", symbol: "₩", name: "South Korean Won" },
+  { code: "JPY", symbol: "¥", name: "Japanese Yen" },
+  { code: "CNY", symbol: "¥", name: "Chinese Yuan" },
+  { code: "SGD", symbol: "S$", name: "Singapore Dollar" },
+  { code: "HKD", symbol: "HK$", name: "Hong Kong Dollar" },
+  { code: "TWD", symbol: "NT$", name: "Taiwan Dollar" },
+  { code: "NZD", symbol: "NZ$", name: "New Zealand Dollar" },
+];
 
 const AddFunds = () => {
   const [amount, setAmount] = useState("");
   const [selectedMethod, setSelectedMethod] = useState("crypto");
+  const [selectedCurrency, setSelectedCurrency] = useState("USD");
   const [isProcessing, setIsProcessing] = useState(false);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [loadingTransactions, setLoadingTransactions] = useState(true);
@@ -46,6 +85,8 @@ const AddFunds = () => {
   const { toast } = useToast();
   const { user, wallet, refreshProfile } = useAuth();
   const navigate = useNavigate();
+
+  const currentCurrency = currencies.find(c => c.code === selectedCurrency) || currencies[0];
 
   useEffect(() => {
     if (user) {
@@ -276,17 +317,38 @@ const AddFunds = () => {
 
               {/* Amount Input */}
               <div className="space-y-4 pt-4 border-t border-border/30">
-                <Label>Amount to Add (USD)</Label>
-                <div className="relative">
-                  <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    type="number"
-                    placeholder="Enter amount"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    className="pl-10 bg-secondary/30 border-border/30 text-lg"
-                    min="1"
-                  />
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <div className="flex-1 space-y-2">
+                    <Label>Amount to Add</Label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                        {currentCurrency.symbol}
+                      </span>
+                      <Input
+                        type="number"
+                        placeholder="Enter amount"
+                        value={amount}
+                        onChange={(e) => setAmount(e.target.value)}
+                        className="pl-10 bg-secondary/30 border-border/30 text-lg"
+                        min="1"
+                      />
+                    </div>
+                  </div>
+                  <div className="w-full sm:w-48 space-y-2">
+                    <Label>Currency</Label>
+                    <Select value={selectedCurrency} onValueChange={setSelectedCurrency}>
+                      <SelectTrigger className="bg-secondary/30 border-border/30">
+                        <SelectValue placeholder="Currency" />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-[300px]">
+                        {currencies.map((currency) => (
+                          <SelectItem key={currency.code} value={currency.code}>
+                            {currency.symbol} {currency.code} - {currency.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {quickAmounts.map((amt) => (
@@ -314,7 +376,7 @@ const AddFunds = () => {
                   ) : (
                     <>
                       <Wallet className="h-4 w-4 mr-2" />
-                      Submit Deposit Request - ${amount || '0'}
+                      Submit Deposit Request - {currentCurrency.symbol}{amount || '0'} {selectedCurrency}
                     </>
                   )}
                 </Button>
