@@ -19,20 +19,21 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
-const referralStats = [
-  { label: "Total Referrals", value: "24", icon: Users, color: "text-primary" },
-  { label: "Active Referrals", value: "18", icon: CheckCircle2, color: "text-success" },
-  { label: "Total Earnings", value: "$156.80", icon: DollarSign, color: "text-accent" },
-  { label: "Commission Rate", value: "10%", icon: Percent, color: "text-warning" },
-];
+interface ReferralStat {
+  label: string;
+  value: string;
+  icon: any;
+  color: string;
+}
 
-const referralHistory = [
-  { id: "REF-001", user: "jo****@gmail.com", orders: 12, earnings: 45.60, status: "active", joined: "2024-01-10" },
-  { id: "REF-002", user: "sa****@outlook.com", orders: 8, earnings: 28.40, status: "active", joined: "2024-01-12" },
-  { id: "REF-003", user: "mi****@yahoo.com", orders: 5, earnings: 18.20, status: "active", joined: "2024-01-13" },
-  { id: "REF-004", user: "al****@gmail.com", orders: 15, earnings: 52.80, status: "active", joined: "2024-01-08" },
-  { id: "REF-005", user: "ch****@hotmail.com", orders: 0, earnings: 0, status: "pending", joined: "2024-01-15" },
-];
+interface ReferralEntry {
+  id: string;
+  user: string;
+  orders: number;
+  earnings: number;
+  status: string;
+  joined: string;
+}
 
 const Referrals = () => {
   const [referralLink] = useState("https://glavior.social/ref/USR123ABC");
