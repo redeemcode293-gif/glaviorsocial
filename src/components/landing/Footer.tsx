@@ -3,33 +3,36 @@ import {
   Send as Telegram,
   Twitter,
 } from "lucide-react";
-
-const footerLinks = {
-  product: [
-    { label: "Services", href: "/services" },
-    { label: "New Order", href: "/new-order" },
-    { label: "API Documentation", href: "/api-docs" },
-    { label: "Updates", href: "/updates" },
-  ],
-  company: [
-    { label: "About Us", href: "/about" },
-    { label: "Terms of Service", href: "/terms" },
-    { label: "Privacy Policy", href: "/privacy" },
-    { label: "Contact", href: "/support" },
-  ],
-  support: [
-    { label: "Help Center", href: "/support" },
-    { label: "FAQ", href: "/faq" },
-    { label: "Status", href: "/status" },
-  ],
-};
-
-const socialLinks = [
-  { icon: Twitter, href: "#", label: "Twitter" },
-  { icon: Telegram, href: "#", label: "Telegram" },
-];
+import { useLocalization } from "@/contexts/LocalizationContext";
 
 export const Footer = () => {
+  const { t } = useLocalization();
+
+  const footerLinks = {
+    product: [
+      { label: t("Services"), href: "/services" },
+      { label: t("New Order"), href: "/new-order" },
+      { label: t("API Documentation"), href: "/api-docs" },
+      { label: t("Updates"), href: "/updates" },
+    ],
+    company: [
+      { label: t("About Us"), href: "/about" },
+      { label: t("Terms of Service"), href: "/terms" },
+      { label: t("Privacy Policy"), href: "/privacy" },
+      { label: t("Contact"), href: "/support" },
+    ],
+    support: [
+      { label: t("Help Center"), href: "/support" },
+      { label: t("FAQ"), href: "/faq" },
+      { label: t("Status"), href: "/status" },
+    ],
+  };
+
+  const socialLinks = [
+    { icon: Twitter, href: "#", label: "Twitter" },
+    { icon: Telegram, href: "#", label: "Telegram" },
+  ];
+
   return (
     <footer className="border-t border-border/30 bg-card/30">
       <div className="container mx-auto px-4 py-12">
@@ -46,7 +49,7 @@ export const Footer = () => {
               </div>
             </Link>
             <p className="text-sm text-muted-foreground mb-4 max-w-xs">
-              Enterprise-grade social media growth infrastructure for creators and businesses.
+              {t("Enterprise-grade social media growth infrastructure for creators and businesses.")}
             </p>
             <div className="flex gap-3">
               {socialLinks.map((social) => (
@@ -64,7 +67,7 @@ export const Footer = () => {
 
           {/* Product Links */}
           <div>
-            <h4 className="font-display text-sm font-semibold text-foreground mb-4">Product</h4>
+            <h4 className="font-display text-sm font-semibold text-foreground mb-4">{t("Product")}</h4>
             <ul className="space-y-2.5">
               {footerLinks.product.map((link) => (
                 <li key={link.label}>
@@ -81,7 +84,7 @@ export const Footer = () => {
 
           {/* Company Links */}
           <div>
-            <h4 className="font-display text-sm font-semibold text-foreground mb-4">Company</h4>
+            <h4 className="font-display text-sm font-semibold text-foreground mb-4">{t("Company")}</h4>
             <ul className="space-y-2.5">
               {footerLinks.company.map((link) => (
                 <li key={link.label}>
@@ -98,7 +101,7 @@ export const Footer = () => {
 
           {/* Support Links */}
           <div>
-            <h4 className="font-display text-sm font-semibold text-foreground mb-4">Support</h4>
+            <h4 className="font-display text-sm font-semibold text-foreground mb-4">{t("Support")}</h4>
             <ul className="space-y-2.5">
               {footerLinks.support.map((link) => (
                 <li key={link.label}>
@@ -117,11 +120,11 @@ export const Footer = () => {
         {/* Bottom Bar */}
         <div className="mt-12 pt-6 border-t border-border/30 flex flex-col sm:flex-row items-center justify-between gap-4">
           <p className="text-xs text-muted-foreground">
-            © {new Date().getFullYear()} Glavior Social. All rights reserved.
+            © {new Date().getFullYear()} Glavior Social. {t("All rights reserved.")}
           </p>
           <div className="flex items-center gap-2">
             <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
-            <span className="text-xs text-muted-foreground">All systems operational</span>
+            <span className="text-xs text-muted-foreground">{t("All systems operational")}</span>
           </div>
         </div>
       </div>
