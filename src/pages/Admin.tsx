@@ -37,6 +37,7 @@ import { useToast } from "@/hooks/use-toast";
 import { UserDetailsDialog } from "@/components/admin/UserDetailsDialog";
 import { ServiceMappingTab } from "@/components/admin/ServiceMappingTab";
 import { ServiceManagementTab } from "@/components/admin/ServiceManagementTab";
+import { RegionalPricingTab } from "@/components/admin/RegionalPricingTab";
 
 const Admin = () => {
   const [loading, setLoading] = useState(true);
