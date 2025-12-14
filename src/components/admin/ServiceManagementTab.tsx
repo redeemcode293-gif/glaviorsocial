@@ -248,6 +248,8 @@ export function ServiceManagementTab() {
       updateData.base_price = parseFloat(value);
     } else if (field === 'is_active') {
       updateData.is_active = value === 'true';
+    } else if (field === 'name') {
+      updateData.name = value;
     }
 
     const { error } = await supabase.from('services').update(updateData).eq('id', serviceId);
@@ -421,7 +423,7 @@ export function ServiceManagementTab() {
                         onCheckedChange={selectAll}
                       />
                     </th>
-                    <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">ID</th>
+                    <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Panel ID / Provider ID</th>
                     <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Service</th>
                     <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Platform</th>
                     <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Provider Price</th>
@@ -450,11 +452,38 @@ export function ServiceManagementTab() {
                             }}
                           />
                         </td>
-                        <td className="p-3 font-mono text-sm text-primary">{service.service_id}</td>
+                        <td className="p-3">
+                          <div className="font-mono text-sm text-primary">{service.service_id}</div>
+                          <div className="font-mono text-xs text-muted-foreground">{service.provider_service_id || '—'}</div>
+                        </td>
                         <td className="p-3 max-w-[250px]">
-                          <p className="font-medium text-foreground text-sm truncate" title={service.name}>
-                            {service.name}
-                          </p>
+                          {inlineEditing?.id === service.id && inlineEditing.field === 'name' ? (
+                            <div className="flex items-center gap-1">
+                              <Input 
+                                className="h-7 w-40 text-xs"
+                                value={inlineValue}
+                                onChange={(e) => setInlineValue(e.target.value)}
+                                autoFocus
+                              />
+                              <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => saveInlineEdit(service.id, 'name', inlineValue)}>
+                                <Check className="h-3 w-3 text-success" />
+                              </Button>
+                              <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setInlineEditing(null)}>
+                                <X className="h-3 w-3 text-destructive" />
+                              </Button>
+                            </div>
+                          ) : (
+                            <p 
+                              className="font-medium text-foreground text-sm truncate cursor-pointer hover:underline" 
+                              title={service.name}
+                              onClick={() => {
+                                setInlineEditing({ id: service.id, field: 'name' });
+                                setInlineValue(service.name);
+                              }}
+                            >
+                              {service.name}
+                            </p>
+                          )}
                           <p className="text-xs text-muted-foreground truncate">{service.category}</p>
                         </td>
                         <td className="p-3">
@@ -516,6 +545,9 @@ export function ServiceManagementTab() {
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
+                              <div className="px-2 py-1.5 text-xs text-muted-foreground border-b border-border/30 mb-1">
+                                <span className="font-medium">Provider Name:</span> {provider?.name || 'Unknown'}
+                              </div>
                               <DropdownMenuItem onClick={() => openEditDialog(service)}>
                                 <Edit className="h-4 w-4 mr-2" />Edit Service
                               </DropdownMenuItem>
@@ -636,11 +668,12 @@ export function ServiceManagementTab() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Max Quantity</Label>
+                <Label>Max Quantity (Read-only)</Label>
                 <Input 
                   type="number"
                   value={editForm.max_quantity}
-                  onChange={(e) => setEditForm({ ...editForm, max_quantity: e.target.value })}
+                  disabled
+                  className="bg-muted"
                 />
               </div>
             </div>
