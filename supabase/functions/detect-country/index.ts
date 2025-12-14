@@ -17,7 +17,11 @@ serve(async (req) => {
                      req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
                      "unknown";
 
-    console.log("Detecting country for IP:", clientIP);
+    // Mask IP for logging - only show first 3 octets for privacy
+    const maskedIP = clientIP !== "unknown" 
+      ? clientIP.split('.').slice(0, 3).join('.') + '.XXX'
+      : "unknown";
+    console.log("Detecting country for IP:", maskedIP);
 
     // Primary: Use ip-api.com for free geolocation
     let geoData = null;
@@ -26,10 +30,10 @@ serve(async (req) => {
       const geoResponse = await fetch(`http://ip-api.com/json/${clientIP}?fields=status,country,countryCode`);
       if (geoResponse.ok) {
         geoData = await geoResponse.json();
-        console.log("ip-api.com response:", geoData);
+        console.log("Geo lookup status:", geoData.status);
       }
     } catch (e) {
-      console.log("ip-api.com failed, trying fallback:", e);
+      console.log("Primary geo service failed, trying fallback");
     }
 
     // If primary fails, try ipinfo.io as fallback
@@ -38,7 +42,7 @@ serve(async (req) => {
         const fallbackResponse = await fetch(`https://ipinfo.io/${clientIP}/json`);
         if (fallbackResponse.ok) {
           const fallbackData = await fallbackResponse.json();
-          console.log("ipinfo.io response:", fallbackData);
+          console.log("Fallback geo lookup completed");
           if (fallbackData.country) {
             geoData = {
               status: "success",
@@ -53,19 +57,20 @@ serve(async (req) => {
               SA: "Saudi Arabia", PK: "Pakistan", BD: "Bangladesh",
               ID: "Indonesia", PH: "Philippines", TH: "Thailand",
               VN: "Vietnam", MY: "Malaysia", TR: "Turkey", EG: "Egypt",
-              NG: "Nigeria", ZA: "South Africa", MX: "Mexico", CO: "Colombia"
+              NG: "Nigeria", ZA: "South Africa", MX: "Mexico", CO: "Colombia",
+              KW: "Kuwait", QA: "Qatar", BH: "Bahrain", OM: "Oman"
             };
             geoData.country = countryNames[fallbackData.country] || fallbackData.country;
             geoData.countryCode = fallbackData.country;
           }
         }
       } catch (e) {
-        console.log("ipinfo.io also failed:", e);
+        console.log("Fallback geo service also failed");
       }
     }
 
     if (geoData && geoData.status === "success") {
-      console.log("Final country detection:", geoData.country, geoData.countryCode);
+      console.log("Country detected:", geoData.countryCode);
       return new Response(
         JSON.stringify({
           country: geoData.country,
@@ -91,7 +96,7 @@ serve(async (req) => {
       }
     );
   } catch (error) {
-    console.error("Error detecting country:", error);
+    console.error("Error in country detection");
     return new Response(
       JSON.stringify({
         country: "Unknown", 
