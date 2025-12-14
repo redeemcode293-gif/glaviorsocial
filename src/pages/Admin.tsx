@@ -36,6 +36,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { UserDetailsDialog } from "@/components/admin/UserDetailsDialog";
 import { ServiceMappingTab } from "@/components/admin/ServiceMappingTab";
+import { ServiceManagementTab } from "@/components/admin/ServiceManagementTab";
 
 const Admin = () => {
   const [loading, setLoading] = useState(true);
@@ -942,148 +943,7 @@ const Admin = () => {
           </TabsContent>
 
           <TabsContent value="services">
-            <Card className="border-border/30 bg-card/60">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-lg font-display">Service Management</CardTitle>
-                  <Dialog open={showServiceDialog} onOpenChange={setShowServiceDialog}>
-                    <DialogTrigger asChild>
-                      <Button><Plus className="h-4 w-4 mr-2" />Add Service</Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                      <DialogHeader><DialogTitle>Add Manual Service</DialogTitle></DialogHeader>
-                      <div className="space-y-4 py-4">
-                        <div className="space-y-2">
-                          <Label>Service Name</Label>
-                          <Input 
-                            placeholder="e.g., Instagram Followers" 
-                            value={serviceForm.name}
-                            onChange={(e) => setServiceForm({ ...serviceForm, name: e.target.value })}
-                          />
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-2">
-                            <Label>Platform</Label>
-                            <Select value={serviceForm.platform} onValueChange={(v) => setServiceForm({ ...serviceForm, platform: v })}>
-                              <SelectTrigger><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="Instagram">Instagram</SelectItem>
-                                <SelectItem value="YouTube">YouTube</SelectItem>
-                                <SelectItem value="TikTok">TikTok</SelectItem>
-                                <SelectItem value="Telegram">Telegram</SelectItem>
-                                <SelectItem value="X">X (Twitter)</SelectItem>
-                                <SelectItem value="Facebook">Facebook</SelectItem>
-                                <SelectItem value="Spotify">Spotify</SelectItem>
-                                <SelectItem value="Other">Other</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div className="space-y-2">
-                            <Label>Base Price (per 1000)</Label>
-                            <Input 
-                              type="number"
-                              step="0.01"
-                              placeholder="0.50" 
-                              value={serviceForm.base_price}
-                              onChange={(e) => setServiceForm({ ...serviceForm, base_price: e.target.value })}
-                            />
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-2">
-                            <Label>Min Quantity</Label>
-                            <Input 
-                              type="number"
-                              value={serviceForm.min_quantity}
-                              onChange={(e) => setServiceForm({ ...serviceForm, min_quantity: e.target.value })}
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label>Max Quantity</Label>
-                            <Input 
-                              type="number"
-                              value={serviceForm.max_quantity}
-                              onChange={(e) => setServiceForm({ ...serviceForm, max_quantity: e.target.value })}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                      <DialogFooter>
-                        <Button onClick={addService}>Add Service</Button>
-                      </DialogFooter>
-                    </DialogContent>
-                  </Dialog>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {services.length === 0 ? (
-                  <div className="text-center py-12">
-                    <Package className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
-                    <p className="text-muted-foreground">No services configured yet</p>
-                    <p className="text-sm text-muted-foreground mt-1">Add a provider and sync services, or add manually</p>
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="border-b border-border/30">
-                          <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">ID</th>
-                          <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Service</th>
-                          <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Platform</th>
-                          <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Provider</th>
-                          <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Base Price</th>
-                          <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Status</th>
-                          <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {services.slice(0, 100).map((service) => (
-                          <tr key={service.id} className="border-b border-border/20 hover:bg-secondary/10">
-                            <td className="p-3 font-mono text-sm">{service.service_id}</td>
-                            <td className="p-3">
-                              <p className="font-medium text-foreground text-sm">{service.name?.substring(0, 40)}{service.name?.length > 40 ? '...' : ''}</p>
-                            </td>
-                            <td className="p-3">
-                              <Badge variant="outline">{service.platform}</Badge>
-                            </td>
-                            <td className="p-3 text-sm text-muted-foreground">
-                              {service.provider_price ? (
-                                <span className="font-mono text-xs">${Number(service.provider_price).toFixed(4)}</span>
-                              ) : '-'}
-                            </td>
-                            <td className="p-3 font-mono text-sm">${Number(service.base_price).toFixed(4)}</td>
-                            <td className="p-3">
-                              <Badge 
-                                variant={service.is_active ? "success" : "secondary"}
-                                className="cursor-pointer"
-                                onClick={() => toggleServiceStatus(service.id, service.is_active)}
-                              >
-                                {service.is_active ? "Active" : "Disabled"}
-                              </Badge>
-                            </td>
-                            <td className="p-3">
-                              <div className="flex items-center gap-1">
-                                <Button 
-                                  variant="ghost" 
-                                  size="icon" 
-                                  className="h-8 w-8 text-destructive"
-                                  onClick={() => deleteService(service.id)}
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    {services.length > 100 && (
-                      <p className="text-sm text-muted-foreground text-center mt-4">Showing 100 of {services.length} services</p>
-                    )}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+            <ServiceManagementTab />
           </TabsContent>
 
           <TabsContent value="orders">
