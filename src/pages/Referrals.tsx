@@ -16,10 +16,10 @@ import {
   Clock,
   Percent,
   Twitter,
-  Facebook,
-  Loader2
+  Facebook
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 
 interface ReferralStat {
@@ -45,15 +45,19 @@ const Referrals = () => {
   const [referralStats, setReferralStats] = useState<ReferralStat[]>([]);
   const [referralHistory, setReferralHistory] = useState<ReferralEntry[]>([]);
   const { toast } = useToast();
+  const { user, profile } = useAuth();
 
   useEffect(() => {
-    fetchReferralData();
-  }, []);
+    if (user) {
+      fetchReferralData();
+    } else {
+      setLoading(false);
+    }
+  }, [user, profile]);
 
   const fetchReferralData = async () => {
     try {
       setLoading(true);
-      const { data: { user } } = await supabase.auth.getUser();
       
       if (!user) {
         setLoading(false);
@@ -164,11 +168,11 @@ const Referrals = () => {
               <div className="w-full lg:w-auto">
                 <div className="flex flex-col sm:flex-row gap-2">
                   <Input
-                    value={referralLink || "Sign in to get your referral link"}
+                    value={user ? (referralLink || "Loading...") : "Sign in to get your referral link"}
                     readOnly
                     className="bg-secondary/30 border-border/50 font-mono text-sm min-w-[280px]"
                   />
-                  <Button onClick={handleCopy} className="shrink-0" disabled={!referralLink}>
+                  <Button onClick={handleCopy} className="shrink-0" disabled={!user || !referralLink}>
                     <Copy className="h-4 w-4 mr-2" />
                     Copy Link
                   </Button>

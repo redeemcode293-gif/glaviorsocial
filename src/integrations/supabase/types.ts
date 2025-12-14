@@ -218,6 +218,36 @@ export type Database = {
           },
         ]
       }
+      regional_pricing: {
+        Row: {
+          countries: string[]
+          created_at: string
+          id: string
+          multiplier: number
+          region_code: string
+          region_name: string
+          updated_at: string
+        }
+        Insert: {
+          countries?: string[]
+          created_at?: string
+          id?: string
+          multiplier?: number
+          region_code: string
+          region_name: string
+          updated_at?: string
+        }
+        Update: {
+          countries?: string[]
+          created_at?: string
+          id?: string
+          multiplier?: number
+          region_code?: string
+          region_name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       reseller_panels: {
         Row: {
           created_at: string

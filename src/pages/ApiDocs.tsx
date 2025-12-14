@@ -7,19 +7,17 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { 
-  Code2,
   Copy,
   RefreshCw,
   Eye,
   EyeOff,
   Lock,
-  CheckCircle2,
   Terminal,
   Zap,
-  Book,
-  Loader2
+  Book
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 
 const endpoints = [
@@ -165,23 +163,18 @@ const ApiDocs = () => {
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
+  const { user } = useAuth();
 
   useEffect(() => {
-    checkAuth();
-  }, []);
-
-  const checkAuth = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
     if (user) {
-      // Generate a deterministic API key based on user ID
       const keyHash = btoa(user.id).substring(0, 32);
       setApiKey(`sk_live_${keyHash}`);
     }
     setLoading(false);
-  };
+  }, [user]);
 
   const handleCopyKey = () => {
-    if (!apiKey) {
+    if (!user || !apiKey) {
       toast({
         title: "Not Authenticated",
         description: "Please sign in to get your API key.",
@@ -197,7 +190,6 @@ const ApiDocs = () => {
   };
 
   const handleRegenerate = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       toast({
         title: "Not Authenticated",
@@ -310,7 +302,7 @@ console.log(data);`;
             <div className="flex flex-col sm:flex-row gap-3">
               <div className="relative flex-1">
                 <Input
-                  value={apiKey ? (showKey ? apiKey : "•".repeat(apiKey.length)) : "Sign in to get your API key"}
+                  value={user ? (apiKey ? (showKey ? apiKey : "•".repeat(apiKey.length)) : "Loading...") : "Sign in to get your API key"}
                   readOnly
                   className="font-mono text-sm bg-secondary/30 border-border/30 pr-20"
                 />
