@@ -39,6 +39,17 @@ const Referrals = () => {
   const [referralLink] = useState("https://glavior.social/ref/USR123ABC");
   const { toast } = useToast();
 
+  // Empty stats - will be populated from database
+  const referralStats: ReferralStat[] = [
+    { label: "Total Referrals", value: "0", icon: Users, color: "text-primary" },
+    { label: "Active Referrals", value: "0", icon: TrendingUp, color: "text-accent" },
+    { label: "Total Earnings", value: "$0.00", icon: DollarSign, color: "text-success" },
+    { label: "Commission Rate", value: "10%", icon: Percent, color: "text-warning" },
+  ];
+
+  // Empty referral history - will be populated from database
+  const referralHistory: ReferralEntry[] = [];
+
   const handleCopy = () => {
     navigator.clipboard.writeText(referralLink);
     toast({
@@ -189,31 +200,39 @@ const Referrals = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {referralHistory.map((ref) => (
-                    <tr key={ref.id} className="border-b border-border/20 hover:bg-secondary/10 transition-colors">
-                      <td className="p-3">
-                        <span className="font-mono text-sm text-foreground">{ref.user}</span>
-                      </td>
-                      <td className="p-3">
-                        <span className="text-sm text-muted-foreground">{ref.joined}</span>
-                      </td>
-                      <td className="p-3">
-                        <span className="text-sm text-foreground">{ref.orders}</span>
-                      </td>
-                      <td className="p-3">
-                        <span className="font-mono text-sm text-success">${ref.earnings.toFixed(2)}</span>
-                      </td>
-                      <td className="p-3">
-                        <Badge variant={ref.status === 'active' ? 'default' : 'secondary'}>
-                          {ref.status === 'active' ? (
-                            <><CheckCircle2 className="h-3 w-3 mr-1" /> Active</>
-                          ) : (
-                            <><Clock className="h-3 w-3 mr-1" /> Pending</>
-                          )}
-                        </Badge>
+                  {referralHistory.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="p-8 text-center text-muted-foreground">
+                        No referrals yet. Share your link to start earning!
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    referralHistory.map((ref) => (
+                      <tr key={ref.id} className="border-b border-border/20 hover:bg-secondary/10 transition-colors">
+                        <td className="p-3">
+                          <span className="font-mono text-sm text-foreground">{ref.user}</span>
+                        </td>
+                        <td className="p-3">
+                          <span className="text-sm text-muted-foreground">{ref.joined}</span>
+                        </td>
+                        <td className="p-3">
+                          <span className="text-sm text-foreground">{ref.orders}</span>
+                        </td>
+                        <td className="p-3">
+                          <span className="font-mono text-sm text-success">${ref.earnings.toFixed(2)}</span>
+                        </td>
+                        <td className="p-3">
+                          <Badge variant={ref.status === 'active' ? 'default' : 'secondary'}>
+                            {ref.status === 'active' ? (
+                              <><CheckCircle2 className="h-3 w-3 mr-1" /> Active</>
+                            ) : (
+                              <><Clock className="h-3 w-3 mr-1" /> Pending</>
+                            )}
+                          </Badge>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
