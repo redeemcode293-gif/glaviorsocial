@@ -18,9 +18,11 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
+import { useLocalization } from "@/contexts/LocalizationContext";
 
 const Dashboard = () => {
   const { user, profile, wallet, loading } = useAuth();
+  const { t, formatPrice } = useLocalization();
   const navigate = useNavigate();
   const [recentOrders, setRecentOrders] = useState<any[]>([]);
   const [stats, setStats] = useState({
@@ -59,7 +61,7 @@ const Dashboard = () => {
         service: order.link.substring(0, 35) + (order.link.length > 35 ? '...' : ''),
         quantity: order.quantity.toLocaleString(),
         status: order.status,
-        price: Number(order.price).toFixed(2),
+        price: Number(order.price),
         date: new Date(order.created_at).toLocaleDateString()
       })));
     }
@@ -117,7 +119,7 @@ const Dashboard = () => {
   const displayName = profile?.full_name || user.email?.split('@')[0] || 'User';
 
   return (
-    <DashboardLayout title="Dashboard" subtitle={`Welcome back, ${displayName.split(' ')[0]}`}>
+    <DashboardLayout title={t("Dashboard")} subtitle={`${t("Welcome back")}, ${displayName.split(' ')[0]}`}>
       <div className="space-y-6 animate-fade-in">
         {/* Stats Grid */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -133,8 +135,8 @@ const Dashboard = () => {
                   </Button>
                 </Link>
               </div>
-              <p className="text-xs text-muted-foreground mb-0.5">Balance</p>
-              <p className="text-2xl font-display font-bold text-gradient-cyan">${balance.toFixed(2)}</p>
+              <p className="text-xs text-muted-foreground mb-0.5">{t("Balance")}</p>
+              <p className="text-2xl font-display font-bold text-gradient-cyan">{formatPrice(balance)}</p>
             </CardContent>
           </Card>
 
@@ -143,7 +145,7 @@ const Dashboard = () => {
               <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center mb-3">
                 <ShoppingCart className="h-5 w-5 text-accent" />
               </div>
-              <p className="text-xs text-muted-foreground mb-0.5">Total Orders</p>
+              <p className="text-xs text-muted-foreground mb-0.5">{t("Total Orders")}</p>
               <p className="text-2xl font-display font-bold text-foreground">{stats.totalOrders}</p>
             </CardContent>
           </Card>
@@ -153,8 +155,8 @@ const Dashboard = () => {
               <div className="w-10 h-10 rounded-lg bg-success/10 flex items-center justify-center mb-3">
                 <TrendingUp className="h-5 w-5 text-success" />
               </div>
-              <p className="text-xs text-muted-foreground mb-0.5">This Month</p>
-              <p className="text-2xl font-display font-bold text-foreground">${stats.spentThisMonth.toFixed(2)}</p>
+              <p className="text-xs text-muted-foreground mb-0.5">{t("This Month")}</p>
+              <p className="text-2xl font-display font-bold text-foreground">{formatPrice(stats.spentThisMonth)}</p>
             </CardContent>
           </Card>
 
@@ -163,7 +165,7 @@ const Dashboard = () => {
               <div className="w-10 h-10 rounded-lg bg-warning/10 flex items-center justify-center mb-3">
                 <Clock className="h-5 w-5 text-warning" />
               </div>
-              <p className="text-xs text-muted-foreground mb-0.5">Pending</p>
+              <p className="text-xs text-muted-foreground mb-0.5">{t("Pending")}</p>
               <p className="text-2xl font-display font-bold text-foreground">{stats.pendingOrders}</p>
             </CardContent>
           </Card>
@@ -174,14 +176,14 @@ const Dashboard = () => {
           {/* Quick Actions */}
           <Card className="border-border/30 bg-card/60">
             <CardHeader className="pb-4">
-              <CardTitle className="text-base font-display">Quick Actions</CardTitle>
+              <CardTitle className="text-base font-display">{t("Quick Actions")}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               <Link to="/dashboard/order" className="block">
                 <Button variant="default" className="w-full justify-between h-11">
                   <span className="flex items-center">
                     <ShoppingCart className="h-4 w-4 mr-2" />
-                    New Order
+                    {t("New Order")}
                   </span>
                   <ArrowUpRight className="h-4 w-4" />
                 </Button>
@@ -190,7 +192,7 @@ const Dashboard = () => {
                 <Button variant="outline" className="w-full justify-between h-11">
                   <span className="flex items-center">
                     <Wallet className="h-4 w-4 mr-2" />
-                    Add Funds
+                    {t("Add Funds")}
                   </span>
                   <ChevronRight className="h-4 w-4" />
                 </Button>
@@ -199,7 +201,7 @@ const Dashboard = () => {
                 <Button variant="ghost" className="w-full justify-between h-11">
                   <span className="flex items-center">
                     <Package className="h-4 w-4 mr-2" />
-                    View Services
+                    {t("View Services")}
                   </span>
                   <ChevronRight className="h-4 w-4" />
                 </Button>
@@ -210,10 +212,10 @@ const Dashboard = () => {
           {/* Recent Orders */}
           <Card className="border-border/30 bg-card/60 lg:col-span-2">
             <CardHeader className="flex-row items-center justify-between pb-4">
-              <CardTitle className="text-base font-display">Recent Orders</CardTitle>
+              <CardTitle className="text-base font-display">{t("Recent Orders")}</CardTitle>
               <Link to="/dashboard/orders">
                 <Button variant="ghost" size="sm" className="text-primary text-xs">
-                  View All
+                  {t("View All")}
                   <ChevronRight className="h-3 w-3 ml-1" />
                 </Button>
               </Link>
@@ -222,9 +224,9 @@ const Dashboard = () => {
               {recentOrders.length === 0 ? (
                 <div className="text-center py-10">
                   <ShoppingCart className="h-10 w-10 mx-auto text-muted-foreground/30 mb-3" />
-                  <p className="text-sm text-muted-foreground mb-3">No orders yet</p>
+                  <p className="text-sm text-muted-foreground mb-3">{t("No orders yet")}</p>
                   <Link to="/dashboard/order">
-                    <Button size="sm">Place Your First Order</Button>
+                    <Button size="sm">{t("Place Your First Order")}</Button>
                   </Link>
                 </div>
               ) : (
@@ -257,9 +259,9 @@ const Dashboard = () => {
                           }
                           className="text-[10px]"
                         >
-                          {order.status}
+                          {t(order.status)}
                         </Badge>
-                        <p className="text-xs text-muted-foreground mt-1">${order.price}</p>
+                        <p className="text-xs text-muted-foreground mt-1">{formatPrice(order.price)}</p>
                       </div>
                     </div>
                   ))}
