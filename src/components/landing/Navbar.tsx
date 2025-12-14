@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Menu, X, Zap } from "lucide-react";
 import { CurrencySelector } from "@/components/preferences/CurrencySelector";
 import { LanguageSelector } from "@/components/preferences/LanguageSelector";
+import { useLocalization } from "@/contexts/LocalizationContext";
 
 const navLinks = [
   { href: "/services", label: "Services" },
@@ -16,6 +17,7 @@ const navLinks = [
 export const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
   const location = useLocation();
+  const { t } = useLocalization();
 
   const isActive = (path: string) => location.pathname === path;
 
@@ -63,12 +65,12 @@ export const Navbar = () => {
             <LanguageSelector />
             <CurrencySelector />
             <Button variant="ghost" size="sm" asChild>
-              <Link to="/login">Sign In</Link>
+              <Link to="/login">{t("Sign In")}</Link>
             </Button>
             <Button variant="default" size="sm" className="gap-2" asChild>
               <Link to="/register">
                 <Zap className="h-3.5 w-3.5" />
-                Get Started
+                {t("Get Started")}
               </Link>
             </Button>
           </div>
@@ -107,12 +109,12 @@ export const Navbar = () => {
               ))}
               <div className="flex flex-col gap-2 pt-4 mt-2 border-t border-border/30">
                 <Button variant="ghost" size="sm" className="justify-start" asChild>
-                  <Link to="/login" onClick={() => setIsOpen(false)}>Sign In</Link>
+                  <Link to="/login" onClick={() => setIsOpen(false)}>{t("Sign In")}</Link>
                 </Button>
                 <Button variant="default" size="sm" className="justify-start gap-2" asChild>
                   <Link to="/register" onClick={() => setIsOpen(false)}>
                     <Zap className="h-3.5 w-3.5" />
-                    Get Started
+                    {t("Get Started")}
                   </Link>
                 </Button>
               </div>
