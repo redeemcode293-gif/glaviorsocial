@@ -28,8 +28,8 @@ const endpoints = [
     action: "balance",
     description: "Returns your current wallet balance",
     params: [],
-    response: `{
-  "balance": "125.50",
+  response: `{
+  "balance": "0.00",
   "currency": "USD"
 }`
   },
@@ -302,7 +302,7 @@ console.log(data);`;
             <div className="flex flex-col sm:flex-row gap-3">
               <div className="relative flex-1">
                 <Input
-                  value={user ? (apiKey ? (showKey ? apiKey : "•".repeat(apiKey.length)) : "Loading...") : "Sign in to get your API key"}
+                  value={apiKey ? (showKey ? apiKey : "•".repeat(apiKey.length)) : "Loading your API key..."}
                   readOnly
                   className="font-mono text-sm bg-secondary/30 border-border/30 pr-20"
                 />

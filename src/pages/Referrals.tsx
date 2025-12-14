@@ -168,7 +168,7 @@ const Referrals = () => {
               <div className="w-full lg:w-auto">
                 <div className="flex flex-col sm:flex-row gap-2">
                   <Input
-                    value={user ? (referralLink || "Loading...") : "Sign in to get your referral link"}
+                    value={referralLink || "Generating your referral link..."}
                     readOnly
                     className="bg-secondary/30 border-border/50 font-mono text-sm min-w-[280px]"
                   />
