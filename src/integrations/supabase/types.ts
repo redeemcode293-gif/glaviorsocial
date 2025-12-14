@@ -108,9 +108,11 @@ export type Database = {
           country: string | null
           country_code: string | null
           created_at: string
+          custom_multiplier: number | null
           email: string | null
           full_name: string | null
           id: string
+          pricing_override: string | null
           referral_code: string | null
           referred_by: string | null
           updated_at: string
@@ -121,9 +123,11 @@ export type Database = {
           country?: string | null
           country_code?: string | null
           created_at?: string
+          custom_multiplier?: number | null
           email?: string | null
           full_name?: string | null
           id?: string
+          pricing_override?: string | null
           referral_code?: string | null
           referred_by?: string | null
           updated_at?: string
@@ -134,9 +138,11 @@ export type Database = {
           country?: string | null
           country_code?: string | null
           created_at?: string
+          custom_multiplier?: number | null
           email?: string | null
           full_name?: string | null
           id?: string
+          pricing_override?: string | null
           referral_code?: string | null
           referred_by?: string | null
           updated_at?: string

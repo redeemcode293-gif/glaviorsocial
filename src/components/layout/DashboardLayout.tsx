@@ -1,4 +1,4 @@
-import { ReactNode } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -20,8 +20,11 @@ import {
   ChevronRight,
   Menu,
   X,
+  Shield,
+  Store,
 } from "lucide-react";
-import { useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 
 const sidebarItems = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
@@ -29,6 +32,7 @@ const sidebarItems = [
   { icon: Package, label: "Orders", href: "/orders" },
   { icon: RefreshCw, label: "Refills", href: "/refills" },
   { icon: Wallet, label: "Add Funds", href: "/add-funds" },
+  { icon: Store, label: "Reseller Panel", href: "/reseller-panel" },
   { icon: Users, label: "Refer & Earn", href: "/referrals", badge: "NEW" },
   { icon: Code2, label: "API", href: "/api-docs", badge: "PRO" },
   { icon: Megaphone, label: "Updates", href: "/updates" },
@@ -44,13 +48,63 @@ interface DashboardLayoutProps {
 export const DashboardLayout = ({ children, title, subtitle }: DashboardLayoutProps) => {
   const location = useLocation();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [balance] = useState(125.50);
+  const [balance, setBalance] = useState(0);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [userEmail, setUserEmail] = useState("");
+
+  useEffect(() => {
+    if (user) {
+      fetchUserData();
+      checkAdminStatus();
+    }
+  }, [user]);
+
+  const fetchUserData = async () => {
+    if (!user) return;
+
+    // Fetch wallet balance
+    const { data: wallet } = await supabase
+      .from('wallets')
+      .select('balance')
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (wallet) {
+      setBalance(Number(wallet.balance) || 0);
+    }
+
+    // Get user email
+    setUserEmail(user.email || "");
+  };
+
+  const checkAdminStatus = async () => {
+    if (!user) return;
+
+    // Check if user has admin role
+    const { data: roles } = await supabase
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', user.id)
+      .eq('role', 'admin')
+      .maybeSingle();
+
+    setIsAdmin(!!roles);
+  };
 
   const isActive = (path: string) => location.pathname === path;
 
-  const handleLogout = () => {
-    navigate("/login");
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    navigate("/");
+  };
+
+  const getUserInitials = () => {
+    if (userEmail) {
+      return userEmail.substring(0, 2).toUpperCase();
+    }
+    return "U";
   };
 
   return (
@@ -129,6 +183,25 @@ export const DashboardLayout = ({ children, title, subtitle }: DashboardLayoutPr
                 )}
               </Link>
             ))}
+
+            {/* Admin Button - Only show for admins */}
+            {isAdmin && (
+              <Link
+                to="/admin"
+                onClick={() => setSidebarOpen(false)}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-all duration-200 ${
+                  isActive('/admin')
+                    ? "bg-destructive/10 text-destructive border-l-2 border-destructive"
+                    : "text-destructive/80 hover:bg-destructive/10 hover:text-destructive"
+                }`}
+              >
+                <Shield className="h-4 w-4" />
+                <span className="flex-1">Admin Panel</span>
+                <Badge variant="destructive" className="text-[9px] px-1.5 py-0">
+                  ADMIN
+                </Badge>
+              </Link>
+            )}
           </nav>
         </ScrollArea>
 
@@ -175,9 +248,16 @@ export const DashboardLayout = ({ children, title, subtitle }: DashboardLayoutPr
               </Button>
               <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-md bg-secondary/50 border border-border/30">
                 <div className="h-6 w-6 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center text-[10px] font-bold text-primary-foreground">
-                  JD
+                  {getUserInitials()}
                 </div>
-                <span className="text-sm font-medium">John Doe</span>
+                <span className="text-sm font-medium truncate max-w-[120px]">
+                  {userEmail || "User"}
+                </span>
+                {isAdmin && (
+                  <Badge variant="destructive" className="text-[8px] px-1 py-0">
+                    Admin
+                  </Badge>
+                )}
               </div>
             </div>
           </div>
