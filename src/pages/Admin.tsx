@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { 
   Users,
   Package,
@@ -27,10 +28,12 @@ import {
   MessageSquare,
   CreditCard,
   Activity,
-  Shield
+  Shield,
+  MoreVertical
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { UserDetailsDialog } from "@/components/admin/UserDetailsDialog";
 
 const Admin = () => {
   const [loading, setLoading] = useState(true);
@@ -53,6 +56,7 @@ const Admin = () => {
   const [regionalPricing, setRegionalPricing] = useState<any[]>([]);
   const [userCountByRegion, setUserCountByRegion] = useState<Record<string, number>>({});
   const [selectedUser, setSelectedUser] = useState<any>(null);
+  const [showUserDetails, setShowUserDetails] = useState(false);
   const [balanceAdjustment, setBalanceAdjustment] = useState("");
   const [adjustmentType, setAdjustmentType] = useState<"add" | "deduct">("add");
   const [userSearchQuery, setUserSearchQuery] = useState("");
@@ -702,9 +706,37 @@ const Admin = () => {
                                       </DialogFooter>
                                     </DialogContent>
                                   </Dialog>
-                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive">
-                                    <Ban className="h-4 w-4" />
-                                  </Button>
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button variant="ghost" size="icon" className="h-8 w-8">
+                                        <MoreVertical className="h-4 w-4" />
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                      <DropdownMenuItem onClick={() => {
+                                        setSelectedUser(user);
+                                        setShowUserDetails(true);
+                                      }}>
+                                        <Eye className="h-4 w-4 mr-2" />
+                                        View Details
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem 
+                                        className="text-destructive"
+                                        onClick={async () => {
+                                          const newStatus = user.status === 'active' ? 'banned' : 'active';
+                                          await supabase
+                                            .from('profiles')
+                                            .update({ status: newStatus })
+                                            .eq('user_id', user.user_id);
+                                          toast({ title: newStatus === 'banned' ? 'User Banned' : 'User Unbanned' });
+                                          fetchAdminData();
+                                        }}
+                                      >
+                                        <Ban className="h-4 w-4 mr-2" />
+                                        {user.status === 'banned' ? 'Unban User' : 'Ban User'}
+                                      </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
                                 </div>
                               </td>
                             </tr>
@@ -1176,6 +1208,15 @@ const Admin = () => {
             </Card>
           </TabsContent>
         </Tabs>
+
+        {/* User Details Dialog */}
+        <UserDetailsDialog
+          user={selectedUser}
+          wallet={selectedUser ? wallets[selectedUser.user_id] : null}
+          open={showUserDetails}
+          onOpenChange={setShowUserDetails}
+          onRefresh={fetchAdminData}
+        />
       </div>
     </div>
   );

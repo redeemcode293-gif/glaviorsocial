@@ -4,4 +4,10 @@ project_id = "uekvulsybwxvwpqaymoa"
 verify_jwt = false
 
 [functions.sync-provider]
-verify_jwt = false
+verify_jwt = true
+
+[functions.process-order]
+verify_jwt = true
+
+[functions.check-order-status]
+verify_jwt = true
