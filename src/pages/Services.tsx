@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { PlatformBadge, PLATFORMS, getPlatformIcon, getPlatformColor } from "@/components/ui/platform-icons";
+import { useLocalization } from "@/contexts/LocalizationContext";
 
 interface ServiceDisplay {
   id: string;
@@ -50,12 +51,18 @@ const getServiceTier = (service: ServiceDisplay): 'budget' | 'standard' | 'premi
 
 const tierOrder = { budget: 0, standard: 1, premium: 2, monetization: 3 };
 
+// Generate random 3-digit service ID
+const generateServiceId = (): number => {
+  return Math.floor(Math.random() * 900) + 100; // 100-999
+};
+
 const Services = () => {
   const [selectedPlatform, setSelectedPlatform] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [services, setServices] = useState<ServiceDisplay[]>([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  const { t, formatPrice } = useLocalization();
 
   useEffect(() => {
     fetchServices();
@@ -71,7 +78,11 @@ const Services = () => {
         .order('price', { ascending: true });
 
       if (!panelError && panelData && panelData.length > 0) {
-        setServices(panelData);
+        // Generate random 3-digit service IDs for display
+        setServices(panelData.map(s => ({
+          ...s,
+          service_id: generateServiceId()
+        })));
         setLoading(false);
         return;
       }
@@ -88,7 +99,7 @@ const Services = () => {
       if (servicesData) {
         setServices(servicesData.map(s => ({
           id: s.id,
-          service_id: s.service_id,
+          service_id: generateServiceId(), // Random 3-digit ID
           name: s.name,
           description: s.description,
           platform: s.platform,
@@ -140,13 +151,13 @@ const Services = () => {
         <div className="container mx-auto px-4">
           {/* Header */}
           <div className="text-center mb-12">
-            <Badge variant="glow" className="mb-4">SERVICES CATALOG</Badge>
+            <Badge variant="glow" className="mb-4">{t("SERVICES CATALOG")}</Badge>
             <h1 className="font-display text-4xl md:text-5xl font-bold mb-4">
-              <span className="text-foreground">Premium</span>
-              <span className="text-gradient-cyan"> Growth Services</span>
+              <span className="text-foreground">{t("Premium")}</span>
+              <span className="text-gradient-cyan"> {t("Growth Services")}</span>
             </h1>
             <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-              Discover our comprehensive range of social media growth solutions
+              {t("Discover our comprehensive range of social media growth solutions")}
             </p>
           </div>
 
@@ -156,7 +167,7 @@ const Services = () => {
             <div className="relative max-w-lg mx-auto w-full">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search by name, ID, category..."
+                placeholder={t("Search by name, ID, category...")}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-10 bg-secondary/50 border-border/50"
@@ -181,7 +192,7 @@ const Services = () => {
                     }`}>
                       <Icon className={`h-3 w-3 ${platform.id !== 'all' ? 'text-white' : ''}`} />
                     </div>
-                    {platform.name}
+                    {t(platform.name)}
                   </Button>
                 );
               })}
@@ -192,7 +203,7 @@ const Services = () => {
           {loading ? (
             <div className="flex items-center justify-center py-20">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <span className="ml-3 text-muted-foreground">Loading services...</span>
+              <span className="ml-3 text-muted-foreground">{t("Loading services...")}</span>
             </div>
           ) : (
             <>
@@ -212,7 +223,7 @@ const Services = () => {
                         <div className="absolute top-3 right-3">
                           <Badge className="bg-gradient-to-r from-amber-500 to-yellow-400 text-black font-semibold gap-1">
                             <Crown className="h-3 w-3" />
-                            Monetization
+                            {t("Monetization")}
                           </Badge>
                         </div>
                       )}
@@ -220,7 +231,7 @@ const Services = () => {
                         <div className="absolute top-3 right-3">
                           <Badge className="bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold gap-1">
                             <TrendingUp className="h-3 w-3" />
-                            Premium
+                            {t("Premium")}
                           </Badge>
                         </div>
                       )}
@@ -232,8 +243,8 @@ const Services = () => {
                               <Icon className="h-5 w-5 text-white" />
                             </div>
                             <div className="flex-1 min-w-0 pr-8">
-                              <CardTitle className="text-base line-clamp-2">{service.name}</CardTitle>
-                              <p className="text-xs text-muted-foreground">{service.platform} • ID: {service.service_id}</p>
+                              <CardTitle className="text-base line-clamp-2">{t(service.name)}</CardTitle>
+                              <p className="text-xs text-muted-foreground">{t(service.platform)} • ID: {service.service_id}</p>
                             </div>
                           </div>
                         </div>
@@ -243,7 +254,7 @@ const Services = () => {
                         {service.description && (
                           <div className="p-3 rounded-lg bg-secondary/20 border border-border/30">
                             <p className="text-sm text-muted-foreground line-clamp-3">
-                              {service.description}
+                              {t(service.description || "")}
                             </p>
                           </div>
                         )}
@@ -251,14 +262,14 @@ const Services = () => {
                         <div className="grid grid-cols-2 gap-3 text-xs">
                           <div className="flex items-center gap-2 text-muted-foreground">
                             <Zap className="h-3 w-3 text-primary" />
-                            <span>Fast delivery</span>
+                            <span>{t("Fast delivery")}</span>
                           </div>
                           <div className="flex items-center gap-2 text-muted-foreground">
                             {service.refill_supported || refillDays ? (
                               <>
                                 <RefreshCw className="h-3 w-3 text-emerald-500" />
                                 <span className="text-emerald-400">
-                                  {refillDays ? `${refillDays} Days Refill` : 'Drop Protection'}
+                                  {refillDays ? t(`${refillDays} Days Refill`) : t('Drop Protection')}
                                 </span>
                               </>
                             ) : (
@@ -269,9 +280,9 @@ const Services = () => {
 
                         <div className="flex items-center justify-between pt-3 border-t border-border/50">
                           <div>
-                            <p className="text-xs text-muted-foreground">Price</p>
+                            <p className="text-xs text-muted-foreground">{t("Price")}</p>
                             <p className="text-xl font-bold text-gradient-cyan">
-                              ${pricePerK.toFixed(2)}
+                              {formatPrice(pricePerK)}
                               <span className="text-xs text-muted-foreground font-normal">/1K</span>
                             </p>
                           </div>
@@ -281,7 +292,7 @@ const Services = () => {
                             onClick={() => navigate('/dashboard/order')}
                           >
                             <ShoppingCart className="h-4 w-4 mr-1" />
-                            Order
+                            {t("Order")}
                           </Button>
                         </div>
                         
@@ -299,8 +310,8 @@ const Services = () => {
                   <Globe className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                   <p className="text-muted-foreground">
                     {services.length === 0 
-                      ? "No services available. Please check back later." 
-                      : "No services found matching your criteria"}
+                      ? t("No services available. Please check back later.") 
+                      : t("No services found matching your criteria")}
                   </p>
                 </div>
               )}

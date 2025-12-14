@@ -163,12 +163,19 @@ export const LocalizationProvider = ({ children }: { children: ReactNode }) => {
     const currencyInfo = currencyData[currency] || currencyData.USD;
     const convertedPrice = priceUSD * currencyInfo.rate;
     
-    // Format based on currency
+    // Format based on currency - no decimals for large value currencies
     if (currency === "JPY" || currency === "KRW" || currency === "VND" || currency === "IDR") {
       return `${currencyInfo.symbol}${Math.round(convertedPrice).toLocaleString()}`;
     }
     
-    return `${currencyInfo.symbol}${convertedPrice.toFixed(2)}`;
+    // Smart decimal formatting - show meaningful decimals
+    if (convertedPrice === 0) return `${currencyInfo.symbol}0.00`;
+    if (convertedPrice >= 1) return `${currencyInfo.symbol}${convertedPrice.toFixed(2)}`;
+    if (convertedPrice >= 0.01) return `${currencyInfo.symbol}${convertedPrice.toFixed(2)}`;
+    if (convertedPrice >= 0.001) return `${currencyInfo.symbol}${convertedPrice.toFixed(3)}`;
+    if (convertedPrice >= 0.0001) return `${currencyInfo.symbol}${convertedPrice.toFixed(4)}`;
+    if (convertedPrice >= 0.00001) return `${currencyInfo.symbol}${convertedPrice.toFixed(5)}`;
+    return `${currencyInfo.symbol}${convertedPrice.toFixed(6)}`;
   }, [currency]);
 
   const currencySymbol = currencyData[currency]?.symbol || "$";

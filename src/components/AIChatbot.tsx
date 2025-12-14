@@ -13,6 +13,7 @@ import {
   Sparkles
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { useLocalization } from "@/contexts/LocalizationContext";
 
 interface Message {
   id: string;
@@ -32,14 +33,14 @@ interface PanelService {
   refill_supported: boolean | null;
 }
 
-const quickQuestions = [
-  "What services do you offer?",
-  "How do I place an order?",
-  "How long does delivery take?",
-  "How do refills work?",
+const getQuickQuestions = (t: (text: string) => string) => [
+  t("What services do you offer?"),
+  t("How do I place an order?"),
+  t("How long does delivery take?"),
+  t("How do refills work?"),
 ];
 
-const getStaticResponse = (message: string, services: PanelService[]): string => {
+const getStaticResponse = (message: string, services: PanelService[], t: (text: string) => string): string => {
   const lower = message.toLowerCase();
   
   // Service-specific queries
@@ -49,80 +50,80 @@ const getStaticResponse = (message: string, services: PanelService[]): string =>
       const types = [...new Set(igServices.map(s => s.category))].slice(0, 5).join(", ");
       const priceRange = igServices.length > 0 
         ? `$${Math.min(...igServices.map(s => s.price)).toFixed(2)} - $${Math.max(...igServices.map(s => s.price)).toFixed(2)}/1K`
-        : "competitive prices";
-      return `We have ${igServices.length} Instagram services available including: ${types}. Prices range from ${priceRange}. Would you like to know more about a specific type?`;
+        : t("competitive prices");
+      return t(`We have ${igServices.length} Instagram services available including: ${types}. Prices range from ${priceRange}. Would you like to know more about a specific type?`);
     }
-    return "We offer various Instagram growth services. Visit our Services page to see the full catalog!";
+    return t("We offer various Instagram growth services. Visit our Services page to see the full catalog!");
   }
   
   if (lower.includes("youtube")) {
     const ytServices = services.filter(s => s.platform === "YouTube");
     if (ytServices.length > 0) {
-      return `We have ${ytServices.length} YouTube services including views, subscribers, likes, and more. Check our Services page for the full list!`;
+      return t(`We have ${ytServices.length} YouTube services including views, subscribers, likes, and more. Check our Services page for the full list!`);
     }
-    return "We offer YouTube growth services. Check our Services page!";
+    return t("We offer YouTube growth services. Check our Services page!");
   }
   
   if (lower.includes("telegram")) {
     const tgServices = services.filter(s => s.platform === "Telegram");
     if (tgServices.length > 0) {
-      return `We have ${tgServices.length} Telegram services for groups and channels. Perfect for growing your Telegram community!`;
+      return t(`We have ${tgServices.length} Telegram services for groups and channels. Perfect for growing your Telegram community!`);
     }
-    return "We offer Telegram member and engagement services.";
+    return t("We offer Telegram member and engagement services.");
   }
   
   if (lower.includes("tiktok")) {
     const ttServices = services.filter(s => s.platform === "TikTok");
     if (ttServices.length > 0) {
-      return `We have ${ttServices.length} TikTok services including followers, likes, and views to boost your content!`;
+      return t(`We have ${ttServices.length} TikTok services including followers, likes, and views to boost your content!`);
     }
-    return "We offer TikTok growth services.";
+    return t("We offer TikTok growth services.");
   }
   
   if (lower.includes("twitter") || lower.includes(" x ") || lower.includes("x/twitter")) {
     const xServices = services.filter(s => s.platform === "X");
     if (xServices.length > 0) {
-      return `We have ${xServices.length} X (Twitter) services to grow your presence on the platform!`;
+      return t(`We have ${xServices.length} X (Twitter) services to grow your presence on the platform!`);
     }
-    return "We offer X (Twitter) growth services.";
+    return t("We offer X (Twitter) growth services.");
   }
   
   if (lower.includes("facebook")) {
     const fbServices = services.filter(s => s.platform === "Facebook");
     if (fbServices.length > 0) {
-      return `We have ${fbServices.length} Facebook services for pages, posts, and profiles!`;
+      return t(`We have ${fbServices.length} Facebook services for pages, posts, and profiles!`);
     }
-    return "We offer Facebook growth services.";
+    return t("We offer Facebook growth services.");
   }
   
   if (lower.includes("spotify")) {
     const spServices = services.filter(s => s.platform === "Spotify");
     if (spServices.length > 0) {
-      return `We have ${spServices.length} Spotify services to boost your music streams and followers!`;
+      return t(`We have ${spServices.length} Spotify services to boost your music streams and followers!`);
     }
-    return "We offer Spotify growth services for artists.";
+    return t("We offer Spotify growth services for artists.");
   }
   
   if (lower.includes("discord")) {
     const dcServices = services.filter(s => s.platform === "Discord");
     if (dcServices.length > 0) {
-      return `We have ${dcServices.length} Discord services to grow your server community!`;
+      return t(`We have ${dcServices.length} Discord services to grow your server community!`);
     }
-    return "We offer Discord member services.";
+    return t("We offer Discord member services.");
   }
 
   // Price queries
   if (lower.includes("price") || lower.includes("cost") || lower.includes("how much")) {
     if (services.length > 0) {
       const cheapest = services.reduce((a, b) => a.price < b.price ? a : b);
-      return `Prices vary by service. Our most affordable options start at $${cheapest.price.toFixed(2)}/1K. Check the Services page for specific prices!`;
+      return t(`Prices vary by service. Our most affordable options start at $${cheapest.price.toFixed(2)}/1K. Check the Services page for specific prices!`);
     }
-    return "Our pricing is competitive and optimized for your region. You'll see the exact price before confirming any order.";
+    return t("Our pricing is competitive and optimized for your region. You'll see the exact price before confirming any order.");
   }
 
   // Order process
   if (lower.includes("order") || lower.includes("place") || lower.includes("buy") || lower.includes("purchase")) {
-    return "Placing an order is simple! 1) Go to 'New Order' in your dashboard, 2) Select a service from the dropdown, 3) Enter the target link and quantity, 4) Confirm payment. Your order will start processing automatically!";
+    return t("Placing an order is simple! 1) Go to 'New Order' in your dashboard, 2) Select a service from the dropdown, 3) Enter the target link and quantity, 4) Confirm payment. Your order will start processing automatically!");
   }
 
   // Services overview
@@ -132,54 +133,58 @@ const getStaticResponse = (message: string, services: PanelService[]): string =>
       return acc;
     }, {} as Record<string, number>);
     const platforms = Object.keys(platformCounts).slice(0, 6).join(", ");
-    return `We offer ${services.length} premium growth services across platforms like ${platforms || 'Instagram, YouTube, TikTok, Telegram, and more'}. Visit our Services page for the full catalog!`;
+    return t(`We offer ${services.length} premium growth services across platforms like ${platforms || 'Instagram, YouTube, TikTok, Telegram, and more'}. Visit our Services page for the full catalog!`);
   }
 
   // Delivery
   if (lower.includes("deliver") || lower.includes("time") || lower.includes("how long") || lower.includes("speed") || lower.includes("fast")) {
-    return "Delivery times vary by service. Most orders start within minutes and complete within 24-72 hours. Speed estimates are shown on each service card. High-demand services typically deliver 5K-50K per day!";
+    return t("Delivery times vary by service. Most orders start within minutes and complete within 24-72 hours. Speed estimates are shown on each service card. High-demand services typically deliver 5K-50K per day!");
   }
 
   // Refills
   if (lower.includes("refill") || lower.includes("drop") || lower.includes("guarantee")) {
     const refillServices = services.filter(s => s.refill_supported);
-    return `${refillServices.length > 0 ? `${refillServices.length} of our services include Managed Refill protection.` : 'Many services include Managed Refill.'} If counts drop within the guarantee period, request a refill from your Orders page and we'll restore them at no extra cost!`;
+    return t(`${refillServices.length > 0 ? `${refillServices.length} of our services include Managed Refill protection.` : 'Many services include Managed Refill.'} If counts drop within the guarantee period, request a refill from your Orders page and we'll restore them at no extra cost!`);
   }
 
   // Payment
   if (lower.includes("payment") || lower.includes("pay") || lower.includes("crypto") || lower.includes("upi")) {
-    return "We accept multiple payment methods including cryptocurrency (USDT, BTC, SOL), UPI, and manual payments with proof upload. Add funds to your wallet first, then use your balance to place orders!";
+    return t("We accept multiple payment methods including cryptocurrency (USDT, BTC, SOL), UPI, and manual payments with proof upload. Add funds to your wallet first, then use your balance to place orders!");
   }
 
   // Help
   if (lower.includes("help") || lower.includes("support") || lower.includes("contact")) {
-    return "I can help you with: services, pricing, ordering, delivery times, refills, and payments. For account issues or specific problems, please open a Support Ticket from your dashboard!";
+    return t("I can help you with: services, pricing, ordering, delivery times, refills, and payments. For account issues or specific problems, please open a Support Ticket from your dashboard!");
   }
 
   // API
   if (lower.includes("api") || lower.includes("integrate") || lower.includes("reseller")) {
-    return "Yes, we offer API access for resellers and developers! You can integrate our services into your own panel. Check the API section in your dashboard for documentation and your API key.";
+    return t("Yes, we offer API access for resellers and developers! You can integrate our services into your own panel. Check the API section in your dashboard for documentation and your API key.");
   }
 
   // Default
-  return "I'm here to help! You can ask me about our services, pricing, ordering process, delivery times, refills, or payments. What would you like to know?";
+  return t("I'm here to help! You can ask me about our services, pricing, ordering process, delivery times, refills, or payments. What would you like to know?");
 };
 
 export const AIChatbot = () => {
+  const { t } = useLocalization();
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: "1",
-      role: "assistant",
-      content: "👋 Hi! I'm your AI assistant. I can help you find the right services, answer questions about pricing, delivery, and more. What can I help you with?",
-      timestamp: new Date(),
-    },
-  ]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [services, setServices] = useState<PanelService[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Initialize with translated greeting
+  useEffect(() => {
+    setMessages([{
+      id: "1",
+      role: "assistant",
+      content: t("Hi! I'm your AI assistant. I can help you find the right services, answer questions about pricing, delivery, and more. What can I help you with?"),
+      timestamp: new Date(),
+    }]);
+  }, [t]);
 
   useEffect(() => {
     fetchServices();
@@ -244,7 +249,7 @@ export const AIChatbot = () => {
       const aiMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
-        content: getStaticResponse(messageText, services),
+        content: getStaticResponse(messageText, services, t),
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, aiMessage]);
@@ -266,7 +271,7 @@ export const AIChatbot = () => {
         className="fixed bottom-6 right-6 h-12 px-4 rounded-full shadow-lg glow-cyan z-50 flex items-center gap-2"
       >
         <MessageCircle className="h-5 w-5" />
-        <span className="font-medium">AI Chatbot</span>
+        <span className="font-medium">{t("AI Chatbot")}</span>
       </Button>
     );
   }
@@ -282,11 +287,11 @@ export const AIChatbot = () => {
             <Bot className="h-4 w-4 text-primary-foreground" />
           </div>
           <div>
-            <p className="text-sm font-medium text-foreground">AI Assistant</p>
+            <p className="text-sm font-medium text-foreground">{t("AI Assistant")}</p>
             {!isMinimized && (
               <p className="text-[10px] text-muted-foreground flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
-                Online • {services.length} services loaded
+                {t("Online")} • {services.length} {t("services loaded")}
               </p>
             )}
           </div>
@@ -364,10 +369,10 @@ export const AIChatbot = () => {
             <div className="px-3 pb-2">
               <p className="text-[10px] text-muted-foreground mb-2 flex items-center gap-1">
                 <Sparkles className="h-3 w-3" />
-                Quick questions
+                {t("Quick questions")}
               </p>
               <div className="flex flex-wrap gap-1.5">
-                {quickQuestions.map((q, i) => (
+                {getQuickQuestions(t).map((q, i) => (
                   <Badge
                     key={i}
                     variant="outline"
@@ -388,7 +393,7 @@ export const AIChatbot = () => {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyPress={handleKeyPress}
-                placeholder="Ask about services, pricing..."
+                placeholder={t("Ask about services, pricing...")}
                 className="flex-1 bg-secondary/30 border-border/30 text-sm h-9"
               />
               <Button 
