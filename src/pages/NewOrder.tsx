@@ -24,6 +24,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
+import { useLocalization } from "@/contexts/LocalizationContext";
 
 interface ServiceDisplay {
   id: string;
@@ -71,6 +72,7 @@ const NewOrder = () => {
   const { toast } = useToast();
   const { user, profile, wallet, refreshProfile } = useAuth();
   const navigate = useNavigate();
+  const { t, formatPrice } = useLocalization();
 
   useEffect(() => {
     fetchServices();
@@ -153,22 +155,22 @@ const NewOrder = () => {
 
   // Calculate price with hidden regional multiplier
   const calculateDisplayPrice = (basePrice: number) => {
-    return (Number(basePrice) * priceMultiplier).toFixed(2);
+    return Number(basePrice) * priceMultiplier;
   };
 
   const calculateTotal = () => {
-    if (!currentService || !quantity) return "0.00";
+    if (!currentService || !quantity) return 0;
     const qty = parseInt(quantity) || 0;
     const basePrice = Number(currentService.price);
     const adjustedPrice = basePrice * priceMultiplier;
-    return ((adjustedPrice * qty) / 1000).toFixed(2);
+    return (adjustedPrice * qty) / 1000;
   };
 
   const handleSingleOrder = async () => {
     if (!user) {
       toast({
-        title: "Not Authenticated",
-        description: "Please sign in to place an order.",
+        title: t("Not Authenticated"),
+        description: t("Please sign in to place an order."),
         variant: "destructive",
       });
       navigate('/auth');
@@ -177,8 +179,8 @@ const NewOrder = () => {
 
     if (!selectedService || !link || !quantity) {
       toast({
-        title: "Missing Information",
-        description: "Please fill all required fields.",
+        title: t("Missing Information"),
+        description: t("Please fill all required fields."),
         variant: "destructive",
       });
       return;
@@ -187,20 +189,20 @@ const NewOrder = () => {
     const qty = parseInt(quantity) || 0;
     if (currentService && (qty < currentService.min_quantity || qty > currentService.max_quantity)) {
       toast({
-        title: "Invalid Quantity",
-        description: `Quantity must be between ${currentService.min_quantity} and ${currentService.max_quantity}.`,
+        title: t("Invalid Quantity"),
+        description: t(`Quantity must be between ${currentService.min_quantity} and ${currentService.max_quantity}.`),
         variant: "destructive",
       });
       return;
     }
 
-    const totalPrice = parseFloat(calculateTotal());
+    const totalPrice = calculateTotal();
     const balance = Number(wallet?.balance || 0);
 
     if (totalPrice > balance) {
       toast({
-        title: "Insufficient Balance",
-        description: `You need $${totalPrice.toFixed(2)} but only have $${balance.toFixed(2)}. Please add funds.`,
+        title: t("Insufficient Balance"),
+        description: t(`You need ${formatPrice(totalPrice)} but only have ${formatPrice(balance)}. Please add funds.`),
         variant: "destructive",
       });
       return;
@@ -249,8 +251,8 @@ const NewOrder = () => {
       await refreshProfile();
 
       toast({
-        title: "Order Placed Successfully!",
-        description: `Order #${order.order_number} has been submitted.`,
+        title: t("Order Placed Successfully!"),
+        description: t(`Order #${order.order_number} has been submitted.`),
       });
 
       setLink("");
@@ -262,8 +264,8 @@ const NewOrder = () => {
     } catch (error: any) {
       console.error('Order error:', error);
       toast({
-        title: "Order Failed",
-        description: error.message || "Failed to place order. Please try again.",
+        title: t("Order Failed"),
+        description: error.message || t("Failed to place order. Please try again."),
         variant: "destructive",
       });
     } finally {
@@ -274,8 +276,8 @@ const NewOrder = () => {
   const handleMassOrder = async () => {
     if (!massOrderText.trim()) {
       toast({
-        title: "No Orders",
-        description: "Please enter orders or upload a CSV file.",
+        title: t("No Orders"),
+        description: t("Please enter orders or upload a CSV file."),
         variant: "destructive",
       });
       return;
@@ -283,8 +285,8 @@ const NewOrder = () => {
 
     if (!user) {
       toast({
-        title: "Not Authenticated",
-        description: "Please sign in to place orders.",
+        title: t("Not Authenticated"),
+        description: t("Please sign in to place orders."),
         variant: "destructive",
       });
       return;
@@ -334,8 +336,8 @@ const NewOrder = () => {
     await refreshProfile();
 
     toast({
-      title: "Mass Order Submitted!",
-      description: `${successCount} orders placed successfully. ${failedCount > 0 ? `${failedCount} failed.` : ''}`,
+      title: t("Mass Order Submitted!"),
+      description: t(`${successCount} orders placed successfully. ${failedCount > 0 ? `${failedCount} failed.` : ''}`),
     });
 
     setMassOrderText("");
@@ -343,7 +345,7 @@ const NewOrder = () => {
   };
 
   return (
-    <DashboardLayout title="New Order" subtitle="Place single or bulk orders">
+    <DashboardLayout title={t("New Order")} subtitle={t("Place single or bulk orders")}>
       <div className="grid lg:grid-cols-3 gap-6 animate-fade-in">
         {/* Left Column - Order Form */}
         <div className="lg:col-span-2 space-y-6">
@@ -351,11 +353,11 @@ const NewOrder = () => {
             <TabsList className="grid w-full grid-cols-2 bg-secondary/30 p-1 h-11">
               <TabsTrigger value="single" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-medium h-9">
                 <ShoppingCart className="h-4 w-4 mr-2" />
-                Single Order
+                {t("Single Order")}
               </TabsTrigger>
               <TabsTrigger value="mass" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-medium h-9">
                 <FileText className="h-4 w-4 mr-2" />
-                Mass Order
+                {t("Mass Order")}
               </TabsTrigger>
             </TabsList>
 
@@ -363,8 +365,8 @@ const NewOrder = () => {
             <TabsContent value="single" className="mt-6">
               <Card className="border-border/30 bg-card/60 backdrop-blur-sm">
                 <CardHeader className="pb-4">
-                  <CardTitle className="text-lg font-display">Select Service</CardTitle>
-                  <CardDescription>Search by name, ID, or platform</CardDescription>
+                  <CardTitle className="text-lg font-display">{t("Select Service")}</CardTitle>
+                  <CardDescription>{t("Search by name, ID, or platform")}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-5">
                   {/* Search & Filter Row */}
@@ -372,7 +374,7 @@ const NewOrder = () => {
                     <div className="relative">
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                       <Input
-                        placeholder="Search by name or ID..."
+                        placeholder={t("Search by name or ID...")}
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         className="pl-10 bg-secondary/30 border-border/30 h-10"
@@ -380,11 +382,11 @@ const NewOrder = () => {
                     </div>
                     <Select value={selectedCategory} onValueChange={setSelectedCategory}>
                       <SelectTrigger className="bg-secondary/30 border-border/30 h-10">
-                        <SelectValue placeholder="All Platforms" />
+                        <SelectValue placeholder={t("All Platforms")} />
                       </SelectTrigger>
                       <SelectContent>
                         {categories.map((cat) => (
-                          <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
+                          <SelectItem key={cat.id} value={cat.id}>{t(cat.name)}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -392,10 +394,10 @@ const NewOrder = () => {
 
                 {/* Service Selection */}
                 <div className="space-y-2">
-                  <Label>Service</Label>
+                  <Label>{t("Service")}</Label>
                   <Select value={selectedService} onValueChange={setSelectedService}>
                     <SelectTrigger className="bg-secondary/30 border-border/30">
-                      <SelectValue placeholder={loadingServices ? "Loading services..." : "Select a service"} />
+                      <SelectValue placeholder={loadingServices ? t("Loading services...") : t("Select a service")} />
                     </SelectTrigger>
                     <SelectContent className="max-h-[300px]">
                       {filteredServices.map((service) => (
@@ -403,10 +405,10 @@ const NewOrder = () => {
                           <div className="flex items-center justify-between w-full gap-4">
                             <span className="flex items-center gap-2">
                               <span className="font-mono text-xs text-muted-foreground">[{service.service_id}]</span>
-                              <span className="truncate max-w-[250px]">{service.name}</span>
+                              <span className="truncate max-w-[250px]">{t(service.name)}</span>
                             </span>
                             <span className="text-primary font-mono text-xs">
-                              ${calculateDisplayPrice(service.price)}/1K
+                              {formatPrice(calculateDisplayPrice(service.price))}/1K
                             </span>
                           </div>
                         </SelectItem>
@@ -418,20 +420,20 @@ const NewOrder = () => {
                 {/* Service Info */}
                 {currentService && (
                   <div className="p-4 rounded-lg bg-secondary/20 border border-border/30 space-y-3 animate-fade-in">
-                    <p className="text-sm text-muted-foreground">{currentService.description}</p>
+                    <p className="text-sm text-muted-foreground">{t(currentService.description || "")}</p>
                     <div className="flex flex-wrap gap-3">
                       <Badge variant="outline" className="gap-1">
                         <Zap className="h-3 w-3 text-primary" />
-                        Fast Delivery
+                        {t("Fast Delivery")}
                       </Badge>
                       <Badge variant="outline" className="gap-1">
                         <Hash className="h-3 w-3" />
-                        Min: {currentService.min_quantity} - Max: {currentService.max_quantity?.toLocaleString()}
+                        {t("Min")}: {currentService.min_quantity} - {t("Max")}: {currentService.max_quantity?.toLocaleString()}
                       </Badge>
                       {currentService.refill_supported && (
                         <Badge variant="outline" className="gap-1 text-success border-success/30">
                           <RefreshCw className="h-3 w-3" />
-                          Drop protection included
+                          {t("Drop protection included")}
                         </Badge>
                       )}
                     </div>
@@ -440,7 +442,7 @@ const NewOrder = () => {
 
                 {/* Link Input */}
                 <div className="space-y-2">
-                  <Label htmlFor="link">Link</Label>
+                  <Label htmlFor="link">{t("Link")}</Label>
                   <div className="relative">
                     <LinkIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
@@ -455,13 +457,13 @@ const NewOrder = () => {
 
                 {/* Quantity */}
                 <div className="space-y-2">
-                  <Label htmlFor="quantity">Quantity</Label>
+                  <Label htmlFor="quantity">{t("Quantity")}</Label>
                   <div className="relative">
                     <Hash className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
                       id="quantity"
                       type="number"
-                      placeholder="Enter quantity"
+                      placeholder={t("Enter quantity")}
                       value={quantity}
                       onChange={(e) => setQuantity(e.target.value)}
                       className="pl-10 bg-secondary/30 border-border/30"
@@ -471,47 +473,43 @@ const NewOrder = () => {
                   </div>
                   {currentService && (
                     <p className="text-xs text-muted-foreground">
-                      Min: {currentService.min_quantity?.toLocaleString()} - Max: {currentService.max_quantity?.toLocaleString()}
+                      {t("Min")}: {currentService.min_quantity.toLocaleString()} | {t("Max")}: {currentService.max_quantity.toLocaleString()}
                     </p>
                   )}
                 </div>
 
-                {/* Drip-Feed */}
+                {/* Drip Feed Toggle */}
                 {currentService?.dripfeed_supported && (
                   <div className="space-y-4 p-4 rounded-lg bg-secondary/10 border border-border/30">
                     <div className="flex items-center justify-between">
                       <div className="space-y-0.5">
-                        <Label className="flex items-center gap-2">
-                          <Clock className="h-4 w-4 text-primary" />
-                          Drip-Feed
-                        </Label>
-                        <p className="text-xs text-muted-foreground">Spread delivery over time</p>
+                        <Label>{t("Drip-Feed")}</Label>
+                        <p className="text-xs text-muted-foreground">{t("Gradually deliver over time")}</p>
                       </div>
                       <Switch checked={dripFeed} onCheckedChange={setDripFeed} />
                     </div>
-                    
                     {dripFeed && (
-                      <div className="grid sm:grid-cols-2 gap-4 pt-2">
+                      <div className="grid sm:grid-cols-2 gap-3 animate-fade-in">
                         <div className="space-y-2">
-                          <Label htmlFor="runs">Number of Runs</Label>
+                          <Label>{t("Runs")}</Label>
                           <Input
-                            id="runs"
                             type="number"
-                            placeholder="e.g., 10"
+                            placeholder="10"
                             value={dripFeedRuns}
                             onChange={(e) => setDripFeedRuns(e.target.value)}
                             className="bg-secondary/30 border-border/30"
+                            min="2"
                           />
                         </div>
                         <div className="space-y-2">
-                          <Label htmlFor="interval">Interval (minutes)</Label>
+                          <Label>{t("Interval (minutes)")}</Label>
                           <Input
-                            id="interval"
                             type="number"
-                            placeholder="e.g., 60"
+                            placeholder="60"
                             value={dripFeedInterval}
                             onChange={(e) => setDripFeedInterval(e.target.value)}
                             className="bg-secondary/30 border-border/30"
+                            min="1"
                           />
                         </div>
                       </div>
@@ -519,38 +517,37 @@ const NewOrder = () => {
                   </div>
                 )}
 
-                {/* Auto-Refill */}
+                {/* Auto Refill Toggle */}
                 {currentService?.refill_supported && (
                   <div className="flex items-center justify-between p-4 rounded-lg bg-secondary/10 border border-border/30">
                     <div className="space-y-0.5">
                       <Label className="flex items-center gap-2">
                         <RefreshCw className="h-4 w-4 text-success" />
-                        Auto-Refill
+                        {t("Auto-Refill")}
                       </Label>
-                      <p className="text-xs text-muted-foreground">Automatically request refill if drops occur</p>
+                      <p className="text-xs text-muted-foreground">{t("Automatically refill drops")}</p>
                     </div>
                     <Switch checked={autoRefill} onCheckedChange={setAutoRefill} />
                   </div>
                 )}
 
-                {/* Order Summary */}
-                <div className="p-4 rounded-lg bg-gradient-to-r from-primary/5 to-accent/5 border border-primary/20">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">Total Price</span>
-                    <span className="text-2xl font-display font-bold text-gradient-cyan">
-                      ${calculateTotal()}
-                    </span>
-                  </div>
-                </div>
-
+                {/* Submit Button */}
                 <Button 
-                  className="w-full" 
-                  size="lg"
+                  className="w-full h-12 text-base"
                   onClick={handleSingleOrder}
                   disabled={isSubmitting || !selectedService || !link || !quantity}
                 >
-                  <ShoppingCart className="h-4 w-4 mr-2" />
-                  {isSubmitting ? "Processing..." : "Place Order"}
+                  {isSubmitting ? (
+                    <>
+                      <Clock className="h-4 w-4 mr-2 animate-spin" />
+                      {t("Processing...")}
+                    </>
+                  ) : (
+                    <>
+                      <ShoppingCart className="h-4 w-4 mr-2" />
+                      {t("Place Order")} - {formatPrice(calculateTotal())}
+                    </>
+                  )}
                 </Button>
                 </CardContent>
               </Card>
@@ -560,39 +557,38 @@ const NewOrder = () => {
             <TabsContent value="mass" className="mt-6">
               <Card className="border-border/30 bg-card/60 backdrop-blur-sm">
                 <CardHeader>
-                  <CardTitle className="text-lg font-display">Mass Order</CardTitle>
-                  <CardDescription>Submit multiple orders at once</CardDescription>
+                  <CardTitle className="text-lg font-display">{t("Mass Order")}</CardTitle>
+                  <CardDescription>{t("Place multiple orders at once")}</CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-5">
-                  <div className="p-4 rounded-lg bg-secondary/10 border border-border/30">
-                    <p className="text-sm text-muted-foreground mb-2">
-                      Format: <code className="text-primary font-mono">service_id|link|quantity</code>
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Example:<br />
-                      <code className="text-primary/80 font-mono">123|https://instagram.com/user1|1000</code><br />
-                      <code className="text-primary/80 font-mono">456|https://instagram.com/user2|5000</code>
-                    </p>
-                  </div>
-
+                <CardContent className="space-y-4">
                   <div className="space-y-2">
-                    <Label>Orders</Label>
+                    <Label>{t("Orders")}</Label>
                     <Textarea
-                      placeholder="Paste your orders here..."
+                      placeholder={t("service_id|link|quantity\nExample:\n123|https://instagram.com/user1|1000\n456|https://instagram.com/user2|500")}
                       value={massOrderText}
                       onChange={(e) => setMassOrderText(e.target.value)}
                       className="min-h-[200px] bg-secondary/30 border-border/30 font-mono text-sm"
                     />
                   </div>
-
+                  <p className="text-xs text-muted-foreground">
+                    {t("Format: service_id|link|quantity (one order per line)")}
+                  </p>
                   <Button 
-                    className="w-full" 
-                    size="lg"
+                    className="w-full"
                     onClick={handleMassOrder}
-                    disabled={isSubmitting || !massOrderText.trim()}
+                    disabled={isSubmitting}
                   >
-                    <FileText className="h-4 w-4 mr-2" />
-                    {isSubmitting ? "Processing..." : "Submit Mass Order"}
+                    {isSubmitting ? (
+                      <>
+                        <Clock className="h-4 w-4 mr-2 animate-spin" />
+                        {t("Processing...")}
+                      </>
+                    ) : (
+                      <>
+                        <FileText className="h-4 w-4 mr-2" />
+                        {t("Submit Mass Order")}
+                      </>
+                    )}
                   </Button>
                 </CardContent>
               </Card>
@@ -600,60 +596,64 @@ const NewOrder = () => {
           </Tabs>
         </div>
 
-        {/* Right Column - Sidebar */}
+        {/* Right Column - Summary */}
         <div className="space-y-6">
-          {/* Balance Card */}
-          <Card className="border-primary/20 bg-gradient-to-br from-primary/5 via-card to-accent/5 sticky top-20">
-            <CardContent className="p-5">
-              <p className="text-xs uppercase tracking-wider text-muted-foreground mb-1">Available Balance</p>
-              <p className="text-3xl font-display font-bold text-gradient-cyan mb-4">
-                ${Number(wallet?.balance || 0).toFixed(2)}
-              </p>
-              <Button variant="outline" className="w-full" onClick={() => navigate('/dashboard/funds')}>
-                <Wallet className="h-4 w-4 mr-2" />
-                Add Funds
-              </Button>
+          {/* Wallet Balance */}
+          <Card className="border-border/30 bg-card/60 backdrop-blur-sm">
+            <CardContent className="p-6">
+              <div className="text-center">
+                <p className="text-xs uppercase tracking-wider text-muted-foreground mb-1">{t("AVAILABLE BALANCE")}</p>
+                <p className="text-4xl font-display font-bold text-gradient-cyan">
+                  {formatPrice(Number(wallet?.balance || 0))}
+                </p>
+                <Button 
+                  variant="outline" 
+                  className="mt-4 border-border/50"
+                  onClick={() => navigate('/dashboard/add-funds')}
+                >
+                  <Wallet className="h-4 w-4 mr-2" />
+                  {t("Add Funds")}
+                </Button>
+              </div>
             </CardContent>
           </Card>
 
-          {/* Quick Info */}
+          {/* Order Summary */}
           {currentService && (
-            <Card className="border-border/30 bg-card/60">
+            <Card className="border-border/30 bg-card/60 backdrop-blur-sm animate-fade-in">
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium">Selected Service</CardTitle>
+                <p className="text-xs text-muted-foreground">ID: {currentService.service_id}</p>
+                <CardTitle className="text-base">{t(currentService.name)}</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3">
-                <div>
-                  <p className="font-mono text-xs text-muted-foreground">ID: {currentService.service_id}</p>
-                  <p className="font-medium text-sm truncate">{currentService.name}</p>
-                </div>
-                <div className="grid grid-cols-2 gap-3 text-center">
-                  <div className="p-2 rounded bg-secondary/30">
-                    <p className="text-[10px] text-muted-foreground">Min</p>
-                    <p className="font-mono text-sm">{currentService.min_quantity}</p>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div className="p-3 rounded-lg bg-secondary/20 text-center">
+                    <p className="text-xs text-muted-foreground">{t("Min")}</p>
+                    <p className="font-medium text-foreground">{currentService.min_quantity.toLocaleString()}</p>
                   </div>
-                  <div className="p-2 rounded bg-secondary/30">
-                    <p className="text-[10px] text-muted-foreground">Max</p>
-                    <p className="font-mono text-sm">{currentService.max_quantity?.toLocaleString()}</p>
+                  <div className="p-3 rounded-lg bg-secondary/20 text-center">
+                    <p className="text-xs text-muted-foreground">{t("Max")}</p>
+                    <p className="font-medium text-foreground">{currentService.max_quantity.toLocaleString()}</p>
                   </div>
                 </div>
-                <div className="p-3 rounded-lg bg-primary/10 border border-primary/20 text-center">
-                  <p className="text-[10px] text-muted-foreground mb-1">Price per 1K</p>
-                  <p className="font-display text-lg font-bold text-primary">
-                    ${calculateDisplayPrice(currentService.price)}
+
+                <div className="p-4 rounded-lg bg-primary/5 border border-primary/20 text-center">
+                  <p className="text-xs text-muted-foreground mb-1">{t("Price per 1K")}</p>
+                  <p className="text-3xl font-display font-bold text-primary">
+                    {formatPrice(calculateDisplayPrice(currentService.price))}
                   </p>
                 </div>
               </CardContent>
             </Card>
           )}
 
-          {/* Service Count */}
-          <Card className="border-border/30 bg-card/60">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <p className="text-sm text-muted-foreground">Available Services</p>
-                <Badge variant="outline" className="font-mono">{filteredServices.length}</Badge>
-              </div>
+          {/* Available Services Count */}
+          <Card className="border-border/30 bg-card/60 backdrop-blur-sm">
+            <CardContent className="p-4 flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">{t("Available Services")}</span>
+              <Badge variant="secondary" className="font-mono">
+                {filteredServices.length}
+              </Badge>
             </CardContent>
           </Card>
         </div>

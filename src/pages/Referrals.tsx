@@ -21,6 +21,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
+import { useLocalization } from "@/contexts/LocalizationContext";
 
 interface ReferralStat {
   label: string;
@@ -46,6 +47,7 @@ const Referrals = () => {
   const [referralHistory, setReferralHistory] = useState<ReferralEntry[]>([]);
   const { toast } = useToast();
   const { user, profile } = useAuth();
+  const { t, formatPrice } = useLocalization();
 
   useEffect(() => {
     if (user) {
@@ -88,10 +90,10 @@ const Referrals = () => {
       const commissionRate = referrals?.[0]?.commission_rate || 10;
 
       setReferralStats([
-        { label: "Total Referrals", value: totalReferrals.toString(), icon: Users, color: "text-primary" },
-        { label: "Active Referrals", value: activeReferrals.toString(), icon: TrendingUp, color: "text-accent" },
-        { label: "Total Earnings", value: `$${totalEarnings.toFixed(2)}`, icon: DollarSign, color: "text-success" },
-        { label: "Commission Rate", value: `${commissionRate}%`, icon: Percent, color: "text-warning" },
+        { label: t("Total Referrals"), value: totalReferrals.toString(), icon: Users, color: "text-primary" },
+        { label: t("Active Referrals"), value: activeReferrals.toString(), icon: TrendingUp, color: "text-accent" },
+        { label: t("Total Earnings"), value: formatPrice(totalEarnings), icon: DollarSign, color: "text-success" },
+        { label: t("Commission Rate"), value: `${commissionRate}%`, icon: Percent, color: "text-warning" },
       ]);
 
       // Transform referrals to history format
@@ -115,13 +117,13 @@ const Referrals = () => {
   const handleCopy = () => {
     navigator.clipboard.writeText(referralLink);
     toast({
-      title: "Link Copied!",
-      description: "Referral link copied to clipboard.",
+      title: t("Link Copied!"),
+      description: t("Referral link copied to clipboard."),
     });
   };
 
   const handleShare = (platform: string) => {
-    const shareText = `Join me on Glavior Social and get premium SMM services! Use my referral link: ${referralLink}`;
+    const shareText = t(`Join me on Glavior Social and get premium SMM services! Use my referral link: ${referralLink}`);
     const shareUrls: Record<string, string> = {
       twitter: `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}`,
       facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(referralLink)}`,
@@ -132,7 +134,7 @@ const Referrals = () => {
 
   if (loading) {
     return (
-      <DashboardLayout title="Refer & Earn" subtitle="Invite friends and earn commissions">
+      <DashboardLayout title={t("Refer & Earn")} subtitle={t("Invite friends and earn commissions")}>
         <div className="space-y-6">
           <Skeleton className="h-40 w-full" />
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -145,7 +147,7 @@ const Referrals = () => {
   }
 
   return (
-    <DashboardLayout title="Refer & Earn" subtitle="Invite friends and earn commissions">
+    <DashboardLayout title={t("Refer & Earn")} subtitle={t("Invite friends and earn commissions")}>
       <div className="space-y-6 animate-fade-in">
         {/* Referral Banner */}
         <Card className="border-primary/20 bg-gradient-to-r from-primary/5 via-accent/5 to-primary/5 overflow-hidden relative">
@@ -155,26 +157,25 @@ const Referrals = () => {
               <div className="flex-1 text-center lg:text-left">
                 <Badge className="mb-3" variant="outline">
                   <Gift className="h-3 w-3 mr-1" />
-                  Referral Program
+                  {t("Referral Program")}
                 </Badge>
                 <h2 className="text-2xl font-display font-bold text-foreground mb-2">
-                  Earn <span className="text-gradient-cyan">10% Commission</span> on Every Order
+                  {t("Earn")} <span className="text-gradient-cyan">{t("10% Commission")}</span> {t("on Every Order")}
                 </h2>
                 <p className="text-muted-foreground max-w-lg">
-                  Share your unique referral link and earn 10% of every order your referrals place. 
-                  Commissions are automatically credited to your wallet.
+                  {t("Share your unique referral link and earn 10% of every order your referrals place. Commissions are automatically credited to your wallet.")}
                 </p>
               </div>
               <div className="w-full lg:w-auto">
                 <div className="flex flex-col sm:flex-row gap-2">
                   <Input
-                    value={referralLink || "Generating your referral link..."}
+                    value={referralLink || t("Generating your referral link...")}
                     readOnly
                     className="bg-secondary/30 border-border/50 font-mono text-sm min-w-[280px]"
                   />
                   <Button onClick={handleCopy} className="shrink-0" disabled={!user || !referralLink}>
                     <Copy className="h-4 w-4 mr-2" />
-                    Copy Link
+                    {t("Copy Link")}
                   </Button>
                 </div>
                 <div className="flex justify-center lg:justify-start gap-2 mt-3">
@@ -196,7 +197,7 @@ const Referrals = () => {
                     disabled={!referralLink}
                   >
                     <Facebook className="h-4 w-4 mr-1" />
-                    Share
+                    {t("Share")}
                   </Button>
                 </div>
               </div>
@@ -230,7 +231,7 @@ const Referrals = () => {
         {/* How It Works */}
         <Card className="border-border/30 bg-card/60 backdrop-blur-sm">
           <CardHeader>
-            <CardTitle className="text-lg font-display">How It Works</CardTitle>
+            <CardTitle className="text-lg font-display">{t("How It Works")}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid md:grid-cols-3 gap-6">
@@ -238,22 +239,22 @@ const Referrals = () => {
                 <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
                   <Share2 className="h-6 w-6 text-primary" />
                 </div>
-                <h4 className="font-medium text-foreground mb-2">1. Share Your Link</h4>
-                <p className="text-sm text-muted-foreground">Share your unique referral link with friends and followers</p>
+                <h4 className="font-medium text-foreground mb-2">{t("1. Share Your Link")}</h4>
+                <p className="text-sm text-muted-foreground">{t("Share your unique referral link with friends and followers")}</p>
               </div>
               <div className="text-center p-4 hover:bg-secondary/10 rounded-lg transition-colors">
                 <div className="w-12 h-12 rounded-full bg-accent/10 flex items-center justify-center mx-auto mb-4">
                   <Users className="h-6 w-6 text-accent" />
                 </div>
-                <h4 className="font-medium text-foreground mb-2">2. Friends Sign Up</h4>
-                <p className="text-sm text-muted-foreground">When they register using your link, they're linked to you</p>
+                <h4 className="font-medium text-foreground mb-2">{t("2. Friends Sign Up")}</h4>
+                <p className="text-sm text-muted-foreground">{t("When they register using your link, they're linked to you")}</p>
               </div>
               <div className="text-center p-4 hover:bg-secondary/10 rounded-lg transition-colors">
                 <div className="w-12 h-12 rounded-full bg-success/10 flex items-center justify-center mx-auto mb-4">
                   <DollarSign className="h-6 w-6 text-success" />
                 </div>
-                <h4 className="font-medium text-foreground mb-2">3. Earn Commissions</h4>
-                <p className="text-sm text-muted-foreground">Get 10% of every order they place, credited automatically</p>
+                <h4 className="font-medium text-foreground mb-2">{t("3. Earn Commissions")}</h4>
+                <p className="text-sm text-muted-foreground">{t("Get 10% of every order they place, credited automatically")}</p>
               </div>
             </div>
           </CardContent>
@@ -262,19 +263,19 @@ const Referrals = () => {
         {/* Referral History */}
         <Card className="border-border/30 bg-card/60 backdrop-blur-sm">
           <CardHeader>
-            <CardTitle className="text-lg font-display">Your Referrals</CardTitle>
-            <CardDescription>Track your referral activity and earnings</CardDescription>
+            <CardTitle className="text-lg font-display">{t("Your Referrals")}</CardTitle>
+            <CardDescription>{t("Track your referral activity and earnings")}</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-border/30">
-                    <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">User</th>
-                    <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Joined</th>
-                    <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Orders</th>
-                    <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Earnings</th>
-                    <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Status</th>
+                    <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">{t("User")}</th>
+                    <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">{t("Joined")}</th>
+                    <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">{t("Orders")}</th>
+                    <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">{t("Earnings")}</th>
+                    <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">{t("Status")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -282,7 +283,7 @@ const Referrals = () => {
                     <tr>
                       <td colSpan={5} className="p-8 text-center text-muted-foreground">
                         <Users className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                        <p>No referrals yet. Share your link to start earning!</p>
+                        <p>{t("No referrals yet. Share your link to start earning!")}</p>
                       </td>
                     </tr>
                   ) : (
@@ -298,14 +299,14 @@ const Referrals = () => {
                           <span className="text-sm text-foreground">{ref.orders}</span>
                         </td>
                         <td className="p-3">
-                          <span className="font-mono text-sm text-success">${ref.earnings.toFixed(2)}</span>
+                          <span className="font-mono text-sm text-success">{formatPrice(ref.earnings)}</span>
                         </td>
                         <td className="p-3">
                           <Badge variant={ref.status === 'active' ? 'default' : 'secondary'}>
                             {ref.status === 'active' ? (
-                              <><CheckCircle2 className="h-3 w-3 mr-1" /> Active</>
+                              <><CheckCircle2 className="h-3 w-3 mr-1" /> {t("Active")}</>
                             ) : (
-                              <><Clock className="h-3 w-3 mr-1" /> Pending</>
+                              <><Clock className="h-3 w-3 mr-1" /> {t("Pending")}</>
                             )}
                           </Badge>
                         </td>

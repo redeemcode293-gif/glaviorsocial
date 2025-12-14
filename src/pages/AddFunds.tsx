@@ -6,7 +6,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
   Wallet,
   CreditCard,
@@ -27,6 +26,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
+import { useLocalization } from "@/contexts/LocalizationContext";
 
 const quickAmounts = [10, 25, 50, 100, 250, 500];
 
@@ -40,43 +40,9 @@ const cryptoAddresses = {
   trx: { network: "TRC20", address: "TYdB1j8sCL8dpNkP5QK9cAh7H3mwKVYrZy" },
 };
 
-const currencies = [
-  { code: "USD", symbol: "$", name: "US Dollar" },
-  { code: "EUR", symbol: "€", name: "Euro" },
-  { code: "GBP", symbol: "£", name: "British Pound" },
-  { code: "INR", symbol: "₹", name: "Indian Rupee" },
-  { code: "AED", symbol: "د.إ", name: "UAE Dirham" },
-  { code: "SAR", symbol: "﷼", name: "Saudi Riyal" },
-  { code: "AUD", symbol: "A$", name: "Australian Dollar" },
-  { code: "CAD", symbol: "C$", name: "Canadian Dollar" },
-  { code: "NGN", symbol: "₦", name: "Nigerian Naira" },
-  { code: "PKR", symbol: "₨", name: "Pakistani Rupee" },
-  { code: "BDT", symbol: "৳", name: "Bangladeshi Taka" },
-  { code: "IDR", symbol: "Rp", name: "Indonesian Rupiah" },
-  { code: "PHP", symbol: "₱", name: "Philippine Peso" },
-  { code: "MYR", symbol: "RM", name: "Malaysian Ringgit" },
-  { code: "BRL", symbol: "R$", name: "Brazilian Real" },
-  { code: "MXN", symbol: "$", name: "Mexican Peso" },
-  { code: "ZAR", symbol: "R", name: "South African Rand" },
-  { code: "KES", symbol: "KSh", name: "Kenyan Shilling" },
-  { code: "EGP", symbol: "£", name: "Egyptian Pound" },
-  { code: "TRY", symbol: "₺", name: "Turkish Lira" },
-  { code: "RUB", symbol: "₽", name: "Russian Ruble" },
-  { code: "THB", symbol: "฿", name: "Thai Baht" },
-  { code: "VND", symbol: "₫", name: "Vietnamese Dong" },
-  { code: "KRW", symbol: "₩", name: "South Korean Won" },
-  { code: "JPY", symbol: "¥", name: "Japanese Yen" },
-  { code: "CNY", symbol: "¥", name: "Chinese Yuan" },
-  { code: "SGD", symbol: "S$", name: "Singapore Dollar" },
-  { code: "HKD", symbol: "HK$", name: "Hong Kong Dollar" },
-  { code: "TWD", symbol: "NT$", name: "Taiwan Dollar" },
-  { code: "NZD", symbol: "NZ$", name: "New Zealand Dollar" },
-];
-
 const AddFunds = () => {
   const [amount, setAmount] = useState("");
   const [selectedMethod, setSelectedMethod] = useState("crypto");
-  const [selectedCurrency, setSelectedCurrency] = useState("USD");
   const [isProcessing, setIsProcessing] = useState(false);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [loadingTransactions, setLoadingTransactions] = useState(true);
@@ -85,8 +51,7 @@ const AddFunds = () => {
   const { toast } = useToast();
   const { user, wallet, refreshProfile } = useAuth();
   const navigate = useNavigate();
-
-  const currentCurrency = currencies.find(c => c.code === selectedCurrency) || currencies[0];
+  const { t, formatPrice, currencySymbol } = useLocalization();
 
   useEffect(() => {
     if (user) {
@@ -114,8 +79,8 @@ const AddFunds = () => {
   const handleAddFunds = async () => {
     if (!user) {
       toast({
-        title: "Not Authenticated",
-        description: "Please sign in to add funds.",
+        title: t("Not Authenticated"),
+        description: t("Please sign in to add funds."),
         variant: "destructive",
       });
       navigate('/auth');
@@ -124,8 +89,8 @@ const AddFunds = () => {
 
     if (!amount || parseFloat(amount) <= 0) {
       toast({
-        title: "Invalid Amount",
-        description: "Please enter a valid amount.",
+        title: t("Invalid Amount"),
+        description: t("Please enter a valid amount."),
         variant: "destructive",
       });
       return;
@@ -143,7 +108,7 @@ const AddFunds = () => {
           amount: parseFloat(amount),
           status: 'pending',
           payment_method: selectedMethod,
-          description: `Deposit via ${selectedMethod.toUpperCase()}`,
+          description: `${t("Deposit via")} ${selectedMethod.toUpperCase()}`,
         })
         .select()
         .single();
@@ -151,8 +116,8 @@ const AddFunds = () => {
       if (error) throw error;
 
       toast({
-        title: "Deposit Initiated",
-        description: `Your deposit of $${amount} is pending verification. We'll credit your wallet once confirmed.`,
+        title: t("Deposit Initiated"),
+        description: t(`Your deposit of ${formatPrice(parseFloat(amount))} is pending verification. We'll credit your wallet once confirmed.`),
       });
 
       setAmount("");
@@ -160,8 +125,8 @@ const AddFunds = () => {
       await fetchTransactions();
     } catch (error: any) {
       toast({
-        title: "Error",
-        description: error.message || "Failed to initiate deposit.",
+        title: t("Error"),
+        description: error.message || t("Failed to initiate deposit."),
         variant: "destructive",
       });
     } finally {
@@ -172,8 +137,8 @@ const AddFunds = () => {
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text);
     toast({
-      title: "Copied",
-      description: "Address copied to clipboard.",
+      title: t("Copied"),
+      description: t("Address copied to clipboard."),
     });
   };
 
@@ -182,8 +147,8 @@ const AddFunds = () => {
     if (file) {
       setUploadedProof(file);
       toast({
-        title: "Screenshot Uploaded",
-        description: "Payment proof has been attached.",
+        title: t("Screenshot Uploaded"),
+        description: t("Payment proof has been attached."),
       });
     }
   };
@@ -191,7 +156,7 @@ const AddFunds = () => {
   const balance = Number(wallet?.balance || 0);
 
   return (
-    <DashboardLayout title="Add Funds" subtitle="Top up your wallet balance">
+    <DashboardLayout title={t("Add Funds")} subtitle={t("Top up your wallet balance")}>
       <div className="grid lg:grid-cols-3 gap-6 animate-fade-in">
         {/* Left Column - Add Funds */}
         <div className="lg:col-span-2 space-y-6">
@@ -200,8 +165,8 @@ const AddFunds = () => {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-muted-foreground mb-1">Current Balance</p>
-                  <p className="text-4xl font-display font-bold text-gradient-cyan">${balance.toFixed(2)}</p>
+                  <p className="text-sm text-muted-foreground mb-1">{t("Current Balance")}</p>
+                  <p className="text-4xl font-display font-bold text-gradient-cyan">{formatPrice(balance)}</p>
                 </div>
                 <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center">
                   <Wallet className="h-8 w-8 text-primary" />
@@ -213,19 +178,19 @@ const AddFunds = () => {
           {/* Payment Methods */}
           <Card className="border-border/30 bg-card/60 backdrop-blur-sm">
             <CardHeader>
-              <CardTitle className="text-lg font-display">Select Payment Method</CardTitle>
-              <CardDescription>Choose your preferred payment method</CardDescription>
+              <CardTitle className="text-lg font-display">{t("Select Payment Method")}</CardTitle>
+              <CardDescription>{t("Choose your preferred payment method")}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <Tabs value={selectedMethod} onValueChange={setSelectedMethod}>
                 <TabsList className="grid grid-cols-3 bg-secondary/30">
                   <TabsTrigger value="crypto" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
                     <Bitcoin className="h-4 w-4 mr-2" />
-                    Crypto
+                    {t("Crypto")}
                   </TabsTrigger>
                   <TabsTrigger value="manual" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
                     <Upload className="h-4 w-4 mr-2" />
-                    Manual
+                    {t("Manual")}
                   </TabsTrigger>
                   <TabsTrigger value="upi" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
                     <Smartphone className="h-4 w-4 mr-2" />
@@ -235,7 +200,7 @@ const AddFunds = () => {
 
                 <TabsContent value="crypto" className="mt-6 space-y-4">
                   <p className="text-sm text-muted-foreground">
-                    Send cryptocurrency to the addresses below. Your balance will be credited after 2 confirmations.
+                    {t("Send cryptocurrency to the addresses below. Your balance will be credited after 2 confirmations.")}
                   </p>
                   <div className="grid gap-3">
                     {Object.entries(cryptoAddresses).map(([coin, data]) => (
@@ -262,14 +227,14 @@ const AddFunds = () => {
                   <div className="p-6 rounded-lg bg-secondary/10 border border-border/30 space-y-4">
                     <div className="text-center">
                       <Upload className="h-12 w-12 text-primary mx-auto mb-3" />
-                      <h3 className="font-medium mb-2">Manual Payment Verification</h3>
+                      <h3 className="font-medium mb-2">{t("Manual Payment Verification")}</h3>
                       <p className="text-sm text-muted-foreground">
-                        Complete payment via bank transfer or any method, then upload proof.
+                        {t("Complete payment via bank transfer or any method, then upload proof.")}
                       </p>
                     </div>
                     
                     <div className="space-y-2">
-                      <Label>Upload Payment Proof</Label>
+                      <Label>{t("Upload Payment Proof")}</Label>
                       <div className="relative">
                         <Input
                           type="file"
@@ -292,7 +257,7 @@ const AddFunds = () => {
                   <div className="p-6 rounded-lg bg-secondary/10 border border-border/30 text-center space-y-4">
                     <QrCode className="h-32 w-32 text-primary mx-auto" />
                     <div>
-                      <p className="text-sm text-muted-foreground mb-2">Scan QR code or use UPI ID</p>
+                      <p className="text-sm text-muted-foreground mb-2">{t("Scan QR code or use UPI ID")}</p>
                       <div className="flex items-center justify-center gap-2">
                         <code className="text-primary bg-primary/10 px-3 py-1 rounded font-mono">
                           payments@glavior
@@ -303,10 +268,10 @@ const AddFunds = () => {
                       </div>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      After payment, enter your UPI transaction ID below
+                      {t("After payment, enter your UPI transaction ID below")}
                     </p>
                     <Input
-                      placeholder="Enter UPI Transaction ID"
+                      placeholder={t("Enter UPI Transaction ID")}
                       value={upiId}
                       onChange={(e) => setUpiId(e.target.value)}
                       className="bg-secondary/30 border-border/30 max-w-xs mx-auto"
@@ -319,35 +284,20 @@ const AddFunds = () => {
               <div className="space-y-4 pt-4 border-t border-border/30">
                 <div className="flex flex-col sm:flex-row gap-4">
                   <div className="flex-1 space-y-2">
-                    <Label>Amount to Add</Label>
+                    <Label>{t("Amount to Add")}</Label>
                     <div className="relative">
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-                        {currentCurrency.symbol}
+                        {currencySymbol}
                       </span>
                       <Input
                         type="number"
-                        placeholder="Enter amount"
+                        placeholder={t("Enter amount")}
                         value={amount}
                         onChange={(e) => setAmount(e.target.value)}
                         className="pl-10 bg-secondary/30 border-border/30 text-lg"
                         min="1"
                       />
                     </div>
-                  </div>
-                  <div className="w-full sm:w-48 space-y-2">
-                    <Label>Currency</Label>
-                    <Select value={selectedCurrency} onValueChange={setSelectedCurrency}>
-                      <SelectTrigger className="bg-secondary/30 border-border/30">
-                        <SelectValue placeholder="Currency" />
-                      </SelectTrigger>
-                      <SelectContent className="max-h-[300px]">
-                        {currencies.map((currency) => (
-                          <SelectItem key={currency.code} value={currency.code}>
-                            {currency.symbol} {currency.code} - {currency.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -371,17 +321,17 @@ const AddFunds = () => {
                   {isProcessing ? (
                     <>
                       <Clock className="h-4 w-4 mr-2 animate-spin" />
-                      Processing...
+                      {t("Processing...")}
                     </>
                   ) : (
                     <>
                       <Wallet className="h-4 w-4 mr-2" />
-                      Submit Deposit Request - {currentCurrency.symbol}{amount || '0'} {selectedCurrency}
+                      {t("Submit Deposit Request")} - {formatPrice(parseFloat(amount) || 0)}
                     </>
                   )}
                 </Button>
                 <p className="text-xs text-muted-foreground text-center">
-                  Deposits are manually verified. Your wallet will be credited within 24 hours after confirmation.
+                  {t("Deposits are manually verified. Your wallet will be credited within 24 hours after confirmation.")}
                 </p>
               </div>
             </CardContent>
@@ -392,18 +342,18 @@ const AddFunds = () => {
         <div className="space-y-6">
           <Card className="border-border/30 bg-card/60 backdrop-blur-sm">
             <CardHeader>
-              <CardTitle className="text-lg font-display">Recent Transactions</CardTitle>
+              <CardTitle className="text-lg font-display">{t("Recent Transactions")}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               {loadingTransactions ? (
                 <div className="text-center py-8 text-muted-foreground">
                   <Clock className="h-8 w-8 mx-auto mb-2 animate-spin" />
-                  Loading...
+                  {t("Loading...")}
                 </div>
               ) : transactions.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   <Wallet className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                  <p>No transactions yet</p>
+                  <p>{t("No transactions yet")}</p>
                 </div>
               ) : (
                 transactions.map((txn) => (
@@ -417,49 +367,33 @@ const AddFunds = () => {
                           ? 'bg-success/10 text-success' 
                           : 'bg-destructive/10 text-destructive'
                       }`}>
-                        {txn.type === 'deposit' || txn.type === 'refund' ? 
-                          <ArrowDownLeft className="h-4 w-4" /> : 
+                        {txn.type === 'deposit' || txn.type === 'refund' ? (
+                          <ArrowDownLeft className="h-4 w-4" />
+                        ) : (
                           <ArrowUpRight className="h-4 w-4" />
-                        }
+                        )}
                       </div>
                       <div>
-                        <p className="text-sm font-medium text-foreground">
-                          {txn.description || txn.payment_method || txn.type}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {new Date(txn.created_at).toLocaleString()}
-                        </p>
+                        <p className="text-sm font-medium text-foreground capitalize">{t(txn.type)}</p>
+                        <p className="text-xs text-muted-foreground">{new Date(txn.created_at).toLocaleDateString()}</p>
                       </div>
                     </div>
                     <div className="text-right">
                       <p className={`font-mono text-sm font-medium ${
-                        Number(txn.amount) > 0 ? 'text-success' : 'text-foreground'
+                        txn.type === 'deposit' || txn.type === 'refund' ? 'text-success' : 'text-foreground'
                       }`}>
-                        {Number(txn.amount) > 0 ? '+' : ''}${Number(txn.amount).toFixed(2)}
+                        {txn.type === 'deposit' || txn.type === 'refund' ? '+' : ''}{formatPrice(Math.abs(txn.amount))}
                       </p>
-                      {txn.status === 'pending' && (
-                        <Badge variant="outline" className="text-[9px] mt-1">
-                          <Clock className="h-2 w-2 mr-1" />
-                          Pending
-                        </Badge>
-                      )}
-                      {txn.status === 'completed' && (
-                        <Badge variant="default" className="text-[9px] mt-1 bg-success/20 text-success border-0">
-                          <CheckCircle2 className="h-2 w-2 mr-1" />
-                          Completed
-                        </Badge>
-                      )}
+                      <Badge 
+                        variant={txn.status === 'completed' ? 'default' : txn.status === 'pending' ? 'secondary' : 'destructive'}
+                        className="text-xs"
+                      >
+                        {t(txn.status)}
+                      </Badge>
                     </div>
                   </div>
                 ))
               )}
-              <Button 
-                variant="ghost" 
-                className="w-full text-sm text-primary"
-                onClick={() => navigate('/dashboard/transactions')}
-              >
-                View All Transactions
-              </Button>
             </CardContent>
           </Card>
         </div>
