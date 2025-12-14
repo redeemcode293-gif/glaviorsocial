@@ -71,7 +71,7 @@ const getPlatformIcon = (platform: string) => {
   return icons[platform] || Star;
 };
 
-interface PanelService {
+interface ServiceDisplay {
   id: string;
   service_id: number;
   name: string;
@@ -81,14 +81,14 @@ interface PanelService {
   price: number;
   min_quantity: number;
   max_quantity: number;
-  refill_supported: boolean;
-  dripfeed_supported: boolean;
+  refill_supported: boolean | null;
+  dripfeed_supported: boolean | null;
 }
 
 const Services = () => {
   const [selectedPlatform, setSelectedPlatform] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
-  const [services, setServices] = useState<PanelService[]>([]);
+  const [services, setServices] = useState<ServiceDisplay[]>([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
@@ -98,16 +98,46 @@ const Services = () => {
 
   const fetchServices = async () => {
     try {
-      // Fetch panel_services (user-facing abstraction layer)
-      const { data, error } = await supabase
+      // First try panel_services (user-facing abstracted services)
+      const { data: panelData, error: panelError } = await supabase
         .from('panel_services')
         .select('*')
         .eq('is_visible', true)
         .order('platform')
         .order('name');
 
-      if (error) throw error;
-      setServices(data || []);
+      if (!panelError && panelData && panelData.length > 0) {
+        setServices(panelData);
+        setLoading(false);
+        return;
+      }
+
+      // Fallback to services table if panel_services is empty
+      const { data: servicesData, error: servicesError } = await supabase
+        .from('services')
+        .select('id, service_id, name, description, platform, category, base_price, min_quantity, max_quantity, refill_supported, dripfeed_supported')
+        .eq('is_active', true)
+        .order('platform')
+        .order('name');
+
+      if (servicesError) throw servicesError;
+      
+      // Map services data to display format
+      if (servicesData) {
+        setServices(servicesData.map(s => ({
+          id: s.id,
+          service_id: s.service_id,
+          name: s.name,
+          description: s.description,
+          platform: s.platform,
+          category: s.category,
+          price: s.base_price,
+          min_quantity: s.min_quantity,
+          max_quantity: s.max_quantity,
+          refill_supported: s.refill_supported,
+          dripfeed_supported: s.dripfeed_supported,
+        })));
+      }
     } catch (error) {
       console.error('Error fetching services:', error);
     } finally {

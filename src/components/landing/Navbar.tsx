@@ -2,7 +2,8 @@ import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Menu, X, Zap, ChevronDown } from "lucide-react";
+import { Menu, X, Zap } from "lucide-react";
+import { CurrencyLanguageSelector } from "@/components/preferences/CurrencyLanguageSelector";
 
 const navLinks = [
   { href: "/services", label: "Services" },
@@ -57,7 +58,8 @@ export const Navbar = () => {
           </div>
 
           {/* Desktop Actions */}
-          <div className="hidden lg:flex items-center gap-2">
+          <div className="hidden lg:flex items-center gap-3">
+            <CurrencyLanguageSelector variant="compact" />
             <Button variant="ghost" size="sm" asChild>
               <Link to="/login">Sign In</Link>
             </Button>
