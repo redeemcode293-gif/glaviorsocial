@@ -29,11 +29,13 @@ import {
   CreditCard,
   Activity,
   Shield,
-  MoreVertical
+  MoreVertical,
+  Link2
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { UserDetailsDialog } from "@/components/admin/UserDetailsDialog";
+import { ServiceMappingTab } from "@/components/admin/ServiceMappingTab";
 
 const Admin = () => {
   const [loading, setLoading] = useState(true);
@@ -578,7 +580,11 @@ const Admin = () => {
               {stats.openTickets > 0 && <Badge variant="secondary" className="ml-1 text-[10px]">{stats.openTickets}</Badge>}
             </TabsTrigger>
             <TabsTrigger value="providers">Providers</TabsTrigger>
-            <TabsTrigger value="services">Services</TabsTrigger>
+            <TabsTrigger value="mapping" className="flex items-center gap-1">
+              <Link2 className="h-3 w-3" />
+              Service Mapping
+            </TabsTrigger>
+            <TabsTrigger value="services">Provider Services</TabsTrigger>
             <TabsTrigger value="orders">Orders</TabsTrigger>
             <TabsTrigger value="pricing">Regional Pricing</TabsTrigger>
           </TabsList>
@@ -928,6 +934,11 @@ const Admin = () => {
                 )}
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* Service Mapping Tab */}
+          <TabsContent value="mapping">
+            <ServiceMappingTab />
           </TabsContent>
 
           <TabsContent value="services">

@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+// Note: Chatbot fetches from panel_services (user-facing abstraction layer)
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
