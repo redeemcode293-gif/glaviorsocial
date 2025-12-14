@@ -17,7 +17,8 @@ import {
   RefreshCw,
   Clock,
   FileText,
-  Search
+  Search,
+  Wallet
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -343,70 +344,51 @@ const NewOrder = () => {
 
   return (
     <DashboardLayout title="New Order" subtitle="Place single or bulk orders">
-      <div className="max-w-4xl mx-auto space-y-6 animate-fade-in">
-        {/* Balance Display */}
-        <Card className="border-primary/20 bg-gradient-to-r from-primary/5 to-accent/5">
-          <CardContent className="p-4 flex items-center justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground">Available Balance</p>
-              <p className="text-2xl font-display font-bold text-gradient-cyan">
-                ${Number(wallet?.balance || 0).toFixed(2)}
-              </p>
-            </div>
-            <Button variant="outline" onClick={() => navigate('/dashboard/funds')}>
-              Add Funds
-            </Button>
-          </CardContent>
-        </Card>
+      <div className="grid lg:grid-cols-3 gap-6 animate-fade-in">
+        {/* Left Column - Order Form */}
+        <div className="lg:col-span-2 space-y-6">
+          <Tabs defaultValue="single" className="w-full">
+            <TabsList className="grid w-full grid-cols-2 bg-secondary/30 p-1 h-11">
+              <TabsTrigger value="single" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-medium h-9">
+                <ShoppingCart className="h-4 w-4 mr-2" />
+                Single Order
+              </TabsTrigger>
+              <TabsTrigger value="mass" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-medium h-9">
+                <FileText className="h-4 w-4 mr-2" />
+                Mass Order
+              </TabsTrigger>
+            </TabsList>
 
-        <Tabs defaultValue="single" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 bg-secondary/30 p-1">
-            <TabsTrigger value="single" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-medium">
-              <ShoppingCart className="h-4 w-4 mr-2" />
-              Single Order
-            </TabsTrigger>
-            <TabsTrigger value="mass" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-medium">
-              <FileText className="h-4 w-4 mr-2" />
-              Mass Order
-            </TabsTrigger>
-          </TabsList>
-
-          {/* Single Order */}
-          <TabsContent value="single" className="mt-6 space-y-6">
-            <Card className="border-border/30 bg-card/60 backdrop-blur-sm">
-              <CardHeader>
-                <CardTitle className="text-lg font-display">Order Details</CardTitle>
-                <CardDescription>Configure your service order</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                {/* Search */}
-                <div className="space-y-2">
-                  <Label>Search Services</Label>
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      placeholder="Search by name, ID, or category..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="pl-10 bg-secondary/30 border-border/30"
-                    />
+            {/* Single Order */}
+            <TabsContent value="single" className="mt-6">
+              <Card className="border-border/30 bg-card/60 backdrop-blur-sm">
+                <CardHeader className="pb-4">
+                  <CardTitle className="text-lg font-display">Select Service</CardTitle>
+                  <CardDescription>Search by name, ID, or platform</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                  {/* Search & Filter Row */}
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Search by name or ID..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="pl-10 bg-secondary/30 border-border/30 h-10"
+                      />
+                    </div>
+                    <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                      <SelectTrigger className="bg-secondary/30 border-border/30 h-10">
+                        <SelectValue placeholder="All Platforms" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {categories.map((cat) => (
+                          <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
-                </div>
-
-                {/* Category Selection */}
-                <div className="space-y-2">
-                  <Label>Platform</Label>
-                  <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                    <SelectTrigger className="bg-secondary/30 border-border/30">
-                      <SelectValue placeholder="Select platform" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {categories.map((cat) => (
-                        <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
 
                 {/* Service Selection */}
                 <div className="space-y-2">
@@ -570,52 +552,111 @@ const NewOrder = () => {
                   <ShoppingCart className="h-4 w-4 mr-2" />
                   {isSubmitting ? "Processing..." : "Place Order"}
                 </Button>
-              </CardContent>
-            </Card>
-          </TabsContent>
+                </CardContent>
+              </Card>
+            </TabsContent>
 
-          {/* Mass Order */}
-          <TabsContent value="mass" className="mt-6">
-            <Card className="border-border/30 bg-card/60 backdrop-blur-sm">
-              <CardHeader>
-                <CardTitle className="text-lg font-display">Mass Order</CardTitle>
-                <CardDescription>Submit multiple orders at once using CSV format</CardDescription>
+            {/* Mass Order */}
+            <TabsContent value="mass" className="mt-6">
+              <Card className="border-border/30 bg-card/60 backdrop-blur-sm">
+                <CardHeader>
+                  <CardTitle className="text-lg font-display">Mass Order</CardTitle>
+                  <CardDescription>Submit multiple orders at once</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                  <div className="p-4 rounded-lg bg-secondary/10 border border-border/30">
+                    <p className="text-sm text-muted-foreground mb-2">
+                      Format: <code className="text-primary font-mono">service_id|link|quantity</code>
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Example:<br />
+                      <code className="text-primary/80 font-mono">123|https://instagram.com/user1|1000</code><br />
+                      <code className="text-primary/80 font-mono">456|https://instagram.com/user2|5000</code>
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Orders</Label>
+                    <Textarea
+                      placeholder="Paste your orders here..."
+                      value={massOrderText}
+                      onChange={(e) => setMassOrderText(e.target.value)}
+                      className="min-h-[200px] bg-secondary/30 border-border/30 font-mono text-sm"
+                    />
+                  </div>
+
+                  <Button 
+                    className="w-full" 
+                    size="lg"
+                    onClick={handleMassOrder}
+                    disabled={isSubmitting || !massOrderText.trim()}
+                  >
+                    <FileText className="h-4 w-4 mr-2" />
+                    {isSubmitting ? "Processing..." : "Submit Mass Order"}
+                  </Button>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
+        </div>
+
+        {/* Right Column - Sidebar */}
+        <div className="space-y-6">
+          {/* Balance Card */}
+          <Card className="border-primary/20 bg-gradient-to-br from-primary/5 via-card to-accent/5 sticky top-20">
+            <CardContent className="p-5">
+              <p className="text-xs uppercase tracking-wider text-muted-foreground mb-1">Available Balance</p>
+              <p className="text-3xl font-display font-bold text-gradient-cyan mb-4">
+                ${Number(wallet?.balance || 0).toFixed(2)}
+              </p>
+              <Button variant="outline" className="w-full" onClick={() => navigate('/dashboard/funds')}>
+                <Wallet className="h-4 w-4 mr-2" />
+                Add Funds
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Quick Info */}
+          {currentService && (
+            <Card className="border-border/30 bg-card/60">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-medium">Selected Service</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="p-4 rounded-lg bg-secondary/10 border border-border/30">
-                  <p className="text-sm text-muted-foreground mb-2">
-                    Format: <code className="text-primary">service_id|link|quantity</code>
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Example:<br />
-                    <code className="text-primary/80">123|https://instagram.com/user1|1000</code><br />
-                    <code className="text-primary/80">456|https://instagram.com/user2|5000</code>
+              <CardContent className="space-y-3">
+                <div>
+                  <p className="font-mono text-xs text-muted-foreground">ID: {currentService.service_id}</p>
+                  <p className="font-medium text-sm truncate">{currentService.name}</p>
+                </div>
+                <div className="grid grid-cols-2 gap-3 text-center">
+                  <div className="p-2 rounded bg-secondary/30">
+                    <p className="text-[10px] text-muted-foreground">Min</p>
+                    <p className="font-mono text-sm">{currentService.min_quantity}</p>
+                  </div>
+                  <div className="p-2 rounded bg-secondary/30">
+                    <p className="text-[10px] text-muted-foreground">Max</p>
+                    <p className="font-mono text-sm">{currentService.max_quantity?.toLocaleString()}</p>
+                  </div>
+                </div>
+                <div className="p-3 rounded-lg bg-primary/10 border border-primary/20 text-center">
+                  <p className="text-[10px] text-muted-foreground mb-1">Price per 1K</p>
+                  <p className="font-display text-lg font-bold text-primary">
+                    ${calculateDisplayPrice(currentService.price)}
                   </p>
                 </div>
-
-                <div className="space-y-2">
-                  <Label>Orders</Label>
-                  <Textarea
-                    placeholder="Paste your orders here..."
-                    value={massOrderText}
-                    onChange={(e) => setMassOrderText(e.target.value)}
-                    className="min-h-[200px] bg-secondary/30 border-border/30 font-mono text-sm"
-                  />
-                </div>
-
-                <Button 
-                  className="w-full" 
-                  size="lg"
-                  onClick={handleMassOrder}
-                  disabled={isSubmitting || !massOrderText.trim()}
-                >
-                  <FileText className="h-4 w-4 mr-2" />
-                  {isSubmitting ? "Processing Orders..." : "Submit Mass Order"}
-                </Button>
               </CardContent>
             </Card>
-          </TabsContent>
-        </Tabs>
+          )}
+
+          {/* Service Count */}
+          <Card className="border-border/30 bg-card/60">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-muted-foreground">Available Services</p>
+                <Badge variant="outline" className="font-mono">{filteredServices.length}</Badge>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </DashboardLayout>
   );
