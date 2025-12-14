@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
 interface LocalizationContextType {
@@ -72,7 +72,10 @@ export const LocalizationProvider = ({ children }: { children: ReactNode }) => {
   const [currency, setCurrencyState] = useState("USD");
   const [translations, setTranslations] = useState<Record<string, string>>({});
   const [isTranslating, setIsTranslating] = useState(false);
-  const [pendingTexts, setPendingTexts] = useState<Set<string>>(new Set());
+  
+  // Use ref to collect texts without triggering re-renders
+  const pendingTextsRef = useRef<Set<string>>(new Set());
+  const translationRequestedRef = useRef(false);
 
   // Load saved preferences
   useEffect(() => {
@@ -86,10 +89,10 @@ export const LocalizationProvider = ({ children }: { children: ReactNode }) => {
     setLanguageState(lang);
     localStorage.setItem("preferredLanguage", lang);
     // Clear translations when language changes
-    if (lang !== language) {
-      setTranslations({});
-    }
-  }, [language]);
+    setTranslations({});
+    pendingTextsRef.current.clear();
+    translationRequestedRef.current = false;
+  }, []);
 
   const setCurrency = useCallback((curr: string) => {
     setCurrencyState(curr);
@@ -100,14 +103,10 @@ export const LocalizationProvider = ({ children }: { children: ReactNode }) => {
   const translateTexts = useCallback(async (texts: string[]) => {
     if (language === "en" || texts.length === 0) return;
     
-    // Filter out already translated texts
-    const newTexts = texts.filter(t => !translations[t] && t.trim().length > 0);
-    if (newTexts.length === 0) return;
-
     setIsTranslating(true);
     try {
       const { data, error } = await supabase.functions.invoke("translate", {
-        body: { texts: newTexts, targetLanguage: language }
+        body: { texts, targetLanguage: language }
       });
 
       if (error) {
@@ -123,27 +122,39 @@ export const LocalizationProvider = ({ children }: { children: ReactNode }) => {
     } finally {
       setIsTranslating(false);
     }
-  }, [language, translations]);
+  }, [language]);
 
-  // Collect texts and batch translate
+  // Process pending texts after render cycle completes
   useEffect(() => {
-    if (pendingTexts.size > 0 && language !== "en") {
-      const timer = setTimeout(() => {
-        translateTexts(Array.from(pendingTexts));
-        setPendingTexts(new Set());
-      }, 100); // Debounce to batch requests
-      return () => clearTimeout(timer);
-    }
-  }, [pendingTexts, language, translateTexts]);
+    if (language === "en") return;
+    
+    const processPending = () => {
+      if (pendingTextsRef.current.size > 0 && !translationRequestedRef.current) {
+        translationRequestedRef.current = true;
+        const textsToTranslate = Array.from(pendingTextsRef.current);
+        pendingTextsRef.current.clear();
+        translateTexts(textsToTranslate).finally(() => {
+          translationRequestedRef.current = false;
+        });
+      }
+    };
 
+    // Delay to batch multiple t() calls from same render
+    const timer = setTimeout(processPending, 100);
+    return () => clearTimeout(timer);
+  }, [language, translateTexts, translations]);
+
+  // The t function - does NOT call setState during render
   const t = useCallback((text: string): string => {
     if (language === "en" || !text) return text;
     
     // Return translated text if available
     if (translations[text]) return translations[text];
     
-    // Queue for translation
-    setPendingTexts(prev => new Set(prev).add(text));
+    // Queue for translation using ref (no state update during render)
+    if (!pendingTextsRef.current.has(text)) {
+      pendingTextsRef.current.add(text);
+    }
     
     return text; // Return original while translating
   }, [language, translations]);
