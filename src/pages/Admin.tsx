@@ -49,12 +49,26 @@ const Admin = () => {
   const [orders, setOrders] = useState<any[]>([]);
   const [tickets, setTickets] = useState<any[]>([]);
   const [deposits, setDeposits] = useState<any[]>([]);
+  const [providers, setProviders] = useState<any[]>([]);
   const [regionalPricing, setRegionalPricing] = useState<any[]>([]);
   const [userCountByRegion, setUserCountByRegion] = useState<Record<string, number>>({});
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [balanceAdjustment, setBalanceAdjustment] = useState("");
   const [adjustmentType, setAdjustmentType] = useState<"add" | "deduct">("add");
   const [userSearchQuery, setUserSearchQuery] = useState("");
+  
+  // Provider form state
+  const [showProviderDialog, setShowProviderDialog] = useState(false);
+  const [providerForm, setProviderForm] = useState({ name: '', api_url: '', api_key: '' });
+  const [syncingProvider, setSyncingProvider] = useState<string | null>(null);
+  
+  // Service form state
+  const [showServiceDialog, setShowServiceDialog] = useState(false);
+  const [serviceForm, setServiceForm] = useState({
+    name: '', platform: 'Instagram', category: 'General', base_price: '',
+    min_quantity: '100', max_quantity: '50000', description: ''
+  });
+  
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -149,6 +163,13 @@ const Admin = () => {
       .select('*')
       .order('service_id', { ascending: true });
     setServices(servicesData || []);
+
+    // Fetch API providers
+    const { data: providersData } = await supabase
+      .from('api_providers')
+      .select('*')
+      .order('priority', { ascending: true });
+    setProviders(providersData || []);
 
     // Fetch recent orders
     const { data: ordersData } = await supabase
@@ -322,16 +343,123 @@ const Admin = () => {
       .eq('id', id);
 
     if (error) {
-      toast({
-        title: "Error",
-        description: "Failed to update pricing",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: "Failed to update pricing", variant: "destructive" });
     } else {
-      toast({
-        title: "Updated",
-        description: "Regional pricing updated successfully",
+      toast({ title: "Updated", description: "Regional pricing updated successfully" });
+      fetchAdminData();
+    }
+  };
+
+  // Provider management
+  const addProvider = async () => {
+    if (!providerForm.name || !providerForm.api_url || !providerForm.api_key) {
+      toast({ title: "Missing fields", variant: "destructive" });
+      return;
+    }
+
+    const { error } = await supabase.from('api_providers').insert({
+      name: providerForm.name,
+      api_url: providerForm.api_url,
+      api_key: providerForm.api_key,
+    });
+
+    if (error) {
+      toast({ title: "Failed to add provider", variant: "destructive" });
+    } else {
+      toast({ title: "Provider Added" });
+      setShowProviderDialog(false);
+      setProviderForm({ name: '', api_url: '', api_key: '' });
+      fetchAdminData();
+    }
+  };
+
+  const syncProvider = async (providerId: string, action: 'services' | 'balance') => {
+    setSyncingProvider(providerId);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await supabase.functions.invoke('sync-provider', {
+        body: { providerId, action },
+        headers: { Authorization: `Bearer ${session?.access_token}` }
       });
+
+      if (response.error) {
+        throw new Error(response.error.message);
+      }
+
+      if (action === 'services') {
+        toast({ 
+          title: "Services Synced", 
+          description: `Added: ${response.data.added}, Updated: ${response.data.updated}` 
+        });
+      } else {
+        toast({ title: "Balance Updated", description: `$${response.data.balance}` });
+      }
+      fetchAdminData();
+    } catch (error: any) {
+      toast({ title: "Sync Failed", description: error.message, variant: "destructive" });
+    }
+    setSyncingProvider(null);
+  };
+
+  const deleteProvider = async (providerId: string) => {
+    const { error } = await supabase.from('api_providers').delete().eq('id', providerId);
+    if (error) {
+      toast({ title: "Failed to delete", variant: "destructive" });
+    } else {
+      toast({ title: "Provider Deleted" });
+      fetchAdminData();
+    }
+  };
+
+  // Service management
+  const addService = async () => {
+    if (!serviceForm.name || !serviceForm.base_price) {
+      toast({ title: "Missing fields", variant: "destructive" });
+      return;
+    }
+
+    const { error } = await supabase.from('services').insert({
+      name: serviceForm.name,
+      platform: serviceForm.platform,
+      category: serviceForm.category,
+      description: serviceForm.description || serviceForm.name,
+      base_price: parseFloat(serviceForm.base_price),
+      min_quantity: parseInt(serviceForm.min_quantity),
+      max_quantity: parseInt(serviceForm.max_quantity),
+      service_id: Math.floor(Math.random() * 100000),
+      is_active: true,
+    });
+
+    if (error) {
+      toast({ title: "Failed to add service", variant: "destructive" });
+    } else {
+      toast({ title: "Service Added" });
+      setShowServiceDialog(false);
+      setServiceForm({ name: '', platform: 'Instagram', category: 'General', base_price: '', min_quantity: '100', max_quantity: '50000', description: '' });
+      fetchAdminData();
+    }
+  };
+
+  const toggleServiceStatus = async (serviceId: string, currentStatus: boolean) => {
+    const { error } = await supabase
+      .from('services')
+      .update({ is_active: !currentStatus })
+      .eq('id', serviceId);
+
+    if (error) {
+      toast({ title: "Failed to update", variant: "destructive" });
+    } else {
+      toast({ title: currentStatus ? "Service Disabled" : "Service Enabled" });
+      fetchAdminData();
+    }
+  };
+
+  const deleteService = async (serviceId: string) => {
+    const { error } = await supabase.from('services').delete().eq('id', serviceId);
+    if (error) {
+      toast({ title: "Failed to delete", variant: "destructive" });
+    } else {
+      toast({ title: "Service Deleted" });
       fetchAdminData();
     }
   };
@@ -445,6 +573,7 @@ const Admin = () => {
               Tickets
               {stats.openTickets > 0 && <Badge variant="secondary" className="ml-1 text-[10px]">{stats.openTickets}</Badge>}
             </TabsTrigger>
+            <TabsTrigger value="providers">Providers</TabsTrigger>
             <TabsTrigger value="services">Services</TabsTrigger>
             <TabsTrigger value="orders">Orders</TabsTrigger>
             <TabsTrigger value="pricing">Regional Pricing</TabsTrigger>
@@ -663,15 +792,184 @@ const Admin = () => {
             </Card>
           </TabsContent>
 
+          {/* Providers Tab */}
+          <TabsContent value="providers">
+            <Card className="border-border/30 bg-card/60">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-lg font-display">API Providers</CardTitle>
+                    <CardDescription>Manage external SMM API providers</CardDescription>
+                  </div>
+                  <Dialog open={showProviderDialog} onOpenChange={setShowProviderDialog}>
+                    <DialogTrigger asChild>
+                      <Button><Plus className="h-4 w-4 mr-2" />Add Provider</Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader><DialogTitle>Add API Provider</DialogTitle></DialogHeader>
+                      <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                          <Label>Provider Name</Label>
+                          <Input 
+                            placeholder="e.g., SMM Panel 1" 
+                            value={providerForm.name}
+                            onChange={(e) => setProviderForm({ ...providerForm, name: e.target.value })}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>API URL</Label>
+                          <Input 
+                            placeholder="https://provider.com/api/v2" 
+                            value={providerForm.api_url}
+                            onChange={(e) => setProviderForm({ ...providerForm, api_url: e.target.value })}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>API Key</Label>
+                          <Input 
+                            type="password"
+                            placeholder="Your API key" 
+                            value={providerForm.api_key}
+                            onChange={(e) => setProviderForm({ ...providerForm, api_key: e.target.value })}
+                          />
+                        </div>
+                      </div>
+                      <DialogFooter>
+                        <Button onClick={addProvider}>Add Provider</Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {providers.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Activity className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
+                    <p className="text-muted-foreground">No providers configured</p>
+                    <p className="text-sm text-muted-foreground mt-1">Add an API provider to sync services</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {providers.map((provider) => (
+                      <div key={provider.id} className="p-4 rounded-lg bg-secondary/10 border border-border/30">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <div className="flex items-center gap-2 mb-1">
+                              <p className="font-medium text-foreground">{provider.name}</p>
+                              <Badge variant={provider.status === 'active' ? 'default' : 'secondary'}>{provider.status}</Badge>
+                              <Badge variant="outline">Priority: {provider.priority}</Badge>
+                            </div>
+                            <p className="text-sm text-muted-foreground">{provider.api_url}</p>
+                            <div className="flex items-center gap-4 mt-2 text-sm">
+                              <span className="text-success font-mono">Balance: ${Number(provider.balance || 0).toFixed(2)}</span>
+                              {provider.last_sync_at && (
+                                <span className="text-muted-foreground">Last sync: {new Date(provider.last_sync_at).toLocaleString()}</span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              onClick={() => syncProvider(provider.id, 'balance')}
+                              disabled={syncingProvider === provider.id}
+                            >
+                              {syncingProvider === provider.id ? <RefreshCw className="h-4 w-4 animate-spin" /> : <DollarSign className="h-4 w-4" />}
+                              Balance
+                            </Button>
+                            <Button 
+                              size="sm" 
+                              onClick={() => syncProvider(provider.id, 'services')}
+                              disabled={syncingProvider === provider.id}
+                            >
+                              {syncingProvider === provider.id ? <RefreshCw className="h-4 w-4 animate-spin mr-1" /> : <RefreshCw className="h-4 w-4 mr-1" />}
+                              Sync Services
+                            </Button>
+                            <Button variant="destructive" size="icon" className="h-8 w-8" onClick={() => deleteProvider(provider.id)}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
           <TabsContent value="services">
             <Card className="border-border/30 bg-card/60">
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-lg font-display">Service Management</CardTitle>
-                  <Button>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Service
-                  </Button>
+                  <Dialog open={showServiceDialog} onOpenChange={setShowServiceDialog}>
+                    <DialogTrigger asChild>
+                      <Button><Plus className="h-4 w-4 mr-2" />Add Service</Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader><DialogTitle>Add Manual Service</DialogTitle></DialogHeader>
+                      <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                          <Label>Service Name</Label>
+                          <Input 
+                            placeholder="e.g., Instagram Followers" 
+                            value={serviceForm.name}
+                            onChange={(e) => setServiceForm({ ...serviceForm, name: e.target.value })}
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label>Platform</Label>
+                            <Select value={serviceForm.platform} onValueChange={(v) => setServiceForm({ ...serviceForm, platform: v })}>
+                              <SelectTrigger><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="Instagram">Instagram</SelectItem>
+                                <SelectItem value="YouTube">YouTube</SelectItem>
+                                <SelectItem value="TikTok">TikTok</SelectItem>
+                                <SelectItem value="Telegram">Telegram</SelectItem>
+                                <SelectItem value="X">X (Twitter)</SelectItem>
+                                <SelectItem value="Facebook">Facebook</SelectItem>
+                                <SelectItem value="Spotify">Spotify</SelectItem>
+                                <SelectItem value="Other">Other</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Base Price (per 1000)</Label>
+                            <Input 
+                              type="number"
+                              step="0.01"
+                              placeholder="0.50" 
+                              value={serviceForm.base_price}
+                              onChange={(e) => setServiceForm({ ...serviceForm, base_price: e.target.value })}
+                            />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label>Min Quantity</Label>
+                            <Input 
+                              type="number"
+                              value={serviceForm.min_quantity}
+                              onChange={(e) => setServiceForm({ ...serviceForm, min_quantity: e.target.value })}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Max Quantity</Label>
+                            <Input 
+                              type="number"
+                              value={serviceForm.max_quantity}
+                              onChange={(e) => setServiceForm({ ...serviceForm, max_quantity: e.target.value })}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                      <DialogFooter>
+                        <Button onClick={addService}>Add Service</Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
                 </div>
               </CardHeader>
               <CardContent>
@@ -679,10 +977,7 @@ const Admin = () => {
                   <div className="text-center py-12">
                     <Package className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
                     <p className="text-muted-foreground">No services configured yet</p>
-                    <Button className="mt-4">
-                      <Plus className="h-4 w-4 mr-2" />
-                      Add First Service
-                    </Button>
+                    <p className="text-sm text-muted-foreground mt-1">Add a provider and sync services, or add manually</p>
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
@@ -692,33 +987,45 @@ const Admin = () => {
                           <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">ID</th>
                           <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Service</th>
                           <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Platform</th>
+                          <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Provider</th>
                           <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Base Price</th>
                           <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Status</th>
                           <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Actions</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {services.map((service) => (
+                        {services.slice(0, 100).map((service) => (
                           <tr key={service.id} className="border-b border-border/20 hover:bg-secondary/10">
                             <td className="p-3 font-mono text-sm">{service.service_id}</td>
                             <td className="p-3">
-                              <p className="font-medium text-foreground">{service.name}</p>
+                              <p className="font-medium text-foreground text-sm">{service.name?.substring(0, 40)}{service.name?.length > 40 ? '...' : ''}</p>
                             </td>
                             <td className="p-3">
                               <Badge variant="outline">{service.platform}</Badge>
                             </td>
-                            <td className="p-3 font-mono">${Number(service.base_price).toFixed(4)}</td>
+                            <td className="p-3 text-sm text-muted-foreground">
+                              {service.provider_price ? (
+                                <span className="font-mono text-xs">${Number(service.provider_price).toFixed(4)}</span>
+                              ) : '-'}
+                            </td>
+                            <td className="p-3 font-mono text-sm">${Number(service.base_price).toFixed(4)}</td>
                             <td className="p-3">
-                              <Badge variant={service.is_active ? "success" : "secondary"}>
+                              <Badge 
+                                variant={service.is_active ? "success" : "secondary"}
+                                className="cursor-pointer"
+                                onClick={() => toggleServiceStatus(service.id, service.is_active)}
+                              >
                                 {service.is_active ? "Active" : "Disabled"}
                               </Badge>
                             </td>
                             <td className="p-3">
                               <div className="flex items-center gap-1">
-                                <Button variant="ghost" size="icon" className="h-8 w-8">
-                                  <Edit className="h-4 w-4" />
-                                </Button>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive">
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-8 w-8 text-destructive"
+                                  onClick={() => deleteService(service.id)}
+                                >
                                   <Trash2 className="h-4 w-4" />
                                 </Button>
                               </div>
@@ -727,6 +1034,9 @@ const Admin = () => {
                         ))}
                       </tbody>
                     </table>
+                    {services.length > 100 && (
+                      <p className="text-sm text-muted-foreground text-center mt-4">Showing 100 of {services.length} services</p>
+                    )}
                   </div>
                 )}
               </CardContent>
