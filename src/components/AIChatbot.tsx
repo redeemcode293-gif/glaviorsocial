@@ -1,5 +1,4 @@
 import { useState, useRef, useEffect } from "react";
-// Note: Chatbot fetches from panel_services (user-facing abstraction layer)
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -11,8 +10,7 @@ import {
   Bot, 
   User,
   Minimize2,
-  Sparkles,
-  Loader2
+  Sparkles
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -23,11 +21,11 @@ interface Message {
   timestamp: Date;
 }
 
-interface Service {
+interface PanelService {
   name: string;
   platform: string;
   category: string;
-  base_price: number;
+  price: number;
   min_quantity: number;
   max_quantity: number;
   description: string | null;
@@ -41,7 +39,7 @@ const quickQuestions = [
   "How do refills work?",
 ];
 
-const getStaticResponse = (message: string, services: Service[]): string => {
+const getStaticResponse = (message: string, services: PanelService[]): string => {
   const lower = message.toLowerCase();
   
   // Service-specific queries
@@ -50,7 +48,7 @@ const getStaticResponse = (message: string, services: Service[]): string => {
     if (igServices.length > 0) {
       const types = [...new Set(igServices.map(s => s.category))].slice(0, 5).join(", ");
       const priceRange = igServices.length > 0 
-        ? `$${Math.min(...igServices.map(s => s.base_price)).toFixed(2)} - $${Math.max(...igServices.map(s => s.base_price)).toFixed(2)}/1K`
+        ? `$${Math.min(...igServices.map(s => s.price)).toFixed(2)} - $${Math.max(...igServices.map(s => s.price)).toFixed(2)}/1K`
         : "competitive prices";
       return `We have ${igServices.length} Instagram services available including: ${types}. Prices range from ${priceRange}. Would you like to know more about a specific type?`;
     }
@@ -116,8 +114,8 @@ const getStaticResponse = (message: string, services: Service[]): string => {
   // Price queries
   if (lower.includes("price") || lower.includes("cost") || lower.includes("how much")) {
     if (services.length > 0) {
-      const cheapest = services.reduce((a, b) => a.base_price < b.base_price ? a : b);
-      return `Prices vary by service. Our most affordable options start at $${cheapest.base_price.toFixed(2)}/1K. Pricing is optimized based on your region for the best value. Check the Services page for specific prices!`;
+      const cheapest = services.reduce((a, b) => a.price < b.price ? a : b);
+      return `Prices vary by service. Our most affordable options start at $${cheapest.price.toFixed(2)}/1K. Check the Services page for specific prices!`;
     }
     return "Our pricing is competitive and optimized for your region. You'll see the exact price before confirming any order.";
   }
@@ -180,7 +178,7 @@ export const AIChatbot = () => {
   ]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
-  const [services, setServices] = useState<Service[]>([]);
+  const [services, setServices] = useState<PanelService[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -189,13 +187,29 @@ export const AIChatbot = () => {
 
   const fetchServices = async () => {
     try {
-      const { data } = await supabase
+      // First try panel_services (user-facing abstracted services)
+      const { data: panelData } = await supabase
+        .from('panel_services')
+        .select('name, platform, category, price, min_quantity, max_quantity, description, refill_supported')
+        .eq('is_visible', true);
+      
+      if (panelData && panelData.length > 0) {
+        setServices(panelData);
+        return;
+      }
+
+      // Fallback to services table (provider services) if panel_services is empty
+      const { data: servicesData } = await supabase
         .from('services')
         .select('name, platform, category, base_price, min_quantity, max_quantity, description, refill_supported')
         .eq('is_active', true);
       
-      if (data) {
-        setServices(data);
+      if (servicesData) {
+        // Map base_price to price for consistent interface
+        setServices(servicesData.map(s => ({
+          ...s,
+          price: s.base_price
+        })));
       }
     } catch (error) {
       console.error('Error fetching services:', error);

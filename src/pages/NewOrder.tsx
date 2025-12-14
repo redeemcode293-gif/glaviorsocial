@@ -24,7 +24,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 
-interface PanelService {
+interface ServiceDisplay {
   id: string;
   service_id: number;
   name: string;
@@ -34,10 +34,10 @@ interface PanelService {
   price: number;
   min_quantity: number;
   max_quantity: number;
-  refill_supported: boolean;
-  dripfeed_supported: boolean;
-  auto_refill_supported: boolean;
-  provider_service_uuid: string | null;
+  refill_supported: boolean | null;
+  dripfeed_supported: boolean | null;
+  auto_refill_supported?: boolean | null;
+  provider_service_uuid?: string | null;
 }
 
 const categories = [
@@ -55,7 +55,7 @@ const categories = [
 const NewOrder = () => {
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [selectedService, setSelectedService] = useState("");
-  const [services, setServices] = useState<PanelService[]>([]);
+  const [services, setServices] = useState<ServiceDisplay[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [link, setLink] = useState("");
   const [quantity, setQuantity] = useState("");
@@ -78,16 +78,45 @@ const NewOrder = () => {
 
   const fetchServices = async () => {
     setLoadingServices(true);
-    // Fetch from panel_services (user-facing abstraction)
-    const { data, error } = await supabase
+    
+    // First try panel_services (user-facing abstracted services)
+    const { data: panelData, error: panelError } = await supabase
       .from('panel_services')
       .select('*')
       .eq('is_visible', true)
       .order('platform')
       .order('name');
 
-    if (data) {
-      setServices(data);
+    if (!panelError && panelData && panelData.length > 0) {
+      setServices(panelData);
+      setLoadingServices(false);
+      return;
+    }
+
+    // Fallback to services table if panel_services is empty
+    const { data: servicesData, error: servicesError } = await supabase
+      .from('services')
+      .select('id, service_id, name, description, platform, category, base_price, min_quantity, max_quantity, refill_supported, dripfeed_supported')
+      .eq('is_active', true)
+      .order('platform')
+      .order('name');
+
+    if (servicesData) {
+      setServices(servicesData.map(s => ({
+        id: s.id,
+        service_id: s.service_id,
+        name: s.name,
+        description: s.description,
+        platform: s.platform,
+        category: s.category,
+        price: s.base_price,
+        min_quantity: s.min_quantity,
+        max_quantity: s.max_quantity,
+        refill_supported: s.refill_supported,
+        dripfeed_supported: s.dripfeed_supported,
+        auto_refill_supported: false,
+        provider_service_uuid: null,
+      })));
     }
     setLoadingServices(false);
   };
@@ -180,14 +209,14 @@ const NewOrder = () => {
 
     try {
       // Get the provider service UUID for order routing
-      const providerServiceId = currentService?.provider_service_uuid;
+      const providerServiceId = currentService?.provider_service_uuid || currentService?.id;
 
       // Create order with panel service reference and routing info
       const { data: order, error: orderError } = await supabase
         .from('orders')
         .insert({
           user_id: user.id,
-          service_id: providerServiceId || currentService?.id, // Use provider service if mapped
+          service_id: providerServiceId,
           link: link,
           quantity: qty,
           price: totalPrice,
@@ -474,28 +503,30 @@ const NewOrder = () => {
                           <Clock className="h-4 w-4 text-primary" />
                           Drip-Feed
                         </Label>
-                        <p className="text-xs text-muted-foreground">Gradually deliver over time</p>
+                        <p className="text-xs text-muted-foreground">Spread delivery over time</p>
                       </div>
                       <Switch checked={dripFeed} onCheckedChange={setDripFeed} />
                     </div>
-
+                    
                     {dripFeed && (
-                      <div className="grid grid-cols-2 gap-4 pt-2 animate-fade-in">
+                      <div className="grid sm:grid-cols-2 gap-4 pt-2">
                         <div className="space-y-2">
-                          <Label className="text-xs">Number of Runs</Label>
+                          <Label htmlFor="runs">Number of Runs</Label>
                           <Input
+                            id="runs"
                             type="number"
-                            placeholder="10"
+                            placeholder="e.g., 10"
                             value={dripFeedRuns}
                             onChange={(e) => setDripFeedRuns(e.target.value)}
                             className="bg-secondary/30 border-border/30"
                           />
                         </div>
                         <div className="space-y-2">
-                          <Label className="text-xs">Interval (minutes)</Label>
+                          <Label htmlFor="interval">Interval (minutes)</Label>
                           <Input
+                            id="interval"
                             type="number"
-                            placeholder="60"
+                            placeholder="e.g., 60"
                             value={dripFeedInterval}
                             onChange={(e) => setDripFeedInterval(e.target.value)}
                             className="bg-secondary/30 border-border/30"
@@ -507,79 +538,69 @@ const NewOrder = () => {
                 )}
 
                 {/* Auto-Refill */}
-                {currentService?.refill_supported && currentService?.auto_refill_supported && (
-                  <div className="flex items-center justify-between p-4 rounded-lg bg-success/5 border border-success/20">
+                {currentService?.refill_supported && (
+                  <div className="flex items-center justify-between p-4 rounded-lg bg-secondary/10 border border-border/30">
                     <div className="space-y-0.5">
                       <Label className="flex items-center gap-2">
                         <RefreshCw className="h-4 w-4 text-success" />
                         Auto-Refill
                       </Label>
-                      <p className="text-xs text-muted-foreground">Automatically refill if drops occur</p>
+                      <p className="text-xs text-muted-foreground">Automatically request refill if drops occur</p>
                     </div>
                     <Switch checked={autoRefill} onCheckedChange={setAutoRefill} />
                   </div>
                 )}
 
                 {/* Order Summary */}
-                <div className="p-4 rounded-lg bg-gradient-to-br from-primary/10 to-accent/10 border border-primary/20">
-                  <div className="flex items-center justify-between mb-4">
-                    <span className="text-muted-foreground">Total Cost</span>
-                    <span className="text-3xl font-display font-bold text-gradient-cyan">
+                <div className="p-4 rounded-lg bg-gradient-to-r from-primary/5 to-accent/5 border border-primary/20">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Total Price</span>
+                    <span className="text-2xl font-display font-bold text-gradient-cyan">
                       ${calculateTotal()}
                     </span>
                   </div>
-                  <Button 
-                    className="w-full" 
-                    size="lg"
-                    onClick={handleSingleOrder}
-                    disabled={isSubmitting || !selectedService || !link || !quantity}
-                  >
-                    {isSubmitting ? (
-                      <>
-                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                        Processing...
-                      </>
-                    ) : (
-                      <>
-                        <ShoppingCart className="h-4 w-4 mr-2" />
-                        Place Order
-                      </>
-                    )}
-                  </Button>
                 </div>
+
+                <Button 
+                  className="w-full" 
+                  size="lg"
+                  onClick={handleSingleOrder}
+                  disabled={isSubmitting || !selectedService || !link || !quantity}
+                >
+                  <ShoppingCart className="h-4 w-4 mr-2" />
+                  {isSubmitting ? "Processing..." : "Place Order"}
+                </Button>
               </CardContent>
             </Card>
           </TabsContent>
 
           {/* Mass Order */}
-          <TabsContent value="mass" className="mt-6 space-y-6">
+          <TabsContent value="mass" className="mt-6">
             <Card className="border-border/30 bg-card/60 backdrop-blur-sm">
               <CardHeader>
                 <CardTitle className="text-lg font-display">Mass Order</CardTitle>
-                <CardDescription>
-                  Place multiple orders at once. Format: service_id|link|quantity (one per line)
-                </CardDescription>
+                <CardDescription>Submit multiple orders at once using CSV format</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div className="space-y-2">
-                  <Label>Orders (one per line)</Label>
-                  <Textarea
-                    placeholder={`Example:\n482|https://instagram.com/user1|1000\n739|https://instagram.com/user2|500`}
-                    value={massOrderText}
-                    onChange={(e) => setMassOrderText(e.target.value)}
-                    rows={10}
-                    className="font-mono text-sm bg-secondary/30 border-border/30"
-                  />
+                <div className="p-4 rounded-lg bg-secondary/10 border border-border/30">
+                  <p className="text-sm text-muted-foreground mb-2">
+                    Format: <code className="text-primary">service_id|link|quantity</code>
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Example:<br />
+                    <code className="text-primary/80">123|https://instagram.com/user1|1000</code><br />
+                    <code className="text-primary/80">456|https://instagram.com/user2|5000</code>
+                  </p>
                 </div>
 
-                <div className="p-4 rounded-lg bg-secondary/20 border border-border/30">
-                  <p className="text-sm font-medium mb-2">Format Guide</p>
-                  <code className="text-xs text-muted-foreground block">
-                    service_id|link|quantity
-                  </code>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Use the numeric service ID shown in the services list.
-                  </p>
+                <div className="space-y-2">
+                  <Label>Orders</Label>
+                  <Textarea
+                    placeholder="Paste your orders here..."
+                    value={massOrderText}
+                    onChange={(e) => setMassOrderText(e.target.value)}
+                    className="min-h-[200px] bg-secondary/30 border-border/30 font-mono text-sm"
+                  />
                 </div>
 
                 <Button 
@@ -588,17 +609,8 @@ const NewOrder = () => {
                   onClick={handleMassOrder}
                   disabled={isSubmitting || !massOrderText.trim()}
                 >
-                  {isSubmitting ? (
-                    <>
-                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                      Processing...
-                    </>
-                  ) : (
-                    <>
-                      <FileText className="h-4 w-4 mr-2" />
-                      Submit Mass Order
-                    </>
-                  )}
+                  <FileText className="h-4 w-4 mr-2" />
+                  {isSubmitting ? "Processing Orders..." : "Submit Mass Order"}
                 </Button>
               </CardContent>
             </Card>
