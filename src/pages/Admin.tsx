@@ -4,16 +4,14 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
-  LayoutDashboard,
   Users,
   Package,
   ShoppingCart,
   DollarSign,
   Settings,
-  Bell,
-  TrendingUp,
   Globe,
   RefreshCw,
   Search,
@@ -22,9 +20,7 @@ import {
   Trash2,
   Eye,
   Ban,
-  CheckCircle2,
-  AlertTriangle,
-  Server
+  Save
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -41,6 +37,7 @@ const Admin = () => {
   const [users, setUsers] = useState<any[]>([]);
   const [services, setServices] = useState<any[]>([]);
   const [orders, setOrders] = useState<any[]>([]);
+  const [regionalPricing, setRegionalPricing] = useState<any[]>([]);
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -56,7 +53,6 @@ const Admin = () => {
       return;
     }
 
-    // Check if user has admin role
     const { data: roles } = await supabase
       .from('user_roles')
       .select('role')
@@ -95,12 +91,12 @@ const Admin = () => {
       activeServices: servicesCount || 0
     });
 
-    // Fetch recent users
+    // Fetch users with country info
     const { data: usersData } = await supabase
       .from('profiles')
       .select('*')
       .order('created_at', { ascending: false })
-      .limit(10);
+      .limit(50);
     setUsers(usersData || []);
 
     // Fetch services
@@ -115,8 +111,36 @@ const Admin = () => {
       .from('orders')
       .select('*')
       .order('created_at', { ascending: false })
-      .limit(20);
+      .limit(50);
     setOrders(ordersData || []);
+
+    // Fetch regional pricing
+    const { data: pricingData } = await supabase
+      .from('regional_pricing')
+      .select('*')
+      .order('multiplier', { ascending: true });
+    setRegionalPricing(pricingData || []);
+  };
+
+  const updateRegionalPricing = async (id: string, multiplier: number) => {
+    const { error } = await supabase
+      .from('regional_pricing')
+      .update({ multiplier })
+      .eq('id', id);
+
+    if (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update pricing",
+        variant: "destructive",
+      });
+    } else {
+      toast({
+        title: "Updated",
+        description: "Regional pricing updated successfully",
+      });
+      fetchAdminData();
+    }
   };
 
   if (loading) {
@@ -130,9 +154,7 @@ const Admin = () => {
     );
   }
 
-  if (!isAdmin) {
-    return null;
-  }
+  if (!isAdmin) return null;
 
   return (
     <div className="min-h-screen bg-background">
@@ -224,7 +246,7 @@ const Admin = () => {
             <TabsTrigger value="users">Users</TabsTrigger>
             <TabsTrigger value="services">Services</TabsTrigger>
             <TabsTrigger value="orders">Orders</TabsTrigger>
-            <TabsTrigger value="settings">Settings</TabsTrigger>
+            <TabsTrigger value="pricing">Regional Pricing</TabsTrigger>
           </TabsList>
 
           <TabsContent value="users">
@@ -256,6 +278,7 @@ const Admin = () => {
                         <tr className="border-b border-border/30">
                           <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">User</th>
                           <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Country</th>
+                          <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Country Code</th>
                           <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">VIP Tier</th>
                           <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Joined</th>
                           <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Actions</th>
@@ -271,7 +294,10 @@ const Admin = () => {
                               </div>
                             </td>
                             <td className="p-3">
-                              <span className="text-sm">{user.country || 'Unknown'}</span>
+                              <span className="text-sm">{user.country || 'Not detected'}</span>
+                            </td>
+                            <td className="p-3">
+                              <Badge variant="outline">{user.country_code || 'XX'}</Badge>
                             </td>
                             <td className="p-3">
                               <Badge variant="secondary">{user.vip_tier || 'Standard'}</Badge>
@@ -406,16 +432,14 @@ const Admin = () => {
                       <tbody>
                         {orders.map((order) => (
                           <tr key={order.id} className="border-b border-border/20 hover:bg-secondary/10">
-                            <td className="p-3 font-mono text-sm text-primary">{order.order_number}</td>
-                            <td className="p-3 max-w-[200px] truncate text-sm">{order.link}</td>
+                            <td className="p-3 font-mono text-sm">{order.order_number}</td>
+                            <td className="p-3">
+                              <p className="text-sm truncate max-w-[200px]">{order.link}</p>
+                            </td>
                             <td className="p-3">{order.quantity.toLocaleString()}</td>
                             <td className="p-3 font-mono">${Number(order.price).toFixed(2)}</td>
                             <td className="p-3">
-                              <Badge variant={
-                                order.status === 'completed' ? 'success' :
-                                order.status === 'processing' ? 'cyan' :
-                                order.status === 'cancelled' ? 'destructive' : 'gold'
-                              }>
+                              <Badge variant={order.status === 'completed' ? 'success' : 'secondary'}>
                                 {order.status}
                               </Badge>
                             </td>
@@ -432,51 +456,71 @@ const Admin = () => {
             </Card>
           </TabsContent>
 
-          <TabsContent value="settings">
-            <div className="grid md:grid-cols-2 gap-6">
-              <Card className="border-border/30 bg-card/60">
-                <CardHeader>
-                  <CardTitle className="text-lg font-display">API Providers</CardTitle>
-                  <CardDescription>Manage SMM API providers</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-center py-8">
-                    <Server className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
-                    <p className="text-muted-foreground mb-4">No API providers configured</p>
-                    <Button>
-                      <Plus className="h-4 w-4 mr-2" />
-                      Add Provider
-                    </Button>
+          <TabsContent value="pricing">
+            <Card className="border-border/30 bg-card/60">
+              <CardHeader>
+                <CardTitle className="text-lg font-display">Regional Pricing Multipliers</CardTitle>
+                <CardDescription>
+                  Configure pricing multipliers for different regions. Base price × multiplier = final price.
+                  This is hidden from users.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {regionalPricing.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Globe className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
+                    <p className="text-muted-foreground">No regional pricing configured</p>
                   </div>
-                </CardContent>
-              </Card>
-
-              <Card className="border-border/30 bg-card/60">
-                <CardHeader>
-                  <CardTitle className="text-lg font-display">Region Multipliers</CardTitle>
-                  <CardDescription>Configure regional pricing</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/20">
-                    <span className="font-medium">Tier A (USA, UAE, etc.)</span>
-                    <Input type="number" defaultValue="2.5" className="w-24 bg-secondary/30" />
+                ) : (
+                  <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {regionalPricing.map((region) => (
+                      <Card key={region.id} className="border-border/30">
+                        <CardContent className="p-4">
+                          <div className="flex items-center justify-between mb-3">
+                            <div>
+                              <p className="font-medium text-foreground">{region.region_name}</p>
+                              <p className="text-xs text-muted-foreground">{region.region_code}</p>
+                            </div>
+                            <Badge variant="outline">{region.multiplier}x</Badge>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Input
+                              type="number"
+                              step="0.05"
+                              min="0.5"
+                              max="5"
+                              defaultValue={region.multiplier}
+                              className="bg-secondary/30 border-border/30 text-sm"
+                              onBlur={(e) => {
+                                const newValue = parseFloat(e.target.value);
+                                if (newValue !== region.multiplier) {
+                                  updateRegionalPricing(region.id, newValue);
+                                }
+                              }}
+                            />
+                            <Button variant="outline" size="icon" className="h-9 w-9">
+                              <Save className="h-4 w-4" />
+                            </Button>
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-1">
+                            {region.countries?.slice(0, 5).map((code: string) => (
+                              <Badge key={code} variant="secondary" className="text-xs">
+                                {code}
+                              </Badge>
+                            ))}
+                            {region.countries?.length > 5 && (
+                              <Badge variant="secondary" className="text-xs">
+                                +{region.countries.length - 5}
+                              </Badge>
+                            )}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
                   </div>
-                  <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/20">
-                    <span className="font-medium">Tier B (UK, EU, etc.)</span>
-                    <Input type="number" defaultValue="2.0" className="w-24 bg-secondary/30" />
-                  </div>
-                  <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/20">
-                    <span className="font-medium">Tier C (Brazil, Turkey, etc.)</span>
-                    <Input type="number" defaultValue="1.3" className="w-24 bg-secondary/30" />
-                  </div>
-                  <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/20">
-                    <span className="font-medium">Tier D (India, etc.)</span>
-                    <Input type="number" defaultValue="1.0" className="w-24 bg-secondary/30" />
-                  </div>
-                  <Button className="w-full">Save Multipliers</Button>
-                </CardContent>
-              </Card>
-            </div>
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </div>
