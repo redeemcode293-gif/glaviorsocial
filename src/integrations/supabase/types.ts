@@ -41,6 +41,33 @@ export type Database = {
         }
         Relationships: []
       }
+      api_keys: {
+        Row: {
+          api_key: string
+          created_at: string
+          id: string
+          is_active: boolean | null
+          last_used_at: string | null
+          user_id: string
+        }
+        Insert: {
+          api_key?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          last_used_at?: string | null
+          user_id: string
+        }
+        Update: {
+          api_key?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          last_used_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       api_providers: {
         Row: {
           api_key: string
@@ -80,6 +107,33 @@ export type Database = {
           priority?: number | null
           status?: string | null
           updated_at?: string
+        }
+        Relationships: []
+      }
+      login_history: {
+        Row: {
+          created_at: string
+          device_info: string | null
+          id: string
+          ip_address: string | null
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          device_info?: string | null
+          id?: string
+          ip_address?: string | null
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          device_info?: string | null
+          id?: string
+          ip_address?: string | null
+          user_agent?: string | null
+          user_id?: string
         }
         Relationships: []
       }
@@ -154,9 +208,11 @@ export type Database = {
           email: string | null
           full_name: string | null
           id: string
+          last_password_change: string | null
           pricing_override: string | null
           referral_code: string | null
           referred_by: string | null
+          status: string | null
           updated_at: string
           user_id: string
           vip_tier: string | null
@@ -169,9 +225,11 @@ export type Database = {
           email?: string | null
           full_name?: string | null
           id?: string
+          last_password_change?: string | null
           pricing_override?: string | null
           referral_code?: string | null
           referred_by?: string | null
+          status?: string | null
           updated_at?: string
           user_id: string
           vip_tier?: string | null
@@ -184,9 +242,11 @@ export type Database = {
           email?: string | null
           full_name?: string | null
           id?: string
+          last_password_change?: string | null
           pricing_override?: string | null
           referral_code?: string | null
           referred_by?: string | null
+          status?: string | null
           updated_at?: string
           user_id?: string
           vip_tier?: string | null
