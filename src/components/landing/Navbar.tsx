@@ -3,7 +3,8 @@ import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Menu, X, Zap } from "lucide-react";
-import { CurrencyLanguageSelector } from "@/components/preferences/CurrencyLanguageSelector";
+import { CurrencySelector } from "@/components/preferences/CurrencySelector";
+import { LanguageSelector } from "@/components/preferences/LanguageSelector";
 
 const navLinks = [
   { href: "/services", label: "Services" },
@@ -59,7 +60,8 @@ export const Navbar = () => {
 
           {/* Desktop Actions */}
           <div className="hidden lg:flex items-center gap-3">
-            <CurrencyLanguageSelector variant="compact" />
+            <LanguageSelector />
+            <CurrencySelector />
             <Button variant="ghost" size="sm" asChild>
               <Link to="/login">Sign In</Link>
             </Button>

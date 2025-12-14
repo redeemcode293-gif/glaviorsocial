@@ -7,69 +7,17 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { 
-  Instagram, 
-  Youtube, 
-  Twitter, 
-  Send, 
-  Music2,
   Search,
   Zap,
   RefreshCw,
-  Star,
   ShoppingCart,
-  Facebook,
-  Twitch,
-  MessageCircle,
-  Disc,
   Loader2,
-  Music,
-  MessageSquare,
   Globe,
-  Camera,
-  Linkedin,
-  Image as ImageIcon
+  Crown,
+  TrendingUp
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-
-const platforms = [
-  { id: "all", name: "All", icon: Star },
-  { id: "Instagram", name: "Instagram", icon: Instagram },
-  { id: "YouTube", name: "YouTube", icon: Youtube },
-  { id: "X", name: "X (Twitter)", icon: Twitter },
-  { id: "Telegram", name: "Telegram", icon: Send },
-  { id: "TikTok", name: "TikTok", icon: Music2 },
-  { id: "Facebook", name: "Facebook", icon: Facebook },
-  { id: "Spotify", name: "Spotify", icon: Music },
-  { id: "Twitch", name: "Twitch", icon: Twitch },
-  { id: "Discord", name: "Discord", icon: MessageCircle },
-  { id: "WhatsApp", name: "WhatsApp", icon: MessageSquare },
-  { id: "Snapchat", name: "Snapchat", icon: Camera },
-  { id: "Threads", name: "Threads", icon: Disc },
-  { id: "LinkedIn", name: "LinkedIn", icon: Linkedin },
-  { id: "Pinterest", name: "Pinterest", icon: ImageIcon },
-  { id: "Other", name: "Others", icon: Globe },
-];
-
-const getPlatformIcon = (platform: string) => {
-  const icons: Record<string, typeof Instagram> = {
-    Instagram: Instagram,
-    YouTube: Youtube,
-    X: Twitter,
-    Telegram: Send,
-    TikTok: Music2,
-    Facebook: Facebook,
-    Spotify: Music,
-    Twitch: Twitch,
-    Discord: MessageCircle,
-    WhatsApp: MessageSquare,
-    Snapchat: Camera,
-    Threads: Disc,
-    LinkedIn: Linkedin,
-    Pinterest: ImageIcon,
-    Other: Globe,
-  };
-  return icons[platform] || Star;
-};
+import { PlatformBadge, PLATFORMS, getPlatformIcon, getPlatformColor } from "@/components/ui/platform-icons";
 
 interface ServiceDisplay {
   id: string;
@@ -85,6 +33,23 @@ interface ServiceDisplay {
   dripfeed_supported: boolean | null;
 }
 
+// Extract refill days from name (e.g., "30 Days Refill" -> 30)
+const extractRefillDays = (name: string): number | null => {
+  const match = name.match(/(\d+)\s*(?:days?|d)\s*refill/i);
+  return match ? parseInt(match[1]) : null;
+};
+
+// Determine service tier based on price and name
+const getServiceTier = (service: ServiceDisplay): 'budget' | 'standard' | 'premium' | 'monetization' => {
+  const name = service.name.toLowerCase();
+  if (name.includes('monetization') || name.includes('monetizable')) return 'monetization';
+  if (name.includes('premium') || name.includes('authority') || name.includes('high quality')) return 'premium';
+  if (name.includes('starter') || name.includes('cheap') || name.includes('budget')) return 'budget';
+  return 'standard';
+};
+
+const tierOrder = { budget: 0, standard: 1, premium: 2, monetization: 3 };
+
 const Services = () => {
   const [selectedPlatform, setSelectedPlatform] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -98,13 +63,12 @@ const Services = () => {
 
   const fetchServices = async () => {
     try {
-      // First try panel_services (user-facing abstracted services)
       const { data: panelData, error: panelError } = await supabase
         .from('panel_services')
         .select('*')
         .eq('is_visible', true)
         .order('platform')
-        .order('name');
+        .order('price', { ascending: true });
 
       if (!panelError && panelData && panelData.length > 0) {
         setServices(panelData);
@@ -112,17 +76,15 @@ const Services = () => {
         return;
       }
 
-      // Fallback to services table if panel_services is empty
       const { data: servicesData, error: servicesError } = await supabase
         .from('services')
         .select('id, service_id, name, description, platform, category, base_price, min_quantity, max_quantity, refill_supported, dripfeed_supported')
         .eq('is_active', true)
         .order('platform')
-        .order('name');
+        .order('base_price', { ascending: true });
 
       if (servicesError) throw servicesError;
       
-      // Map services data to display format
       if (servicesData) {
         setServices(servicesData.map(s => ({
           id: s.id,
@@ -145,19 +107,28 @@ const Services = () => {
     }
   };
 
-  const filteredServices = services.filter((service) => {
-    const matchesPlatform = selectedPlatform === "all" || service.platform === selectedPlatform;
-    const matchesSearch = 
-      service.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (service.description?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false) ||
-      service.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      service.service_id.toString().includes(searchQuery);
-    return matchesPlatform && matchesSearch;
-  });
+  // Filter and sort services
+  const filteredServices = services
+    .filter((service) => {
+      const matchesPlatform = selectedPlatform === "all" || service.platform === selectedPlatform;
+      const matchesSearch = 
+        service.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (service.description?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false) ||
+        service.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        service.service_id.toString().includes(searchQuery);
+      return matchesPlatform && matchesSearch;
+    })
+    .sort((a, b) => {
+      // Sort by tier first (budget -> standard -> premium -> monetization)
+      const tierA = tierOrder[getServiceTier(a)];
+      const tierB = tierOrder[getServiceTier(b)];
+      if (tierA !== tierB) return tierA - tierB;
+      // Then by price within same tier
+      return a.price - b.price;
+    });
 
-  // Get available platforms from actual services
   const availablePlatforms = [...new Set(services.map(s => s.platform))];
-  const displayPlatforms = platforms.filter(p => 
+  const displayPlatforms = PLATFORMS.filter(p => 
     p.id === "all" || availablePlatforms.includes(p.id)
   );
 
@@ -175,7 +146,7 @@ const Services = () => {
               <span className="text-gradient-cyan"> Growth Services</span>
             </h1>
             <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-              Glavior Social provides scalable social media solutions through a unified platform
+              Discover our comprehensive range of social media growth solutions
             </p>
           </div>
 
@@ -192,20 +163,28 @@ const Services = () => {
               />
             </div>
 
-            {/* Platform Filters */}
+            {/* Platform Filters with icons */}
             <div className="flex flex-wrap justify-center gap-2">
-              {displayPlatforms.map((platform) => (
-                <Button
-                  key={platform.id}
-                  variant={selectedPlatform === platform.id ? "default" : "glass"}
-                  size="sm"
-                  onClick={() => setSelectedPlatform(platform.id)}
-                  className="flex items-center gap-2"
-                >
-                  <platform.icon className="h-4 w-4" />
-                  {platform.name}
-                </Button>
-              ))}
+              {displayPlatforms.map((platform) => {
+                const Icon = platform.icon;
+                const isActive = selectedPlatform === platform.id;
+                return (
+                  <Button
+                    key={platform.id}
+                    variant={isActive ? "default" : "glass"}
+                    size="sm"
+                    onClick={() => setSelectedPlatform(platform.id)}
+                    className={`flex items-center gap-2 ${isActive ? 'glow-cyan' : ''}`}
+                  >
+                    <div className={`w-5 h-5 rounded flex items-center justify-center ${
+                      platform.id !== 'all' ? `bg-gradient-to-br ${getPlatformColor(platform.id)}` : ''
+                    }`}>
+                      <Icon className={`h-3 w-3 ${platform.id !== 'all' ? 'text-white' : ''}`} />
+                    </div>
+                    {platform.name}
+                  </Button>
+                );
+              })}
             </div>
           </div>
 
@@ -220,18 +199,39 @@ const Services = () => {
               {/* Services Grid */}
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {filteredServices.map((service) => {
-                  const PlatformIcon = getPlatformIcon(service.platform);
                   const pricePerK = Number(service.price) || 0;
+                  const refillDays = extractRefillDays(service.name);
+                  const tier = getServiceTier(service);
+                  const Icon = getPlatformIcon(service.platform);
+                  const colorClass = getPlatformColor(service.platform);
                   
                   return (
-                    <Card key={service.id} variant="glass" className="group hover:border-primary/30 transition-all duration-300">
+                    <Card key={service.id} variant="glass" className="group hover:border-primary/30 transition-all duration-300 relative overflow-hidden">
+                      {/* Tier indicator */}
+                      {tier === 'monetization' && (
+                        <div className="absolute top-3 right-3">
+                          <Badge className="bg-gradient-to-r from-amber-500 to-yellow-400 text-black font-semibold gap-1">
+                            <Crown className="h-3 w-3" />
+                            Monetization
+                          </Badge>
+                        </div>
+                      )}
+                      {tier === 'premium' && (
+                        <div className="absolute top-3 right-3">
+                          <Badge className="bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold gap-1">
+                            <TrendingUp className="h-3 w-3" />
+                            Premium
+                          </Badge>
+                        </div>
+                      )}
+                      
                       <CardHeader className="pb-3">
                         <div className="flex items-start justify-between">
                           <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-lg bg-secondary flex items-center justify-center">
-                              <PlatformIcon className="h-5 w-5 text-primary" />
+                            <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${colorClass} flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform`}>
+                              <Icon className="h-5 w-5 text-white" />
                             </div>
-                            <div>
+                            <div className="flex-1 min-w-0 pr-8">
                               <CardTitle className="text-base line-clamp-2">{service.name}</CardTitle>
                               <p className="text-xs text-muted-foreground">{service.platform} • ID: {service.service_id}</p>
                             </div>
@@ -239,9 +239,14 @@ const Services = () => {
                         </div>
                       </CardHeader>
                       <CardContent className="space-y-4">
-                        <p className="text-sm text-muted-foreground line-clamp-2">
-                          {service.description || 'Premium quality service with fast delivery'}
-                        </p>
+                        {/* Description */}
+                        {service.description && (
+                          <div className="p-3 rounded-lg bg-secondary/20 border border-border/30">
+                            <p className="text-sm text-muted-foreground line-clamp-3">
+                              {service.description}
+                            </p>
+                          </div>
+                        )}
                         
                         <div className="grid grid-cols-2 gap-3 text-xs">
                           <div className="flex items-center gap-2 text-muted-foreground">
@@ -249,13 +254,15 @@ const Services = () => {
                             <span>Fast delivery</span>
                           </div>
                           <div className="flex items-center gap-2 text-muted-foreground">
-                            {service.refill_supported ? (
+                            {service.refill_supported || refillDays ? (
                               <>
                                 <RefreshCw className="h-3 w-3 text-emerald-500" />
-                                <span>Drop Protection</span>
+                                <span className="text-emerald-400">
+                                  {refillDays ? `${refillDays} Days Refill` : 'Drop Protection'}
+                                </span>
                               </>
                             ) : (
-                              <span>No Refill</span>
+                              <span className="text-muted-foreground/60">—</span>
                             )}
                           </div>
                         </div>

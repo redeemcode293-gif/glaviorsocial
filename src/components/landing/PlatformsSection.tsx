@@ -1,24 +1,19 @@
 import { Card, CardContent } from "@/components/ui/card";
-import { 
-  Instagram, 
-  Youtube, 
-  Twitter, 
-  Send, 
-  Music2, 
-  Facebook,
-  Linkedin,
-  MessageCircle
-} from "lucide-react";
+import { getPlatformIcon, getPlatformColor } from "@/components/ui/platform-icons";
 
 const platforms = [
-  { name: "Instagram", icon: Instagram, color: "from-pink-500 to-purple-600", services: "12+ Services" },
-  { name: "YouTube", icon: Youtube, color: "from-red-500 to-red-600", services: "8+ Services" },
-  { name: "X (Twitter)", icon: Twitter, color: "from-slate-600 to-slate-800", services: "10+ Services" },
-  { name: "Telegram", icon: Send, color: "from-blue-400 to-blue-600", services: "6+ Services" },
-  { name: "TikTok", icon: Music2, color: "from-pink-500 to-cyan-400", services: "9+ Services" },
-  { name: "Facebook", icon: Facebook, color: "from-blue-500 to-blue-700", services: "7+ Services" },
-  { name: "LinkedIn", icon: Linkedin, color: "from-blue-600 to-blue-800", services: "5+ Services" },
-  { name: "Discord", icon: MessageCircle, color: "from-indigo-500 to-indigo-700", services: "4+ Services" },
+  { name: "Instagram", services: "15+ Services" },
+  { name: "YouTube", services: "12+ Services" },
+  { name: "TikTok", services: "10+ Services" },
+  { name: "X", displayName: "X (Twitter)", services: "8+ Services" },
+  { name: "Telegram", services: "6+ Services" },
+  { name: "Facebook", services: "7+ Services" },
+  { name: "Spotify", services: "5+ Services" },
+  { name: "Discord", services: "4+ Services" },
+  { name: "Twitch", services: "4+ Services" },
+  { name: "LinkedIn", services: "5+ Services" },
+  { name: "Snapchat", services: "3+ Services" },
+  { name: "Pinterest", services: "3+ Services" },
 ];
 
 export const PlatformsSection = () => {
@@ -37,23 +32,30 @@ export const PlatformsSection = () => {
           </p>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 max-w-5xl mx-auto">
-          {platforms.map((platform, index) => (
-            <Card 
-              key={platform.name} 
-              variant="glass" 
-              className="group cursor-pointer hover:scale-105 transition-all duration-300 hover:border-primary/50"
-              style={{ animationDelay: `${index * 100}ms` }}
-            >
-              <CardContent className="p-6 text-center">
-                <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${platform.color} flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform duration-300 shadow-lg`}>
-                  <platform.icon className="h-7 w-7 text-white" />
-                </div>
-                <h3 className="font-semibold text-foreground mb-1">{platform.name}</h3>
-                <p className="text-xs text-muted-foreground">{platform.services}</p>
-              </CardContent>
-            </Card>
-          ))}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 md:gap-6 max-w-6xl mx-auto">
+          {platforms.map((platform, index) => {
+            const Icon = getPlatformIcon(platform.name);
+            const colorClass = getPlatformColor(platform.name);
+            
+            return (
+              <Card 
+                key={platform.name} 
+                variant="glass" 
+                className="group cursor-pointer hover:scale-105 transition-all duration-300 hover:border-primary/50"
+                style={{ animationDelay: `${index * 50}ms` }}
+              >
+                <CardContent className="p-4 md:p-6 text-center">
+                  <div className={`w-12 h-12 md:w-14 md:h-14 rounded-xl bg-gradient-to-br ${colorClass} flex items-center justify-center mx-auto mb-3 md:mb-4 group-hover:scale-110 transition-transform duration-300 shadow-lg`}>
+                    <Icon className="h-6 w-6 md:h-7 md:w-7 text-white" />
+                  </div>
+                  <h3 className="font-semibold text-foreground mb-1 text-sm md:text-base">
+                    {platform.displayName || platform.name}
+                  </h3>
+                  <p className="text-xs text-muted-foreground">{platform.services}</p>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       </div>
     </section>
