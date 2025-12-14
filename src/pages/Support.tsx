@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { 
   HelpCircle,
   MessageSquare,
@@ -18,69 +19,116 @@ import {
   ChevronRight,
   Search,
   Book,
-  Headphones
+  Headphones,
+  ArrowLeft,
+  User,
+  Shield,
+  RefreshCw
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 
-const tickets = [
-  { 
-    id: "TKT-1234", 
-    subject: "Order not processing", 
-    status: "open", 
-    priority: "high",
-    lastReply: "2024-01-15 14:30",
-    created: "2024-01-15 12:00"
-  },
-  { 
-    id: "TKT-1233", 
-    subject: "Refund request for cancelled order", 
-    status: "pending", 
-    priority: "medium",
-    lastReply: "2024-01-14 16:45",
-    created: "2024-01-14 10:30"
-  },
-  { 
-    id: "TKT-1232", 
-    subject: "API integration help", 
-    status: "resolved", 
-    priority: "low",
-    lastReply: "2024-01-13 11:20",
-    created: "2024-01-12 09:00"
-  },
-  { 
-    id: "TKT-1231", 
-    subject: "Payment not credited", 
-    status: "resolved", 
-    priority: "high",
-    lastReply: "2024-01-12 18:00",
-    created: "2024-01-12 14:00"
-  },
-];
+interface Ticket {
+  id: string;
+  ticket_number: string;
+  subject: string;
+  message: string;
+  status: string;
+  priority: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface TicketMessage {
+  id: string;
+  ticket_id: string;
+  message: string;
+  is_admin: boolean;
+  created_at: string;
+}
 
 const faqs = [
   { q: "How long does order delivery take?", a: "Delivery time varies by service. Check the estimated speed shown on each service." },
   { q: "What happens if my order is not completed?", a: "If an order cannot be completed, you will receive an automatic refund to your wallet." },
-  { q: "How do refills work?", a: "Services with refill support automatically restore any drops within the guarantee period." },
+  { q: "How do refills work?", a: "Services with drop-managed protection automatically restore any drops within the guarantee period." },
   { q: "Can I cancel an order?", a: "Orders can only be cancelled if they haven't started processing yet." },
   { q: "How do I add funds?", a: "Go to Add Funds page and choose from crypto, card, or UPI payment methods." },
+  { q: "What is the API for?", a: "The API allows you to integrate our services into your own platform or automate orders." },
+  { q: "How do referrals work?", a: "Share your referral link and earn commission on every order placed by referred users." },
 ];
 
-const statusConfig: Record<string, { label: string; variant: "default" | "secondary" | "outline"; icon: typeof CheckCircle2 }> = {
+const statusConfig: Record<string, { label: string; variant: "default" | "secondary" | "outline" | "destructive"; icon: typeof CheckCircle2 }> = {
   open: { label: "Open", variant: "default", icon: MessageSquare },
   pending: { label: "Pending", variant: "secondary", icon: Clock },
   resolved: { label: "Resolved", variant: "outline", icon: CheckCircle2 },
+  closed: { label: "Closed", variant: "outline", icon: CheckCircle2 },
 };
 
 const Support = () => {
+  const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
+  const [ticketMessages, setTicketMessages] = useState<TicketMessage[]>([]);
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
   const [priority, setPriority] = useState("");
   const [orderId, setOrderId] = useState("");
+  const [replyMessage, setReplyMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSendingReply, setIsSendingReply] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const { toast } = useToast();
+  const { user } = useAuth();
 
-  const handleSubmit = () => {
+  useEffect(() => {
+    if (user) {
+      fetchTickets();
+    }
+  }, [user]);
+
+  const fetchTickets = async () => {
+    if (!user) return;
+
+    const { data, error } = await supabase
+      .from('support_tickets')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false });
+
+    if (!error && data) {
+      setTickets(data);
+    }
+    setLoading(false);
+  };
+
+  const fetchTicketMessages = async (ticketId: string) => {
+    const { data, error } = await supabase
+      .from('ticket_messages')
+      .select('*')
+      .eq('ticket_id', ticketId)
+      .order('created_at', { ascending: true });
+
+    if (!error && data) {
+      setTicketMessages(data);
+    }
+  };
+
+  const handleTicketClick = async (ticket: Ticket) => {
+    setSelectedTicket(ticket);
+    await fetchTicketMessages(ticket.id);
+  };
+
+  const handleSubmit = async () => {
+    if (!user) {
+      toast({
+        title: "Not Authenticated",
+        description: "Please sign in to create a ticket.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (!subject.trim() || !message.trim() || !priority) {
       toast({
         title: "Missing Information",
@@ -91,23 +139,189 @@ const Support = () => {
     }
 
     setIsSubmitting(true);
-    setTimeout(() => {
-      setIsSubmitting(false);
+
+    const ticketNumber = `TKT-${Date.now().toString(36).toUpperCase()}`;
+    const fullMessage = orderId ? `Order ID: ${orderId}\n\n${message}` : message;
+
+    const { data: ticketData, error: ticketError } = await supabase
+      .from('support_tickets')
+      .insert({
+        user_id: user.id,
+        ticket_number: ticketNumber,
+        subject,
+        message: fullMessage,
+        priority,
+        status: 'open'
+      })
+      .select()
+      .single();
+
+    if (ticketError) {
       toast({
-        title: "Ticket Created",
-        description: "Your support ticket has been submitted. We'll respond within 24 hours.",
+        title: "Error",
+        description: "Failed to create ticket. Please try again.",
+        variant: "destructive",
       });
-      setSubject("");
-      setMessage("");
-      setPriority("");
-      setOrderId("");
-    }, 1500);
+      setIsSubmitting(false);
+      return;
+    }
+
+    // Add initial message to ticket_messages
+    await supabase.from('ticket_messages').insert({
+      ticket_id: ticketData.id,
+      user_id: user.id,
+      message: fullMessage,
+      is_admin: false
+    });
+
+    toast({
+      title: "Ticket Created",
+      description: `Your ticket ${ticketNumber} has been submitted. We'll respond within 24 hours.`,
+    });
+
+    setSubject("");
+    setMessage("");
+    setPriority("");
+    setOrderId("");
+    setIsSubmitting(false);
+    fetchTickets();
+  };
+
+  const handleSendReply = async () => {
+    if (!selectedTicket || !replyMessage.trim() || !user) return;
+
+    setIsSendingReply(true);
+
+    const { error } = await supabase.from('ticket_messages').insert({
+      ticket_id: selectedTicket.id,
+      user_id: user.id,
+      message: replyMessage,
+      is_admin: false
+    });
+
+    if (error) {
+      toast({
+        title: "Error",
+        description: "Failed to send message.",
+        variant: "destructive",
+      });
+    } else {
+      setReplyMessage("");
+      await fetchTicketMessages(selectedTicket.id);
+      toast({
+        title: "Message Sent",
+        description: "Your reply has been sent.",
+      });
+    }
+
+    setIsSendingReply(false);
   };
 
   const filteredFaqs = faqs.filter(faq => 
     faq.q.toLowerCase().includes(searchQuery.toLowerCase()) ||
     faq.a.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  // Ticket detail view
+  if (selectedTicket) {
+    const status = statusConfig[selectedTicket.status] || statusConfig.open;
+    const StatusIcon = status.icon;
+
+    return (
+      <DashboardLayout title="Support" subtitle="Ticket Details">
+        <div className="space-y-6 animate-fade-in">
+          <Button 
+            variant="ghost" 
+            onClick={() => setSelectedTicket(null)}
+            className="mb-4"
+          >
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to Tickets
+          </Button>
+
+          <Card className="border-border/30 bg-card/60 backdrop-blur-sm">
+            <CardHeader>
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="font-mono text-sm text-primary">{selectedTicket.ticket_number}</span>
+                    <Badge variant={status.variant} className="flex items-center gap-1 text-xs">
+                      <StatusIcon className="h-3 w-3" />
+                      {status.label}
+                    </Badge>
+                    {selectedTicket.priority === "high" && (
+                      <Badge variant="destructive" className="text-xs">High Priority</Badge>
+                    )}
+                  </div>
+                  <CardTitle className="text-lg font-display">{selectedTicket.subject}</CardTitle>
+                  <CardDescription>
+                    Created on {new Date(selectedTicket.created_at).toLocaleString()}
+                  </CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {/* Message Thread */}
+              <ScrollArea className="h-[400px] pr-4 mb-4">
+                <div className="space-y-4">
+                  {ticketMessages.map((msg) => (
+                    <div 
+                      key={msg.id}
+                      className={`p-4 rounded-lg ${
+                        msg.is_admin 
+                          ? 'bg-primary/10 border border-primary/20 ml-8' 
+                          : 'bg-secondary/20 border border-border/30 mr-8'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 mb-2">
+                        {msg.is_admin ? (
+                          <Shield className="h-4 w-4 text-primary" />
+                        ) : (
+                          <User className="h-4 w-4 text-muted-foreground" />
+                        )}
+                        <span className="text-sm font-medium">
+                          {msg.is_admin ? 'Support Team' : 'You'}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {new Date(msg.created_at).toLocaleString()}
+                        </span>
+                      </div>
+                      <p className="text-sm text-foreground whitespace-pre-wrap">{msg.message}</p>
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+
+              {/* Reply Box */}
+              {selectedTicket.status !== 'closed' && selectedTicket.status !== 'resolved' && (
+                <div className="border-t border-border/30 pt-4">
+                  <div className="flex gap-2">
+                    <Textarea
+                      placeholder="Type your reply..."
+                      value={replyMessage}
+                      onChange={(e) => setReplyMessage(e.target.value)}
+                      className="flex-1 bg-secondary/30 border-border/30 min-h-[80px]"
+                    />
+                    <Button 
+                      onClick={handleSendReply}
+                      disabled={isSendingReply || !replyMessage.trim()}
+                      className="self-end"
+                    >
+                      {isSendingReply ? (
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Send className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout title="Support" subtitle="Get help with your account">
@@ -132,51 +346,64 @@ const Support = () => {
           <TabsContent value="tickets" className="mt-6">
             <Card className="border-border/30 bg-card/60 backdrop-blur-sm">
               <CardHeader>
-                <CardTitle className="text-lg font-display">My Tickets</CardTitle>
-                <CardDescription>View and manage your support tickets</CardDescription>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-lg font-display">My Tickets</CardTitle>
+                    <CardDescription>View and manage your support tickets</CardDescription>
+                  </div>
+                  <Button variant="outline" size="icon" onClick={fetchTickets}>
+                    <RefreshCw className="h-4 w-4" />
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {tickets.map((ticket) => {
-                    const status = statusConfig[ticket.status];
-                    const StatusIcon = status.icon;
+                {loading ? (
+                  <div className="flex items-center justify-center py-12">
+                    <RefreshCw className="h-8 w-8 animate-spin text-primary" />
+                  </div>
+                ) : tickets.length === 0 ? (
+                  <div className="text-center py-8">
+                    <HelpCircle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                    <p className="text-muted-foreground">No tickets yet</p>
+                    <p className="text-sm text-muted-foreground mt-1">Create a new ticket if you need help</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {tickets.map((ticket) => {
+                      const status = statusConfig[ticket.status] || statusConfig.open;
+                      const StatusIcon = status.icon;
 
-                    return (
-                      <div 
-                        key={ticket.id}
-                        className="p-4 rounded-lg bg-secondary/10 border border-border/30 hover:border-border/50 transition-colors cursor-pointer group"
-                      >
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-2">
-                              <span className="font-mono text-sm text-primary">{ticket.id}</span>
-                              <Badge variant={status.variant} className="flex items-center gap-1 text-xs">
-                                <StatusIcon className="h-3 w-3" />
-                                {status.label}
-                              </Badge>
-                              {ticket.priority === "high" && (
-                                <Badge variant="destructive" className="text-xs">High Priority</Badge>
-                              )}
+                      return (
+                        <div 
+                          key={ticket.id}
+                          onClick={() => handleTicketClick(ticket)}
+                          className="p-4 rounded-lg bg-secondary/10 border border-border/30 hover:border-primary/30 transition-colors cursor-pointer group"
+                        >
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-2">
+                                <span className="font-mono text-sm text-primary">{ticket.ticket_number}</span>
+                                <Badge variant={status.variant} className="flex items-center gap-1 text-xs">
+                                  <StatusIcon className="h-3 w-3" />
+                                  {status.label}
+                                </Badge>
+                                {ticket.priority === "high" && (
+                                  <Badge variant="destructive" className="text-xs">High Priority</Badge>
+                                )}
+                              </div>
+                              <p className="font-medium text-foreground mb-1">{ticket.subject}</p>
+                              <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                                <span>Created: {new Date(ticket.created_at).toLocaleDateString()}</span>
+                                <span>Updated: {new Date(ticket.updated_at).toLocaleDateString()}</span>
+                              </div>
                             </div>
-                            <p className="font-medium text-foreground mb-1">{ticket.subject}</p>
-                            <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                              <span>Created: {ticket.created}</span>
-                              <span>Last reply: {ticket.lastReply}</span>
-                            </div>
+                            <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all" />
                           </div>
-                          <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all" />
                         </div>
-                      </div>
-                    );
-                  })}
-
-                  {tickets.length === 0 && (
-                    <div className="text-center py-8">
-                      <HelpCircle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                      <p className="text-muted-foreground">No tickets yet</p>
-                    </div>
-                  )}
-                </div>
+                      );
+                    })}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -243,7 +470,10 @@ const Support = () => {
                   disabled={isSubmitting}
                 >
                   {isSubmitting ? (
-                    <>Processing...</>
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                      Creating Ticket...
+                    </>
                   ) : (
                     <><Send className="h-4 w-4 mr-2" /> Submit Ticket</>
                   )}
