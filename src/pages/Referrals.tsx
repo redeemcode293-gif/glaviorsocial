@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { 
   Users,
   Gift,
@@ -15,9 +16,11 @@ import {
   Clock,
   Percent,
   Twitter,
-  Facebook
+  Facebook,
+  Loader2
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 interface ReferralStat {
   label: string;
@@ -36,19 +39,74 @@ interface ReferralEntry {
 }
 
 const Referrals = () => {
-  const [referralLink] = useState("https://glavior.social/ref/USR123ABC");
+  const [referralLink, setReferralLink] = useState("");
+  const [referralCode, setReferralCode] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [referralStats, setReferralStats] = useState<ReferralStat[]>([]);
+  const [referralHistory, setReferralHistory] = useState<ReferralEntry[]>([]);
   const { toast } = useToast();
 
-  // Empty stats - will be populated from database
-  const referralStats: ReferralStat[] = [
-    { label: "Total Referrals", value: "0", icon: Users, color: "text-primary" },
-    { label: "Active Referrals", value: "0", icon: TrendingUp, color: "text-accent" },
-    { label: "Total Earnings", value: "$0.00", icon: DollarSign, color: "text-success" },
-    { label: "Commission Rate", value: "10%", icon: Percent, color: "text-warning" },
-  ];
+  useEffect(() => {
+    fetchReferralData();
+  }, []);
 
-  // Empty referral history - will be populated from database
-  const referralHistory: ReferralEntry[] = [];
+  const fetchReferralData = async () => {
+    try {
+      setLoading(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+
+      // Fetch user profile for referral code
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('id, referral_code')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (profile?.referral_code) {
+        setReferralCode(profile.referral_code);
+        setReferralLink(`https://glavior.social/ref/${profile.referral_code}`);
+      }
+
+      // Fetch referrals made by this user
+      const { data: referrals } = await supabase
+        .from('referrals')
+        .select('*')
+        .eq('referrer_id', profile?.id || '');
+
+      const totalReferrals = referrals?.length || 0;
+      const activeReferrals = referrals?.filter(r => r.status === 'active').length || 0;
+      const totalEarnings = referrals?.reduce((sum, r) => sum + (r.total_earnings || 0), 0) || 0;
+      const commissionRate = referrals?.[0]?.commission_rate || 10;
+
+      setReferralStats([
+        { label: "Total Referrals", value: totalReferrals.toString(), icon: Users, color: "text-primary" },
+        { label: "Active Referrals", value: activeReferrals.toString(), icon: TrendingUp, color: "text-accent" },
+        { label: "Total Earnings", value: `$${totalEarnings.toFixed(2)}`, icon: DollarSign, color: "text-success" },
+        { label: "Commission Rate", value: `${commissionRate}%`, icon: Percent, color: "text-warning" },
+      ]);
+
+      // Transform referrals to history format
+      const history: ReferralEntry[] = (referrals || []).map(ref => ({
+        id: ref.id,
+        user: ref.referred_id.substring(0, 8) + '***',
+        orders: 0,
+        earnings: ref.total_earnings || 0,
+        status: ref.status || 'pending',
+        joined: new Date(ref.created_at).toLocaleDateString()
+      }));
+
+      setReferralHistory(history);
+    } catch (error) {
+      console.error('Error fetching referral data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleCopy = () => {
     navigator.clipboard.writeText(referralLink);
@@ -67,6 +125,20 @@ const Referrals = () => {
     
     window.open(shareUrls[platform], '_blank');
   };
+
+  if (loading) {
+    return (
+      <DashboardLayout title="Refer & Earn" subtitle="Invite friends and earn commissions">
+        <div className="space-y-6">
+          <Skeleton className="h-40 w-full" />
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-24" />)}
+          </div>
+          <Skeleton className="h-60 w-full" />
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout title="Refer & Earn" subtitle="Invite friends and earn commissions">
@@ -92,11 +164,11 @@ const Referrals = () => {
               <div className="w-full lg:w-auto">
                 <div className="flex flex-col sm:flex-row gap-2">
                   <Input
-                    value={referralLink}
+                    value={referralLink || "Sign in to get your referral link"}
                     readOnly
                     className="bg-secondary/30 border-border/50 font-mono text-sm min-w-[280px]"
                   />
-                  <Button onClick={handleCopy} className="shrink-0">
+                  <Button onClick={handleCopy} className="shrink-0" disabled={!referralLink}>
                     <Copy className="h-4 w-4 mr-2" />
                     Copy Link
                   </Button>
@@ -107,6 +179,7 @@ const Referrals = () => {
                     size="sm"
                     onClick={() => handleShare('twitter')}
                     className="border-border/50"
+                    disabled={!referralLink}
                   >
                     <Twitter className="h-4 w-4 mr-1" />
                     Tweet
@@ -116,6 +189,7 @@ const Referrals = () => {
                     size="sm"
                     onClick={() => handleShare('facebook')}
                     className="border-border/50"
+                    disabled={!referralLink}
                   >
                     <Facebook className="h-4 w-4 mr-1" />
                     Share
@@ -131,7 +205,7 @@ const Referrals = () => {
           {referralStats.map((stat, index) => (
             <Card 
               key={stat.label}
-              className="border-border/30 bg-card/60 backdrop-blur-sm hover:border-border/50 transition-colors"
+              className="border-border/30 bg-card/60 backdrop-blur-sm hover:border-border/50 transition-all duration-300 hover:scale-[1.02]"
               style={{ animationDelay: `${index * 100}ms` }}
             >
               <CardContent className="p-4">
@@ -156,21 +230,21 @@ const Referrals = () => {
           </CardHeader>
           <CardContent>
             <div className="grid md:grid-cols-3 gap-6">
-              <div className="text-center p-4">
+              <div className="text-center p-4 hover:bg-secondary/10 rounded-lg transition-colors">
                 <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
                   <Share2 className="h-6 w-6 text-primary" />
                 </div>
                 <h4 className="font-medium text-foreground mb-2">1. Share Your Link</h4>
                 <p className="text-sm text-muted-foreground">Share your unique referral link with friends and followers</p>
               </div>
-              <div className="text-center p-4">
+              <div className="text-center p-4 hover:bg-secondary/10 rounded-lg transition-colors">
                 <div className="w-12 h-12 rounded-full bg-accent/10 flex items-center justify-center mx-auto mb-4">
                   <Users className="h-6 w-6 text-accent" />
                 </div>
                 <h4 className="font-medium text-foreground mb-2">2. Friends Sign Up</h4>
                 <p className="text-sm text-muted-foreground">When they register using your link, they're linked to you</p>
               </div>
-              <div className="text-center p-4">
+              <div className="text-center p-4 hover:bg-secondary/10 rounded-lg transition-colors">
                 <div className="w-12 h-12 rounded-full bg-success/10 flex items-center justify-center mx-auto mb-4">
                   <DollarSign className="h-6 w-6 text-success" />
                 </div>
@@ -203,7 +277,8 @@ const Referrals = () => {
                   {referralHistory.length === 0 ? (
                     <tr>
                       <td colSpan={5} className="p-8 text-center text-muted-foreground">
-                        No referrals yet. Share your link to start earning!
+                        <Users className="h-12 w-12 mx-auto mb-3 opacity-30" />
+                        <p>No referrals yet. Share your link to start earning!</p>
                       </td>
                     </tr>
                   ) : (

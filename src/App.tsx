@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Index from "./pages/Index";
 import Services from "./pages/Services";
 import Dashboard from "./pages/Dashboard";
@@ -18,6 +18,11 @@ import ApiDocs from "./pages/ApiDocs";
 import Updates from "./pages/Updates";
 import Support from "./pages/Support";
 import Settings from "./pages/Settings";
+import Transactions from "./pages/Transactions";
+import ResellerPanel from "./pages/ResellerPanel";
+import Auth from "./pages/Auth";
+import Admin from "./pages/Admin";
+import NotFound from "./pages/NotFound";
 import AIChatbot from "./components/AIChatbot";
 
 const queryClient = new QueryClient();
@@ -29,21 +34,45 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
+          {/* Public routes */}
           <Route path="/" element={<Index />} />
           <Route path="/services" element={<Services />} />
-          <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/auth" element={<Auth />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route path="/new-order" element={<NewOrder />} />
-          <Route path="/orders" element={<Orders />} />
-          <Route path="/refills" element={<Refills />} />
-          <Route path="/add-funds" element={<AddFunds />} />
-          <Route path="/referrals" element={<Referrals />} />
-          <Route path="/api-docs" element={<ApiDocs />} />
-          <Route path="/updates" element={<Updates />} />
-          <Route path="/support" element={<Support />} />
-          <Route path="/settings" element={<Settings />} />
+          
+          {/* Dashboard routes */}
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/dashboard/orders" element={<Orders />} />
+          <Route path="/dashboard/new-order" element={<NewOrder />} />
+          <Route path="/dashboard/refills" element={<Refills />} />
+          <Route path="/dashboard/add-funds" element={<AddFunds />} />
+          <Route path="/dashboard/transactions" element={<Transactions />} />
+          <Route path="/dashboard/referrals" element={<Referrals />} />
+          <Route path="/dashboard/reseller" element={<ResellerPanel />} />
+          <Route path="/dashboard/api" element={<ApiDocs />} />
+          <Route path="/dashboard/updates" element={<Updates />} />
+          <Route path="/dashboard/support" element={<Support />} />
+          <Route path="/dashboard/settings" element={<Settings />} />
+          
+          {/* Admin routes */}
+          <Route path="/admin" element={<Admin />} />
+          <Route path="/admin/*" element={<Admin />} />
+          
+          {/* Legacy routes - redirect to dashboard */}
+          <Route path="/new-order" element={<Navigate to="/dashboard/new-order" replace />} />
+          <Route path="/orders" element={<Navigate to="/dashboard/orders" replace />} />
+          <Route path="/refills" element={<Navigate to="/dashboard/refills" replace />} />
+          <Route path="/add-funds" element={<Navigate to="/dashboard/add-funds" replace />} />
+          <Route path="/referrals" element={<Navigate to="/dashboard/referrals" replace />} />
+          <Route path="/api-docs" element={<Navigate to="/dashboard/api" replace />} />
+          <Route path="/updates" element={<Navigate to="/dashboard/updates" replace />} />
+          <Route path="/support" element={<Navigate to="/dashboard/support" replace />} />
+          <Route path="/settings" element={<Navigate to="/dashboard/settings" replace />} />
+          
+          {/* Catch-all - redirect to home instead of 404 */}
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         <AIChatbot />
       </BrowserRouter>
