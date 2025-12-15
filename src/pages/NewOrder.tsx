@@ -125,19 +125,39 @@ const NewOrder = () => {
   };
 
   const fetchRegionalMultiplier = async () => {
-    if (!profile?.country_code) return;
+    // Check for pricing_override first (admin special pricing)
+    if (profile?.pricing_override === 'provider') {
+      setPriceMultiplier(1.0); // Provider cost only
+      return;
+    }
+
+    // Default fallback multiplier for unknown countries
+    const DEFAULT_FALLBACK_MULTIPLIER = 1.40;
+
+    if (!profile?.country_code) {
+      setPriceMultiplier(DEFAULT_FALLBACK_MULTIPLIER);
+      return;
+    }
 
     const { data: regions } = await supabase
       .from('regional_pricing')
       .select('*');
 
     if (regions) {
+      let found = false;
       for (const region of regions) {
         if (region.countries?.includes(profile.country_code)) {
           setPriceMultiplier(Number(region.multiplier));
+          found = true;
           break;
         }
       }
+      // Apply default fallback if country not in any region
+      if (!found) {
+        setPriceMultiplier(DEFAULT_FALLBACK_MULTIPLIER);
+      }
+    } else {
+      setPriceMultiplier(DEFAULT_FALLBACK_MULTIPLIER);
     }
   };
 

@@ -104,63 +104,33 @@ const ALL_COUNTRIES = [
   { code: "UG", name: "Uganda", flag: "🇺🇬" },
 ];
 
-// Default region groups
+// Default region groups - Updated per requirements
 const DEFAULT_REGIONS = [
-  {
-    region_code: "GCC",
-    region_name: "GCC / Gulf Premium",
-    multiplier: 2.25,
-    countries: ["AE", "SA", "QA", "KW", "BH", "OM"]
-  },
-  {
-    region_code: "TIER1",
-    region_name: "Tier 1 (US/UK/CA/AU)",
-    multiplier: 2.0,
-    countries: ["US", "GB", "CA", "AU", "NZ"]
-  },
-  {
-    region_code: "WEST_EU",
-    region_name: "Western Europe",
-    multiplier: 1.7,
-    countries: ["DE", "FR", "IT", "ES", "NL", "BE", "AT", "CH", "SE", "NO", "DK", "FI", "IE", "PT", "GR"]
-  },
-  {
-    region_code: "MODERATE",
-    region_name: "Moderate (LATAM/East EU)",
-    multiplier: 1.4,
-    countries: ["TR", "BR", "MX", "AR", "CL", "CO", "PE", "PL", "CZ", "HU", "RO", "RU", "UA"]
-  },
-  {
-    region_code: "MENA",
-    region_name: "MENA Non-Gulf",
-    multiplier: 1.5,
-    countries: ["EG", "MA", "DZ", "TN", "JO", "LB", "IQ", "IR"]
-  },
-  {
-    region_code: "ASIA",
-    region_name: "South/Southeast Asia",
-    multiplier: 1.2,
-    countries: ["ID", "MY", "TH", "VN", "PH", "SG"]
-  },
-  {
-    region_code: "PRICE_SENS",
-    region_name: "Price-Sensitive (India/South Asia)",
-    multiplier: 1.15,
-    countries: ["IN", "PK", "BD", "LK", "NP"]
-  },
-  {
-    region_code: "EAST_ASIA",
-    region_name: "East Asia",
-    multiplier: 1.6,
-    countries: ["JP", "KR", "CN", "TW", "HK"]
-  },
-  {
-    region_code: "AFRICA",
-    region_name: "Africa",
-    multiplier: 1.15,
-    countries: ["ZA", "NG", "KE", "GH", "ET", "TZ", "UG"]
-  }
+  { region_code: "GCC_UAE", region_name: "UAE Premium", multiplier: 2.25, countries: ["AE"] },
+  { region_code: "GCC_SA", region_name: "Saudi Arabia", multiplier: 2.10, countries: ["SA"] },
+  { region_code: "GCC_QA", region_name: "Qatar", multiplier: 2.20, countries: ["QA"] },
+  { region_code: "GCC_KW", region_name: "Kuwait/Bahrain/Oman", multiplier: 2.10, countries: ["KW", "BH", "OM"] },
+  { region_code: "USA", region_name: "United States", multiplier: 1.90, countries: ["US"] },
+  { region_code: "UK", region_name: "United Kingdom", multiplier: 1.85, countries: ["GB"] },
+  { region_code: "CA", region_name: "Canada", multiplier: 1.80, countries: ["CA"] },
+  { region_code: "AU", region_name: "Australia/New Zealand", multiplier: 1.85, countries: ["AU", "NZ"] },
+  { region_code: "EU_PREMIUM", region_name: "Western Europe Premium", multiplier: 1.75, countries: ["DE", "FR", "NL", "CH", "AT", "BE"] },
+  { region_code: "EU_MID", region_name: "Western Europe Mid", multiplier: 1.65, countries: ["IT", "ES", "PT", "SE", "NO", "DK", "FI", "IE", "GR"] },
+  { region_code: "TURKEY", region_name: "Turkey", multiplier: 1.45, countries: ["TR"] },
+  { region_code: "MALAYSIA", region_name: "Malaysia/Singapore", multiplier: 1.40, countries: ["MY", "SG"] },
+  { region_code: "INDONESIA", region_name: "Indonesia", multiplier: 1.35, countries: ["ID"] },
+  { region_code: "PHILIPPINES", region_name: "Southeast Asia Mid", multiplier: 1.30, countries: ["PH", "TH", "VN"] },
+  { region_code: "BRAZIL", region_name: "Brazil", multiplier: 1.30, countries: ["BR"] },
+  { region_code: "MEXICO", region_name: "Mexico/LATAM", multiplier: 1.25, countries: ["MX", "AR", "CL", "CO", "PE"] },
+  { region_code: "SOUTH_AFRICA", region_name: "South Africa", multiplier: 1.25, countries: ["ZA"] },
+  { region_code: "AFRICA_MID", region_name: "Africa Mid-Tier", multiplier: 1.05, countries: ["NG", "EG", "KE", "GH", "MA", "TN", "DZ"] },
+  { region_code: "CIS", region_name: "CIS/Eastern Europe", multiplier: 1.35, countries: ["RU", "UA", "KZ", "BY", "GE", "AZ", "PL", "CZ", "HU", "RO"] },
+  { region_code: "EAST_ASIA", region_name: "East Asia", multiplier: 1.60, countries: ["JP", "KR", "CN", "TW", "HK"] },
+  { region_code: "SOUTH_ASIA", region_name: "India/South Asia (Base)", multiplier: 1.00, countries: ["IN", "PK", "BD", "NP", "LK"] }
 ];
+
+// Default fallback multiplier for unlisted countries
+const DEFAULT_FALLBACK_MULTIPLIER = 1.40;
 
 export function RegionalPricingTab() {
   const [regions, setRegions] = useState<Region[]>([]);
@@ -301,7 +271,7 @@ export function RegionalPricingTab() {
     <>
       <Card className="border-border/30 bg-card/60">
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <CardTitle className="text-lg font-display flex items-center gap-2">
                 <Globe className="h-5 w-5 text-primary" />
@@ -309,7 +279,7 @@ export function RegionalPricingTab() {
               </CardTitle>
               <CardDescription>Define pricing multipliers by country groups (admin-only view)</CardDescription>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <Button variant="outline" size="icon" onClick={fetchRegions}>
                 <RefreshCw className="h-4 w-4" />
               </Button>
@@ -322,6 +292,12 @@ export function RegionalPricingTab() {
                 <Plus className="h-4 w-4 mr-2" />Add Region
               </Button>
             </div>
+          </div>
+          {/* Default Fallback Info */}
+          <div className="mt-4 p-3 rounded-lg bg-warning/10 border border-warning/30">
+            <p className="text-sm text-warning-foreground">
+              <strong>Default Fallback:</strong> Countries not listed in any region will use <span className="font-mono font-bold">{DEFAULT_FALLBACK_MULTIPLIER}x</span> multiplier.
+            </p>
           </div>
         </CardHeader>
         <CardContent>

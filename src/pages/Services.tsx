@@ -61,12 +61,42 @@ const Services = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [services, setServices] = useState<ServiceDisplay[]>([]);
   const [loading, setLoading] = useState(true);
+  const [priceMultiplier, setPriceMultiplier] = useState(1.40); // Default fallback
   const navigate = useNavigate();
   const { t, formatPrice } = useLocalization();
 
   useEffect(() => {
     fetchServices();
+    fetchRegionalMultiplier();
   }, []);
+
+  const fetchRegionalMultiplier = async () => {
+    const DEFAULT_FALLBACK = 1.40;
+    try {
+      // Detect country via edge function
+      const { data: countryData } = await supabase.functions.invoke('detect-country');
+      const countryCode = countryData?.countryCode;
+      
+      if (!countryCode || countryCode === 'XX') {
+        setPriceMultiplier(DEFAULT_FALLBACK);
+        return;
+      }
+
+      // Fetch regional pricing
+      const { data: regions } = await supabase.from('regional_pricing').select('*');
+      if (regions) {
+        for (const region of regions) {
+          if (region.countries?.includes(countryCode)) {
+            setPriceMultiplier(Number(region.multiplier));
+            return;
+          }
+        }
+      }
+      setPriceMultiplier(DEFAULT_FALLBACK);
+    } catch (e) {
+      setPriceMultiplier(DEFAULT_FALLBACK);
+    }
+  };
 
   const fetchServices = async () => {
     try {
@@ -210,9 +240,9 @@ const Services = () => {
               {/* Services Grid */}
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {filteredServices.map((service) => {
-                  const pricePerK = Number(service.price) || 0;
-                  const refillDays = extractRefillDays(service.name);
-                  const tier = getServiceTier(service);
+                                const pricePerK = (Number(service.price) || 0) * priceMultiplier;
+                                const refillDays = extractRefillDays(service.name);
+                                const tier = getServiceTier(service);
                   const Icon = getPlatformIcon(service.platform);
                   const colorClass = getPlatformColor(service.platform);
                   

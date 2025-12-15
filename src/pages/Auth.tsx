@@ -51,7 +51,7 @@ const Auth = () => {
     e.preventDefault();
     setLoading(true);
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data: loginData, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
@@ -63,6 +63,28 @@ const Auth = () => {
         variant: "destructive",
       });
     } else {
+      // Check if user has country_code, if not detect it
+      if (loginData?.user?.id) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('country_code')
+          .eq('user_id', loginData.user.id)
+          .single();
+        
+        if (!profile?.country_code) {
+          try {
+            const { data } = await supabase.functions.invoke('detect-country');
+            if (data?.countryCode && data.countryCode !== 'XX') {
+              await supabase
+                .from('profiles')
+                .update({ country: data.country, country_code: data.countryCode })
+                .eq('user_id', loginData.user.id);
+            }
+          } catch (e) {
+            console.log('Country detection skipped');
+          }
+        }
+      }
       toast({
         title: "Welcome back!",
         description: "Successfully logged in",
@@ -72,13 +94,30 @@ const Auth = () => {
     setLoading(false);
   };
 
+  const detectAndStoreCountry = async (userId: string) => {
+    try {
+      const { data } = await supabase.functions.invoke('detect-country');
+      if (data?.countryCode && data.countryCode !== 'XX') {
+        await supabase
+          .from('profiles')
+          .update({ 
+            country: data.country, 
+            country_code: data.countryCode 
+          })
+          .eq('user_id', userId);
+      }
+    } catch (e) {
+      console.log('Country detection failed, will retry on dashboard');
+    }
+  };
+
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
     const redirectUrl = `${window.location.origin}/`;
 
-    const { error } = await supabase.auth.signUp({
+    const { data: signupData, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -96,6 +135,10 @@ const Auth = () => {
         variant: "destructive",
       });
     } else {
+      // Detect country silently after signup
+      if (signupData?.user?.id) {
+        detectAndStoreCountry(signupData.user.id);
+      }
       toast({
         title: "Account Created!",
         description: "Please check your email to verify your account",
