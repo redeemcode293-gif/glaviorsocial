@@ -17,8 +17,9 @@ import {
   TrendingUp
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { PlatformBadge, PLATFORMS, getPlatformIcon, getPlatformColor } from "@/components/ui/platform-icons";
+import { PLATFORMS, getPlatformIcon, getPlatformColor } from "@/components/ui/platform-icons";
 import { useLocalization } from "@/contexts/LocalizationContext";
+import { useRegionalPricing } from "@/hooks/useRegionalPricing";
 
 interface ServiceDisplay {
   id: string;
@@ -51,52 +52,20 @@ const getServiceTier = (service: ServiceDisplay): 'budget' | 'standard' | 'premi
 
 const tierOrder = { budget: 0, standard: 1, premium: 2, monetization: 3 };
 
-// Generate random 3-digit service ID
-const generateServiceId = (): number => {
-  return Math.floor(Math.random() * 900) + 100; // 100-999
-};
-
 const Services = () => {
   const [selectedPlatform, setSelectedPlatform] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [services, setServices] = useState<ServiceDisplay[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [priceMultiplier, setPriceMultiplier] = useState(1.40); // Default fallback
+  const [loadingServices, setLoadingServices] = useState(true);
   const navigate = useNavigate();
   const { t, formatPrice } = useLocalization();
+  
+  // Use shared regional pricing hook - this handles loading state properly
+  const { multiplier: priceMultiplier, loading: loadingPricing } = useRegionalPricing();
 
   useEffect(() => {
     fetchServices();
-    fetchRegionalMultiplier();
   }, []);
-
-  const fetchRegionalMultiplier = async () => {
-    const DEFAULT_FALLBACK = 1.40;
-    try {
-      // Detect country via edge function
-      const { data: countryData } = await supabase.functions.invoke('detect-country');
-      const countryCode = countryData?.countryCode;
-      
-      if (!countryCode || countryCode === 'XX') {
-        setPriceMultiplier(DEFAULT_FALLBACK);
-        return;
-      }
-
-      // Fetch regional pricing
-      const { data: regions } = await supabase.from('regional_pricing').select('*');
-      if (regions) {
-        for (const region of regions) {
-          if (region.countries?.includes(countryCode)) {
-            setPriceMultiplier(Number(region.multiplier));
-            return;
-          }
-        }
-      }
-      setPriceMultiplier(DEFAULT_FALLBACK);
-    } catch (e) {
-      setPriceMultiplier(DEFAULT_FALLBACK);
-    }
-  };
 
   const fetchServices = async () => {
     try {
@@ -108,12 +77,8 @@ const Services = () => {
         .order('price', { ascending: true });
 
       if (!panelError && panelData && panelData.length > 0) {
-        // Generate random 3-digit service IDs for display
-        setServices(panelData.map(s => ({
-          ...s,
-          service_id: generateServiceId()
-        })));
-        setLoading(false);
+        setServices(panelData);
+        setLoadingServices(false);
         return;
       }
 
@@ -129,7 +94,7 @@ const Services = () => {
       if (servicesData) {
         setServices(servicesData.map(s => ({
           id: s.id,
-          service_id: generateServiceId(), // Random 3-digit ID
+          service_id: s.service_id, // Use actual service_id from database
           name: s.name,
           description: s.description,
           platform: s.platform,
@@ -144,7 +109,7 @@ const Services = () => {
     } catch (error) {
       console.error('Error fetching services:', error);
     } finally {
-      setLoading(false);
+      setLoadingServices(false);
     }
   };
 
@@ -172,6 +137,9 @@ const Services = () => {
   const displayPlatforms = PLATFORMS.filter(p => 
     p.id === "all" || availablePlatforms.includes(p.id)
   );
+
+  // Show loading state until both services AND pricing are loaded
+  const isLoading = loadingServices || loadingPricing;
 
   return (
     <div className="min-h-screen bg-background">
@@ -229,8 +197,8 @@ const Services = () => {
             </div>
           </div>
 
-          {/* Loading State */}
-          {loading ? (
+          {/* Loading State - wait for both services AND pricing */}
+          {isLoading ? (
             <div className="flex items-center justify-center py-20">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
               <span className="ml-3 text-muted-foreground">{t("Loading services...")}</span>
@@ -240,9 +208,9 @@ const Services = () => {
               {/* Services Grid */}
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {filteredServices.map((service) => {
-                                const pricePerK = (Number(service.price) || 0) * priceMultiplier;
-                                const refillDays = extractRefillDays(service.name);
-                                const tier = getServiceTier(service);
+                  const pricePerK = (Number(service.price) || 0) * priceMultiplier;
+                  const refillDays = extractRefillDays(service.name);
+                  const tier = getServiceTier(service);
                   const Icon = getPlatformIcon(service.platform);
                   const colorClass = getPlatformColor(service.platform);
                   
@@ -335,7 +303,7 @@ const Services = () => {
                 })}
               </div>
 
-              {filteredServices.length === 0 && !loading && (
+              {filteredServices.length === 0 && !isLoading && (
                 <div className="text-center py-12">
                   <Globe className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                   <p className="text-muted-foreground">
