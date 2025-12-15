@@ -19,11 +19,13 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { useLocalization } from "@/contexts/LocalizationContext";
+import { supabase } from "@/integrations/supabase/client";
 
 const ApiDocs = () => {
-  const [apiKey, setApiKey] = useState("");
+  const [apiKey, setApiKey] = useState<string | null>(null);
   const [showKey, setShowKey] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
   const { user, loading: authLoading } = useAuth();
   const { t } = useLocalization();
@@ -146,11 +148,53 @@ const ApiDocs = () => {
     }
   ];
 
+  // Fetch the real API key from database
   useEffect(() => {
-    if (user) {
-      const keyHash = btoa(user.id).substring(0, 32);
-      setApiKey(`sk_live_${keyHash}`);
-    }
+    const fetchApiKey = async () => {
+      if (!user) {
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        // First try to get existing active key
+        const { data: existingKey, error: fetchError } = await supabase
+          .from('api_keys')
+          .select('api_key, is_active')
+          .eq('user_id', user.id)
+          .eq('is_active', true)
+          .maybeSingle();
+
+        if (fetchError) {
+          console.error('Error fetching API key:', fetchError);
+          setIsLoading(false);
+          return;
+        }
+
+        if (existingKey) {
+          setApiKey(existingKey.api_key);
+        } else {
+          // No active key exists, create one
+          const { data: newKey, error: createError } = await supabase
+            .from('api_keys')
+            .insert({ user_id: user.id })
+            .select('api_key')
+            .single();
+
+          if (createError) {
+            console.error('Error creating API key:', createError);
+          } else if (newKey) {
+            setApiKey(newKey.api_key);
+          }
+        }
+      } catch (err) {
+        console.error('Error in API key fetch:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchApiKey();
   }, [user]);
 
   const handleCopyKey = () => {
@@ -180,15 +224,42 @@ const ApiDocs = () => {
     }
     
     setIsRegenerating(true);
-    setTimeout(() => {
-      setIsRegenerating(false);
-      const newKeyHash = btoa(user.id + Date.now()).substring(0, 32);
-      setApiKey(`sk_live_${newKeyHash}`);
+    
+    try {
+      // Deactivate existing keys
+      await supabase
+        .from('api_keys')
+        .update({ is_active: false })
+        .eq('user_id', user.id);
+
+      // Create new key (database generates it securely via gen_random_bytes)
+      const { data: newKey, error } = await supabase
+        .from('api_keys')
+        .insert({ user_id: user.id })
+        .select('api_key')
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      if (newKey) {
+        setApiKey(newKey.api_key);
+        toast({
+          title: t("API Key Regenerated"),
+          description: t("Your new API key is ready to use."),
+        });
+      }
+    } catch (err) {
+      console.error('Error regenerating API key:', err);
       toast({
-        title: t("API Key Regenerated"),
-        description: t("Your new API key is ready to use."),
+        title: t("Error"),
+        description: t("Failed to regenerate API key. Please try again."),
+        variant: "destructive"
       });
-    }, 1500);
+    } finally {
+      setIsRegenerating(false);
+    }
   };
 
   const handleCopyCode = (code: string, language: string) => {
@@ -254,7 +325,7 @@ echo $response;`;
 const data = await response.json();
 console.log(data);`;
 
-  if (authLoading) {
+  if (authLoading || isLoading) {
     return (
       <DashboardLayout title={t("API Documentation")} subtitle={t("Integrate with our powerful API")}>
         <div className="space-y-6">
@@ -282,7 +353,7 @@ console.log(data);`;
             <div className="flex flex-col sm:flex-row gap-3">
               <div className="relative flex-1">
                 <Input
-                  value={apiKey ? (showKey ? apiKey : "•".repeat(apiKey.length)) : t("Loading your API key...")}
+                  value={apiKey ? (showKey ? apiKey : "•".repeat(Math.min(apiKey.length, 40))) : t("Loading your API key...")}
                   readOnly
                   className="font-mono text-xs md:text-sm bg-secondary/30 border-border/30 pr-20"
                 />
@@ -310,7 +381,7 @@ console.log(data);`;
               <Button 
                 variant="outline" 
                 onClick={handleRegenerate}
-                disabled={isRegenerating || !apiKey}
+                disabled={isRegenerating || !user}
                 className="border-border/50 w-full sm:w-auto"
               >
                 {isRegenerating ? (
@@ -459,9 +530,9 @@ console.log(data);`;
                     { code: "order_not_found", message: t("Order not found"), desc: t("Check order ID") },
                     { code: "refill_not_available", message: t("Refill not available"), desc: t("Service doesn't support refills") }
                   ].map((error, i) => (
-                    <tr key={i} className="border-b border-border/20">
-                      <td className="p-2 md:p-3"><code className="text-destructive font-mono text-xs">{error.code}</code></td>
-                      <td className="p-2 md:p-3 text-foreground">{error.message}</td>
+                    <tr key={i} className="border-b border-border/20 hover:bg-secondary/5">
+                      <td className="p-2 md:p-3 font-mono text-destructive">{error.code}</td>
+                      <td className="p-2 md:p-3">{error.message}</td>
                       <td className="p-2 md:p-3 text-muted-foreground hidden sm:table-cell">{error.desc}</td>
                     </tr>
                   ))}
