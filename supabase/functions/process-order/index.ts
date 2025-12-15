@@ -20,10 +20,42 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    // Authentication: Verify the user's JWT token
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      console.error('No authorization header provided');
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    
+    if (authError || !user) {
+      console.error('Invalid token:', authError);
+      return new Response(JSON.stringify({ error: 'Invalid authentication token' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    console.log(`Authenticated user: ${user.id}`);
+
     const { orderId }: OrderProcessRequest = await req.json();
 
     if (!orderId) {
       return new Response(JSON.stringify({ error: 'Order ID required' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Validate orderId format (UUID)
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(orderId)) {
+      return new Response(JSON.stringify({ error: 'Invalid order ID format' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
@@ -41,7 +73,8 @@ serve(async (req) => {
           name,
           provider_id,
           provider_service_id,
-          provider_price
+          provider_price,
+          is_active
         )
       `)
       .eq('id', orderId)
@@ -55,8 +88,59 @@ serve(async (req) => {
       });
     }
 
+    // Authorization: Verify user owns this order or is admin
+    if (order.user_id !== user.id) {
+      // Check if user is admin
+      const { data: roleData } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.id)
+        .eq('role', 'admin')
+        .maybeSingle();
+      
+      if (!roleData) {
+        console.error(`User ${user.id} attempted to process order ${orderId} owned by ${order.user_id}`);
+        return new Response(JSON.stringify({ error: 'Unauthorized to process this order' }), {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+      console.log(`Admin user ${user.id} processing order for user ${order.user_id}`);
+    }
+
+    // Validate order status - only process pending orders
+    if (order.status !== 'pending') {
+      console.log(`Order ${orderId} has status ${order.status}, cannot process`);
+      return new Response(JSON.stringify({ 
+        error: 'Order cannot be processed',
+        reason: order.status === 'processing' ? 'Order is already being processed' :
+                order.status === 'completed' ? 'Order has already been completed' :
+                order.status === 'cancelled' ? 'Order has been cancelled' :
+                order.status === 'failed' ? 'Order has failed - please create a new order' :
+                `Order status is ${order.status}`
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
     const service = order.services;
-    if (!service?.provider_id || !service?.provider_service_id) {
+    
+    // Validate service is active
+    if (!service || !service.is_active) {
+      console.error('Service is not active or not found');
+      await supabase
+        .from('orders')
+        .update({ status: 'failed' })
+        .eq('id', orderId);
+        
+      return new Response(JSON.stringify({ error: 'Service is not available' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    if (!service.provider_id || !service.provider_service_id) {
       // No provider assigned - mark as manual
       await supabase
         .from('orders')
