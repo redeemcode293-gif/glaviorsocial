@@ -18,13 +18,15 @@ import {
   Clock,
   FileText,
   Search,
-  Wallet
+  Wallet,
+  Loader2
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { useLocalization } from "@/contexts/LocalizationContext";
+import { useRegionalPricing } from "@/hooks/useRegionalPricing";
 
 interface ServiceDisplay {
   id: string;
@@ -67,17 +69,18 @@ const NewOrder = () => {
   const [autoRefill, setAutoRefill] = useState(false);
   const [massOrderText, setMassOrderText] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [priceMultiplier, setPriceMultiplier] = useState(1);
   const [loadingServices, setLoadingServices] = useState(true);
   const { toast } = useToast();
   const { user, profile, wallet, refreshProfile } = useAuth();
   const navigate = useNavigate();
   const { t, formatPrice } = useLocalization();
+  
+  // Use shared regional pricing hook
+  const { multiplier: priceMultiplier, loading: loadingPricing, countryCode } = useRegionalPricing();
 
   useEffect(() => {
     fetchServices();
-    fetchRegionalMultiplier();
-  }, [profile]);
+  }, []);
 
   const fetchServices = async () => {
     setLoadingServices(true);
@@ -124,42 +127,8 @@ const NewOrder = () => {
     setLoadingServices(false);
   };
 
-  const fetchRegionalMultiplier = async () => {
-    // Check for pricing_override first (admin special pricing)
-    if (profile?.pricing_override === 'provider') {
-      setPriceMultiplier(1.0); // Provider cost only
-      return;
-    }
-
-    // Default fallback multiplier for unknown countries
-    const DEFAULT_FALLBACK_MULTIPLIER = 1.40;
-
-    if (!profile?.country_code) {
-      setPriceMultiplier(DEFAULT_FALLBACK_MULTIPLIER);
-      return;
-    }
-
-    const { data: regions } = await supabase
-      .from('regional_pricing')
-      .select('*');
-
-    if (regions) {
-      let found = false;
-      for (const region of regions) {
-        if (region.countries?.includes(profile.country_code)) {
-          setPriceMultiplier(Number(region.multiplier));
-          found = true;
-          break;
-        }
-      }
-      // Apply default fallback if country not in any region
-      if (!found) {
-        setPriceMultiplier(DEFAULT_FALLBACK_MULTIPLIER);
-      }
-    } else {
-      setPriceMultiplier(DEFAULT_FALLBACK_MULTIPLIER);
-    }
-  };
+  // Show loading state until both services AND pricing are loaded
+  const isLoading = loadingServices || loadingPricing;
 
   // Filter services by category and search
   const filteredServices = services.filter(s => {
@@ -249,7 +218,7 @@ const NewOrder = () => {
           dripfeed_interval: dripFeed ? parseInt(dripFeedInterval) || 60 : null,
           auto_refill: autoRefill,
           applied_multiplier: priceMultiplier,
-          user_country_code: profile?.country_code || null
+          user_country_code: countryCode || profile?.country_code || null
         })
         .select()
         .single();
@@ -341,7 +310,7 @@ const NewOrder = () => {
                 status: 'pending',
                 order_number: `ORD-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
                 applied_multiplier: priceMultiplier,
-                user_country_code: profile?.country_code || null
+                user_country_code: countryCode || profile?.country_code || null
               });
             successCount++;
           } catch {
@@ -417,7 +386,7 @@ const NewOrder = () => {
                   <Label>{t("Service")}</Label>
                   <Select value={selectedService} onValueChange={setSelectedService}>
                     <SelectTrigger className="bg-secondary/30 border-border/30">
-                      <SelectValue placeholder={loadingServices ? t("Loading services...") : t("Select a service")} />
+                      <SelectValue placeholder={isLoading ? t("Loading...") : t("Select a service")} />
                     </SelectTrigger>
                     <SelectContent className="max-h-[300px]">
                       {filteredServices.map((service) => (
