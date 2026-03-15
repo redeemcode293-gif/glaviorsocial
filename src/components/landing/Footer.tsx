@@ -44,8 +44,7 @@ export const Footer = () => {
                 <span className="font-display text-xs font-bold text-primary-foreground">GS</span>
               </div>
               <div className="flex flex-col leading-none">
-                <span className="font-display text-base font-bold tracking-wider text-foreground">GLAVIOR</span>
-                <span className="text-[8px] font-semibold text-primary tracking-[0.2em]">SOCIAL</span>
+                <span className="font-display text-base font-bold tracking-wider text-foreground">SMM DADDY</span>
               </div>
             </Link>
             <p className="text-sm text-muted-foreground mb-4 max-w-xs">
@@ -120,7 +119,7 @@ export const Footer = () => {
         {/* Bottom Bar */}
         <div className="mt-12 pt-6 border-t border-border/30 flex flex-col sm:flex-row items-center justify-between gap-4">
           <p className="text-xs text-muted-foreground">
-            © {new Date().getFullYear()} Glavior Social. {t("All rights reserved.")}
+            © {new Date().getFullYear()} SMM Daddy. {t("All rights reserved.")}
           </p>
           <div className="flex items-center gap-2">
             <span className="h-2 w-2 rounded-full bg-success animate-pulse" />

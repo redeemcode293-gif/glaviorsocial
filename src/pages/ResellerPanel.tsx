@@ -512,7 +512,7 @@ const ResellerPanel = () => {
               <CardHeader>
                 <CardTitle className="text-base md:text-lg font-display">{t("Available Services")}</CardTitle>
                 <CardDescription>
-                  {t("All services from Glavior Social are automatically available on your panel")}
+                  {t("All services from SMM Daddy are automatically available on your panel")}
                 </CardDescription>
               </CardHeader>
               <CardContent>

@@ -123,7 +123,7 @@ const Referrals = () => {
   };
 
   const handleShare = (platform: string) => {
-    const shareText = t(`Join me on Glavior Social and get premium SMM services! Use my referral link: ${referralLink}`);
+    const shareText = t(`Join me on SMM Daddy and get premium SMM services! Use my referral link: ${referralLink}`);
     const shareUrls: Record<string, string> = {
       twitter: `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}`,
       facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(referralLink)}`,
