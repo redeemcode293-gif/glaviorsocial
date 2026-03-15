@@ -129,7 +129,12 @@ export const DashboardLayout = ({ children, title, subtitle }: DashboardLayoutPr
         {/* Logo */}
         <div className="p-4 border-b border-border/30">
           <Link to="/" className="flex items-center gap-2">
-            <img src="/logo.png" alt="SMM Daddy" className="h-9 w-auto" />
+            <div className="h-8 w-8 rounded-md bg-gradient-to-br from-primary to-accent flex items-center justify-center">
+              <span className="font-display text-xs font-bold text-primary-foreground">GS</span>
+            </div>
+            <div className="flex flex-col leading-none">
+              <span className="font-display text-base font-bold tracking-wider text-foreground">SMM DADDY</span>
+            </div>
           </Link>
         </div>
 

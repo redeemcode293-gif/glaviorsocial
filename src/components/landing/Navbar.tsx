@@ -27,7 +27,14 @@ export const Navbar = () => {
         <div className="flex h-16 items-center justify-between">
           {/* Logo */}
           <Link to="/" className="flex items-center gap-2">
-            <img src="/logo.png" alt="SMM Daddy" className="h-10 w-auto" />
+            <div className="relative">
+              <div className="h-9 w-9 rounded-md bg-gradient-to-br from-primary to-accent flex items-center justify-center">
+                <span className="font-display text-sm font-bold text-primary-foreground">SD</span>
+              </div>
+            </div>
+            <div className="flex flex-col leading-none">
+              <span className="font-display text-lg font-bold tracking-wider text-foreground">SMM DADDY</span>
+            </div>
           </Link>
 
           {/* Desktop Navigation */}
