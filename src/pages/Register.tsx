@@ -38,7 +38,7 @@ const Register = () => {
       setIsLoading(false);
       toast({
         title: "Account created!",
-        description: "Welcome to Glavior Social.",
+        description: "Welcome to SMM Daddy.",
       });
       navigate("/dashboard");
     }, 1000);
