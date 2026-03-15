@@ -119,7 +119,7 @@ export const Footer = () => {
         {/* Bottom Bar */}
         <div className="mt-12 pt-6 border-t border-border/30 flex flex-col sm:flex-row items-center justify-between gap-4">
           <p className="text-xs text-muted-foreground">
-            © {new Date().getFullYear()} Glavior Social. {t("All rights reserved.")}
+            © {new Date().getFullYear()} SMM Daddy. {t("All rights reserved.")}
           </p>
           <div className="flex items-center gap-2">
             <span className="h-2 w-2 rounded-full bg-success animate-pulse" />

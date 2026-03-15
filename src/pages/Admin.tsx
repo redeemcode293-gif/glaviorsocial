@@ -496,7 +496,7 @@ const Admin = () => {
             </div>
             <div>
               <h1 className="font-display text-xl font-bold text-foreground">Admin Panel</h1>
-              <p className="text-xs text-muted-foreground">Glavior Social Management</p>
+              <p className="text-xs text-muted-foreground">SMM Daddy Management</p>
             </div>
           </div>
           <div className="flex items-center gap-4">

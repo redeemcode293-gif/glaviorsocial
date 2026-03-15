@@ -24,7 +24,7 @@ export const CTASection = () => {
           </h2>
           
           <p className="text-lg text-muted-foreground mb-10 max-w-2xl mx-auto">
-            Join 50,000+ creators, agencies, and brands using Glavior Social to scale their 
+            Join 50,000+ creators, agencies, and brands using SMM Daddy to scale their 
             social presence across the globe.
           </p>
           

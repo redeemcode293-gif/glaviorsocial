@@ -59,8 +59,7 @@ const Register = () => {
             <span className="font-display text-sm font-bold text-primary-foreground">GS</span>
           </div>
           <div className="flex flex-col leading-none">
-            <span className="font-display text-xl font-bold tracking-wider text-foreground">GLAVIOR</span>
-            <span className="text-[9px] font-semibold text-primary tracking-[0.2em]">SOCIAL</span>
+            <span className="font-display text-xl font-bold tracking-wider text-foreground">SMM DADDY</span>
           </div>
         </Link>
 
