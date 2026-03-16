@@ -1003,7 +1003,7 @@ const Admin = () => {
                     <CardTitle className="text-lg font-display">Order Management</CardTitle>
                     <CardDescription>View orders with applied multipliers and user country</CardDescription>
                   </div>
-                  <Button variant="outline" size="icon" onClick={fetchAdminData}>
+                  <Button variant="outline" size="icon" onClick={() => fetchAdminData()}>
                     <RefreshCw className="h-4 w-4" />
                   </Button>
                 </div>
