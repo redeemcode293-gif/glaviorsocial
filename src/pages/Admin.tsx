@@ -38,6 +38,7 @@ import { UserDetailsDialog } from "@/components/admin/UserDetailsDialog";
 import { ServiceMappingTab } from "@/components/admin/ServiceMappingTab";
 import { ServiceManagementTab } from "@/components/admin/ServiceManagementTab";
 import { RegionalPricingTab } from "@/components/admin/RegionalPricingTab";
+import { BulkServiceImport } from "@/components/admin/BulkServiceImport";
 
 const Admin = () => {
   const [loading, setLoading] = useState(true);
