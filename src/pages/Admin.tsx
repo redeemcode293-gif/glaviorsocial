@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Switch } from "@/components/ui/switch";
 import { 
   Users,
   Package,
@@ -19,7 +20,6 @@ import {
   RefreshCw,
   Search,
   Plus,
-  Edit,
   Trash2,
   Eye,
   Ban,
@@ -31,7 +31,9 @@ import {
   Shield,
   MoreVertical,
   Link2,
-  Download
+  Download,
+  Crown,
+  EyeOff
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -44,6 +46,7 @@ import { BulkServiceImport } from "@/components/admin/BulkServiceImport";
 const Admin = () => {
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isOwner, setIsOwner] = useState(false);
   const [stats, setStats] = useState({
     totalUsers: 0,
     totalOrders: 0,
@@ -94,14 +97,31 @@ const Admin = () => {
       return;
     }
 
-    const { data: roles } = await supabase
+    // Check for owner role first
+    const { data: ownerRole } = await supabase
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', user.id)
+      .eq('role', 'owner')
+      .maybeSingle();
+
+    if (ownerRole) {
+      setIsOwner(true);
+      setIsAdmin(true);
+      await fetchAdminData(true);
+      setLoading(false);
+      return;
+    }
+
+    // Check for admin role
+    const { data: adminRole } = await supabase
       .from('user_roles')
       .select('role')
       .eq('user_id', user.id)
       .eq('role', 'admin')
       .maybeSingle();
 
-    if (!roles) {
+    if (!adminRole) {
       toast({
         title: "Access Denied",
         description: "You don't have admin privileges",
@@ -112,7 +132,7 @@ const Admin = () => {
     }
 
     setIsAdmin(true);
-    await fetchAdminData();
+    await fetchAdminData(false);
     setLoading(false);
   };
 
