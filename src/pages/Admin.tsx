@@ -1201,7 +1201,7 @@ const Admin = () => {
           wallet={selectedUser ? wallets[selectedUser.user_id] : null}
           open={showUserDetails}
           onOpenChange={setShowUserDetails}
-          onRefresh={fetchAdminData}
+          onRefresh={() => fetchAdminData()}
         />
       </div>
     </div>
