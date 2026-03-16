@@ -30,7 +30,8 @@ import {
   Activity,
   Shield,
   MoreVertical,
-  Link2
+  Link2,
+  Download
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
