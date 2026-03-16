@@ -397,12 +397,12 @@ const ResellerPanel = () => {
                   <div className="p-3 md:p-4 rounded-lg bg-secondary/20">
                     <p className="text-xs md:text-sm text-muted-foreground mb-1">{t("Panel URL")}</p>
                     <div className="flex items-center gap-2">
-                      <p className="font-mono text-xs md:text-sm text-primary truncate">{panelData?.subdomain}.glavior.social</p>
+                      <p className="font-mono text-xs md:text-sm text-primary truncate">{panelData?.subdomain}.smmdaddy.com</p>
                       <Button 
                         variant="ghost" 
                         size="icon" 
                         className="h-6 w-6 flex-shrink-0"
-                        onClick={() => copyToClipboard(`https://${panelData?.subdomain}.glavior.social`)}
+                        onClick={() => copyToClipboard(`https://${panelData?.subdomain}.smmdaddy.com`)}
                       >
                         <Copy className="h-3 w-3" />
                       </Button>
