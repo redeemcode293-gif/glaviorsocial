@@ -544,7 +544,14 @@ const Admin = () => {
               <Globe className="h-4 w-4 mr-2" />
               User Dashboard
             </Button>
-            <Badge variant="destructive">Admin Mode</Badge>
+            {isOwner ? (
+              <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30">
+                <Crown className="h-3 w-3 mr-1" />
+                Owner
+              </Badge>
+            ) : (
+              <Badge variant="destructive">Admin Mode</Badge>
+            )}
           </div>
         </div>
       </header>
