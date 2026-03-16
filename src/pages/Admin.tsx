@@ -136,16 +136,23 @@ const Admin = () => {
     setLoading(false);
   };
 
-  const fetchAdminData = async () => {
+  const fetchAdminData = async (ownerMode?: boolean) => {
+    const effectiveOwner = ownerMode ?? isOwner;
     // Fetch stats
     const { count: usersCount } = await supabase.from('profiles').select('*', { count: 'exact', head: true });
     const { count: ordersCount } = await supabase.from('orders').select('*', { count: 'exact', head: true });
     const { count: servicesCount } = await supabase.from('services').select('*', { count: 'exact', head: true }).eq('is_active', true);
-    const { count: pendingDepositsCount } = await supabase.from('transactions').select('*', { count: 'exact', head: true }).eq('type', 'deposit').eq('status', 'pending');
     const { count: openTicketsCount } = await supabase.from('support_tickets').select('*', { count: 'exact', head: true }).eq('status', 'open');
     
     const { data: revenueData } = await supabase.from('orders').select('price').eq('status', 'completed');
     const totalRevenue = revenueData?.reduce((sum, order) => sum + Number(order.price), 0) || 0;
+
+    // Pending deposits count: owner sees all pending, admin only sees admin_visible pending
+    let pendingQuery = supabase.from('transactions').select('*', { count: 'exact', head: true }).eq('type', 'deposit').eq('status', 'pending');
+    if (!effectiveOwner) {
+      pendingQuery = pendingQuery.eq('admin_visible', true) as any;
+    }
+    const { count: pendingDepositsCount } = await pendingQuery;
 
     setStats({
       totalUsers: usersCount || 0,
@@ -209,13 +216,10 @@ const Admin = () => {
       .limit(100);
     setOrders(ordersData || []);
 
-    // Fetch pending deposits
-    const { data: depositsData } = await supabase
-      .from('transactions')
-      .select('*')
-      .eq('type', 'deposit')
-      .order('created_at', { ascending: false })
-      .limit(50);
+    // Fetch deposits — owner sees all, admin only sees admin_visible ones
+    let depositsQuery = supabase.from('transactions').select('*').eq('type', 'deposit').order('created_at', { ascending: false }).limit(50);
+    // RLS already filters for admin; for owner we get everything
+    const { data: depositsData } = await depositsQuery;
     setDeposits(depositsData || []);
 
     // Fetch open tickets
@@ -232,6 +236,20 @@ const Admin = () => {
       .select('*')
       .order('multiplier', { ascending: true });
     setRegionalPricing(pricingData || []);
+  };
+
+  // Owner-only: toggle admin_visible on a transaction
+  const toggleAdminVisible = async (depositId: string, currentValue: boolean) => {
+    const { error } = await supabase
+      .from('transactions')
+      .update({ admin_visible: !currentValue })
+      .eq('id', depositId);
+    if (error) {
+      toast({ title: "Failed to update visibility", variant: "destructive" });
+    } else {
+      toast({ title: !currentValue ? "Released to Admin" : "Hidden from Admin" });
+      fetchAdminData();
+    }
   };
 
   const adjustUserBalance = async () => {
