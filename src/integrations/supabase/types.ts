@@ -610,6 +610,7 @@ export type Database = {
       }
       transactions: {
         Row: {
+          admin_visible: boolean
           amount: number
           created_at: string
           description: string | null
@@ -623,6 +624,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          admin_visible?: boolean
           amount: number
           created_at?: string
           description?: string | null
@@ -636,6 +638,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          admin_visible?: boolean
           amount?: number
           created_at?: string
           description?: string | null
