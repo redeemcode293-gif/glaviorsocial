@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Switch } from "@/components/ui/switch";
 import { 
   Users,
   Package,
@@ -19,7 +20,6 @@ import {
   RefreshCw,
   Search,
   Plus,
-  Edit,
   Trash2,
   Eye,
   Ban,
@@ -31,7 +31,9 @@ import {
   Shield,
   MoreVertical,
   Link2,
-  Download
+  Download,
+  Crown,
+  EyeOff
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -44,6 +46,7 @@ import { BulkServiceImport } from "@/components/admin/BulkServiceImport";
 const Admin = () => {
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isOwner, setIsOwner] = useState(false);
   const [stats, setStats] = useState({
     totalUsers: 0,
     totalOrders: 0,
@@ -94,14 +97,31 @@ const Admin = () => {
       return;
     }
 
-    const { data: roles } = await supabase
+    // Check for owner role first
+    const { data: ownerRole } = await supabase
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', user.id)
+      .eq('role', 'owner')
+      .maybeSingle();
+
+    if (ownerRole) {
+      setIsOwner(true);
+      setIsAdmin(true);
+      await fetchAdminData(true);
+      setLoading(false);
+      return;
+    }
+
+    // Check for admin role
+    const { data: adminRole } = await supabase
       .from('user_roles')
       .select('role')
       .eq('user_id', user.id)
       .eq('role', 'admin')
       .maybeSingle();
 
-    if (!roles) {
+    if (!adminRole) {
       toast({
         title: "Access Denied",
         description: "You don't have admin privileges",
@@ -112,20 +132,27 @@ const Admin = () => {
     }
 
     setIsAdmin(true);
-    await fetchAdminData();
+    await fetchAdminData(false);
     setLoading(false);
   };
 
-  const fetchAdminData = async () => {
+  const fetchAdminData = async (ownerMode?: boolean) => {
+    const effectiveOwner = ownerMode ?? isOwner;
     // Fetch stats
     const { count: usersCount } = await supabase.from('profiles').select('*', { count: 'exact', head: true });
     const { count: ordersCount } = await supabase.from('orders').select('*', { count: 'exact', head: true });
     const { count: servicesCount } = await supabase.from('services').select('*', { count: 'exact', head: true }).eq('is_active', true);
-    const { count: pendingDepositsCount } = await supabase.from('transactions').select('*', { count: 'exact', head: true }).eq('type', 'deposit').eq('status', 'pending');
     const { count: openTicketsCount } = await supabase.from('support_tickets').select('*', { count: 'exact', head: true }).eq('status', 'open');
     
     const { data: revenueData } = await supabase.from('orders').select('price').eq('status', 'completed');
     const totalRevenue = revenueData?.reduce((sum, order) => sum + Number(order.price), 0) || 0;
+
+    // Pending deposits count: owner sees all pending, admin only sees admin_visible pending
+    let pendingQuery = supabase.from('transactions').select('*', { count: 'exact', head: true }).eq('type', 'deposit').eq('status', 'pending');
+    if (!effectiveOwner) {
+      pendingQuery = pendingQuery.eq('admin_visible', true) as any;
+    }
+    const { count: pendingDepositsCount } = await pendingQuery;
 
     setStats({
       totalUsers: usersCount || 0,
@@ -189,13 +216,10 @@ const Admin = () => {
       .limit(100);
     setOrders(ordersData || []);
 
-    // Fetch pending deposits
-    const { data: depositsData } = await supabase
-      .from('transactions')
-      .select('*')
-      .eq('type', 'deposit')
-      .order('created_at', { ascending: false })
-      .limit(50);
+    // Fetch deposits — owner sees all, admin only sees admin_visible ones
+    let depositsQuery = supabase.from('transactions').select('*').eq('type', 'deposit').order('created_at', { ascending: false }).limit(50);
+    // RLS already filters for admin; for owner we get everything
+    const { data: depositsData } = await depositsQuery;
     setDeposits(depositsData || []);
 
     // Fetch open tickets
@@ -212,6 +236,20 @@ const Admin = () => {
       .select('*')
       .order('multiplier', { ascending: true });
     setRegionalPricing(pricingData || []);
+  };
+
+  // Owner-only: toggle admin_visible on a transaction
+  const toggleAdminVisible = async (depositId: string, currentValue: boolean) => {
+    const { error } = await supabase
+      .from('transactions')
+      .update({ admin_visible: !currentValue })
+      .eq('id', depositId);
+    if (error) {
+      toast({ title: "Failed to update visibility", variant: "destructive" });
+    } else {
+      toast({ title: !currentValue ? "Released to Admin" : "Hidden from Admin" });
+      fetchAdminData();
+    }
   };
 
   const adjustUserBalance = async () => {
@@ -506,7 +544,14 @@ const Admin = () => {
               <Globe className="h-4 w-4 mr-2" />
               User Dashboard
             </Button>
-            <Badge variant="destructive">Admin Mode</Badge>
+            {isOwner ? (
+              <Badge className="bg-gold/20 text-gold border-gold/30">
+                <Crown className="h-3 w-3 mr-1" />
+                Owner
+              </Badge>
+            ) : (
+              <Badge variant="destructive">Admin Mode</Badge>
+            )}
           </div>
         </div>
       </header>
@@ -612,7 +657,7 @@ const Admin = () => {
                         onChange={(e) => setUserSearchQuery(e.target.value)}
                       />
                     </div>
-                    <Button variant="outline" size="icon" onClick={fetchAdminData}>
+                    <Button variant="outline" size="icon" onClick={() => fetchAdminData()}>
                       <RefreshCw className="h-4 w-4" />
                     </Button>
                   </div>
@@ -769,7 +814,11 @@ const Admin = () => {
             <Card className="border-border/30 bg-card/60">
               <CardHeader>
                 <CardTitle className="text-lg font-display">Deposit Management</CardTitle>
-                <CardDescription>Approve or reject pending deposits</CardDescription>
+                <CardDescription>
+                  {isOwner
+                    ? "Review all user deposits. Use the toggle to release deposits to your admin team."
+                    : "Approve or reject pending deposits"}
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 {deposits.filter(d => d.status === 'pending').length === 0 ? (
@@ -780,18 +829,54 @@ const Admin = () => {
                 ) : (
                   <div className="space-y-4">
                     {deposits.filter(d => d.status === 'pending').map((deposit) => (
-                      <div key={deposit.id} className="p-4 rounded-lg bg-secondary/10 border border-border/30 flex items-center justify-between">
-                        <div>
+                      <div key={deposit.id} className="p-4 rounded-lg bg-secondary/10 border border-border/30 flex items-center justify-between gap-4">
+                        <div className="flex-1 min-w-0">
                           <p className="font-mono text-lg text-primary">${Number(deposit.amount).toFixed(2)}</p>
                           <p className="text-sm text-muted-foreground">{deposit.payment_method} • {new Date(deposit.created_at).toLocaleString()}</p>
                           {deposit.reference_id && <p className="text-xs text-muted-foreground">Ref: {deposit.reference_id}</p>}
+                          {deposit.description && <p className="text-xs text-muted-foreground mt-1">{deposit.description}</p>}
                         </div>
-                        <div className="flex gap-2">
+                        <div className="flex items-center gap-3 shrink-0">
+                          {/* Owner-only: release to admin toggle */}
+                          {isOwner && (
+                            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-secondary/20 border border-border/30">
+                              {deposit.admin_visible ? (
+                                <Eye className="h-3.5 w-3.5 text-success" />
+                              ) : (
+                                <EyeOff className="h-3.5 w-3.5 text-muted-foreground" />
+                              )}
+                              <Switch
+                                checked={deposit.admin_visible ?? false}
+                                onCheckedChange={() => toggleAdminVisible(deposit.id, deposit.admin_visible ?? false)}
+                                className="scale-75"
+                              />
+                            </div>
+                          )}
                           <Button variant="outline" size="sm" onClick={() => rejectDeposit(deposit.id)}>Reject</Button>
                           <Button size="sm" onClick={() => approveDeposit(deposit)}>Approve</Button>
                         </div>
                       </div>
                     ))}
+                  </div>
+                )}
+
+                {/* Owner: show all deposits history */}
+                {isOwner && deposits.filter(d => d.status !== 'pending').length > 0 && (
+                  <div className="mt-6">
+                    <p className="text-sm font-medium text-muted-foreground mb-3">Processed Deposits</p>
+                    <div className="space-y-2">
+                      {deposits.filter(d => d.status !== 'pending').map((deposit) => (
+                        <div key={deposit.id} className="p-3 rounded-lg bg-secondary/5 border border-border/20 flex items-center justify-between">
+                          <div>
+                            <p className="font-mono text-sm">${Number(deposit.amount).toFixed(2)}</p>
+                            <p className="text-xs text-muted-foreground">{deposit.payment_method} • {new Date(deposit.created_at).toLocaleString()}</p>
+                          </div>
+                          <Badge variant={deposit.status === 'completed' ? 'default' : 'destructive'} className="text-xs capitalize">
+                            {deposit.status}
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </CardContent>
@@ -965,7 +1050,7 @@ const Admin = () => {
                     <CardTitle className="text-lg font-display">Order Management</CardTitle>
                     <CardDescription>View orders with applied multipliers and user country</CardDescription>
                   </div>
-                  <Button variant="outline" size="icon" onClick={fetchAdminData}>
+                  <Button variant="outline" size="icon" onClick={() => fetchAdminData()}>
                     <RefreshCw className="h-4 w-4" />
                   </Button>
                 </div>
@@ -1116,7 +1201,7 @@ const Admin = () => {
           wallet={selectedUser ? wallets[selectedUser.user_id] : null}
           open={showUserDetails}
           onOpenChange={setShowUserDetails}
-          onRefresh={fetchAdminData}
+          onRefresh={() => fetchAdminData()}
         />
       </div>
     </div>
