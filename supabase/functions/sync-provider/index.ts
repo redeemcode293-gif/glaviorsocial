@@ -51,7 +51,39 @@ serve(async (req) => {
       });
     }
 
-    const { providerId, action } = await req.json();
+    const body = await req.json();
+    const { providerId, action } = body;
+
+    // ── fetch-preview: no saved provider needed, just fetch services from any URL ──
+    if (action === 'fetch-preview') {
+      const { apiUrl, apiKey } = body;
+      if (!apiUrl || !apiKey) {
+        return new Response(JSON.stringify({ error: 'apiUrl and apiKey are required' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ key: apiKey, action: 'services' }),
+        signal: AbortSignal.timeout(20000),
+      });
+
+      const services = await response.json();
+
+      if (!Array.isArray(services)) {
+        return new Response(JSON.stringify({ error: 'Provider did not return an array of services', raw: services }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      return new Response(JSON.stringify({ services }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     // Fetch provider details
     const { data: provider, error: providerError } = await supabase

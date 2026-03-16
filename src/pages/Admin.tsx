@@ -30,7 +30,8 @@ import {
   Activity,
   Shield,
   MoreVertical,
-  Link2
+  Link2,
+  Download
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -38,6 +39,7 @@ import { UserDetailsDialog } from "@/components/admin/UserDetailsDialog";
 import { ServiceMappingTab } from "@/components/admin/ServiceMappingTab";
 import { ServiceManagementTab } from "@/components/admin/ServiceManagementTab";
 import { RegionalPricingTab } from "@/components/admin/RegionalPricingTab";
+import { BulkServiceImport } from "@/components/admin/BulkServiceImport";
 
 const Admin = () => {
   const [loading, setLoading] = useState(true);
@@ -586,6 +588,10 @@ const Admin = () => {
               <Link2 className="h-3 w-3" />
               Service Mapping
             </TabsTrigger>
+            <TabsTrigger value="import" className="flex items-center gap-1">
+              <Download className="h-3 w-3" />
+              Import Services
+            </TabsTrigger>
             <TabsTrigger value="services">Provider Services</TabsTrigger>
             <TabsTrigger value="orders">Orders</TabsTrigger>
             <TabsTrigger value="pricing">Regional Pricing</TabsTrigger>
@@ -941,6 +947,10 @@ const Admin = () => {
           {/* Service Mapping Tab */}
           <TabsContent value="mapping">
             <ServiceMappingTab />
+          </TabsContent>
+
+          <TabsContent value="import">
+            <BulkServiceImport />
           </TabsContent>
 
           <TabsContent value="services">

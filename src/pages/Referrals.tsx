@@ -75,7 +75,7 @@ const Referrals = () => {
 
       if (profile?.referral_code) {
         setReferralCode(profile.referral_code);
-        setReferralLink(`https://glavior.social/ref/${profile.referral_code}`);
+        setReferralLink(`https://smmdaddy.com/ref/${profile.referral_code}`);
       }
 
       // Fetch referrals made by this user

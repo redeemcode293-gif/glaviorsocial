@@ -191,8 +191,8 @@ const Auth = () => {
             <Globe className="h-6 w-6 text-primary-foreground" />
           </div>
           <div className="flex flex-col">
-            <span className="font-display text-2xl font-bold text-foreground">GLAVIOR</span>
-            <span className="text-xs font-medium text-primary tracking-widest">SOCIAL</span>
+            <span className="font-display text-2xl font-bold text-foreground">SMM</span>
+            <span className="text-xs font-medium text-primary tracking-widest">DADDY</span>
           </div>
         </Link>
 
