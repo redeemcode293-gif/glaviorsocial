@@ -949,6 +949,10 @@ const Admin = () => {
             <ServiceMappingTab />
           </TabsContent>
 
+          <TabsContent value="import">
+            <BulkServiceImport />
+          </TabsContent>
+
           <TabsContent value="services">
             <ServiceManagementTab />
           </TabsContent>
