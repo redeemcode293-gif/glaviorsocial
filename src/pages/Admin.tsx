@@ -587,6 +587,10 @@ const Admin = () => {
               <Link2 className="h-3 w-3" />
               Service Mapping
             </TabsTrigger>
+            <TabsTrigger value="import" className="flex items-center gap-1">
+              <Download className="h-3 w-3" />
+              Import Services
+            </TabsTrigger>
             <TabsTrigger value="services">Provider Services</TabsTrigger>
             <TabsTrigger value="orders">Orders</TabsTrigger>
             <TabsTrigger value="pricing">Regional Pricing</TabsTrigger>
