@@ -545,7 +545,7 @@ const Admin = () => {
               User Dashboard
             </Button>
             {isOwner ? (
-              <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30">
+              <Badge className="bg-gold/20 text-gold border-gold/30">
                 <Crown className="h-3 w-3 mr-1" />
                 Owner
               </Badge>
