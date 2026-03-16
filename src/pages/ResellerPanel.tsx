@@ -252,7 +252,7 @@ const ResellerPanel = () => {
                       className="bg-secondary/30 border-border/30 rounded-r-none"
                     />
                     <div className="px-3 md:px-4 flex items-center bg-secondary/50 border border-l-0 border-border/30 rounded-r-lg text-xs md:text-sm text-muted-foreground whitespace-nowrap">
-                      .glavior.social
+                      .smmdaddy.com
                     </div>
                   </div>
                 </div>

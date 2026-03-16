@@ -270,7 +270,7 @@ const ApiDocs = () => {
     });
   };
 
-  const curlCode = `curl -X POST https://api.glavior.social/api/v2/order \\
+  const curlCode = `curl -X POST https://api.smmdaddy.com/api/v2/order \\
   -H "Content-Type: application/json" \\
   -d '{
     "key": "YOUR_API_KEY",
@@ -283,7 +283,7 @@ const ApiDocs = () => {
   const pythonCode = `import requests
 
 response = requests.post(
-    "https://api.glavior.social/api/v2/order",
+    "https://api.smmdaddy.com/api/v2/order",
     json={
         "key": "YOUR_API_KEY",
         "action": "add",
@@ -296,7 +296,7 @@ print(response.json())`;
 
   const phpCode = `<?php
 $ch = curl_init();
-curl_setopt($ch, CURLOPT_URL, "https://api.glavior.social/api/v2/order");
+curl_setopt($ch, CURLOPT_URL, "https://api.smmdaddy.com/api/v2/order");
 curl_setopt($ch, CURLOPT_POST, true);
 curl_setopt($ch, CURLOPT_HTTPHEADER, ["Content-Type: application/json"]);
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -311,7 +311,7 @@ $response = curl_exec($ch);
 curl_close($ch);
 echo $response;`;
 
-  const nodeCode = `const response = await fetch("https://api.glavior.social/api/v2/order", {
+  const nodeCode = `const response = await fetch("https://api.smmdaddy.com/api/v2/order", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({

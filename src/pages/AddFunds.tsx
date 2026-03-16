@@ -260,9 +260,9 @@ const AddFunds = () => {
                       <p className="text-sm text-muted-foreground mb-2">{t("Scan QR code or use UPI ID")}</p>
                       <div className="flex items-center justify-center gap-2">
                         <code className="text-primary bg-primary/10 px-3 py-1 rounded font-mono">
-                          payments@glavior
+                          payments@smmdaddy
                         </code>
-                        <Button variant="ghost" size="icon" onClick={() => handleCopy("payments@glavior")}>
+                        <Button variant="ghost" size="icon" onClick={() => handleCopy("payments@smmdaddy")}>
                           <Copy className="h-4 w-4" />
                         </Button>
                       </div>
