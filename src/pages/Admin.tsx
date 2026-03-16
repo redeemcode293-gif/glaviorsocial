@@ -650,7 +650,7 @@ const Admin = () => {
                         onChange={(e) => setUserSearchQuery(e.target.value)}
                       />
                     </div>
-                    <Button variant="outline" size="icon" onClick={fetchAdminData}>
+                    <Button variant="outline" size="icon" onClick={() => fetchAdminData()}>
                       <RefreshCw className="h-4 w-4" />
                     </Button>
                   </div>
