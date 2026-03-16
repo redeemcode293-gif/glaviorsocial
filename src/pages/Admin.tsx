@@ -814,7 +814,11 @@ const Admin = () => {
             <Card className="border-border/30 bg-card/60">
               <CardHeader>
                 <CardTitle className="text-lg font-display">Deposit Management</CardTitle>
-                <CardDescription>Approve or reject pending deposits</CardDescription>
+                <CardDescription>
+                  {isOwner
+                    ? "Review all user deposits. Use the toggle to release deposits to your admin team."
+                    : "Approve or reject pending deposits"}
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 {deposits.filter(d => d.status === 'pending').length === 0 ? (
@@ -825,18 +829,54 @@ const Admin = () => {
                 ) : (
                   <div className="space-y-4">
                     {deposits.filter(d => d.status === 'pending').map((deposit) => (
-                      <div key={deposit.id} className="p-4 rounded-lg bg-secondary/10 border border-border/30 flex items-center justify-between">
-                        <div>
+                      <div key={deposit.id} className="p-4 rounded-lg bg-secondary/10 border border-border/30 flex items-center justify-between gap-4">
+                        <div className="flex-1 min-w-0">
                           <p className="font-mono text-lg text-primary">${Number(deposit.amount).toFixed(2)}</p>
                           <p className="text-sm text-muted-foreground">{deposit.payment_method} • {new Date(deposit.created_at).toLocaleString()}</p>
                           {deposit.reference_id && <p className="text-xs text-muted-foreground">Ref: {deposit.reference_id}</p>}
+                          {deposit.description && <p className="text-xs text-muted-foreground mt-1">{deposit.description}</p>}
                         </div>
-                        <div className="flex gap-2">
+                        <div className="flex items-center gap-3 shrink-0">
+                          {/* Owner-only: release to admin toggle */}
+                          {isOwner && (
+                            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-secondary/20 border border-border/30">
+                              {deposit.admin_visible ? (
+                                <Eye className="h-3.5 w-3.5 text-success" />
+                              ) : (
+                                <EyeOff className="h-3.5 w-3.5 text-muted-foreground" />
+                              )}
+                              <Switch
+                                checked={deposit.admin_visible ?? false}
+                                onCheckedChange={() => toggleAdminVisible(deposit.id, deposit.admin_visible ?? false)}
+                                className="scale-75"
+                              />
+                            </div>
+                          )}
                           <Button variant="outline" size="sm" onClick={() => rejectDeposit(deposit.id)}>Reject</Button>
                           <Button size="sm" onClick={() => approveDeposit(deposit)}>Approve</Button>
                         </div>
                       </div>
                     ))}
+                  </div>
+                )}
+
+                {/* Owner: show all deposits history */}
+                {isOwner && deposits.filter(d => d.status !== 'pending').length > 0 && (
+                  <div className="mt-6">
+                    <p className="text-sm font-medium text-muted-foreground mb-3">Processed Deposits</p>
+                    <div className="space-y-2">
+                      {deposits.filter(d => d.status !== 'pending').map((deposit) => (
+                        <div key={deposit.id} className="p-3 rounded-lg bg-secondary/5 border border-border/20 flex items-center justify-between">
+                          <div>
+                            <p className="font-mono text-sm">${Number(deposit.amount).toFixed(2)}</p>
+                            <p className="text-xs text-muted-foreground">{deposit.payment_method} • {new Date(deposit.created_at).toLocaleString()}</p>
+                          </div>
+                          <Badge variant={deposit.status === 'completed' ? 'default' : 'destructive'} className="text-xs capitalize">
+                            {deposit.status}
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </CardContent>
