@@ -127,10 +127,13 @@ const NewOrder = () => {
   // Filter services by category and search
   const filteredServices = services.filter(s => {
     const matchesCategory = selectedCategory === "all" || s.platform === selectedCategory;
-    const matchesSearch = searchQuery === "" || 
-      s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      s.service_id.toString().includes(searchQuery) ||
-      s.category.toLowerCase().includes(searchQuery.toLowerCase());
+    const q = searchQuery.toLowerCase().trim();
+    const matchesSearch = q === "" || 
+      s.name.toLowerCase().includes(q) ||
+      s.service_id.toString().includes(q) ||
+      (s.description || "").toLowerCase().includes(q) ||
+      s.platform.toLowerCase().includes(q) ||
+      s.category.toLowerCase().includes(q);
     return matchesCategory && matchesSearch;
   });
 
