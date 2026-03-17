@@ -6,6 +6,22 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+/**
+ * Locale-aware price parser.
+ * Handles INR format (1,00,000.19 or 15,650.19) and USD format (15650.19).
+ * Removes commas (thousand-separators in both locales) before parsing.
+ */
+function parseProviderPrice(raw: string | number): number {
+  if (typeof raw === 'number') return isNaN(raw) ? 0 : raw;
+  if (!raw) return 0;
+  // Remove currency symbols, spaces, Rs, ₹
+  const cleaned = String(raw).replace(/[₹Rs$€£\s]/g, '').trim();
+  // Remove ALL commas (thousand separators in INR and USD) — keeps decimal dot
+  const noCommas = cleaned.replace(/,/g, '');
+  const parsed = parseFloat(noCommas);
+  return isNaN(parsed) ? 0 : parsed;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -16,7 +32,7 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Get authorization header to verify admin
+    // Get authorization header to verify admin/owner
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
@@ -25,7 +41,7 @@ serve(async (req) => {
       });
     }
 
-    // Verify user is admin
+    // Verify user
     const token = authHeader.replace('Bearer ', '');
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
     
@@ -36,16 +52,16 @@ serve(async (req) => {
       });
     }
 
-    // Check admin role
+    // Check admin OR owner role
     const { data: roleData } = await supabase
       .from('user_roles')
       .select('role')
       .eq('user_id', user.id)
-      .eq('role', 'admin')
+      .in('role', ['admin', 'owner'])
       .maybeSingle();
 
     if (!roleData) {
-      return new Response(JSON.stringify({ error: 'Admin access required' }), {
+      return new Response(JSON.stringify({ error: 'Admin or Owner access required' }), {
         status: 403,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -54,7 +70,7 @@ serve(async (req) => {
     const body = await req.json();
     const { providerId, action } = body;
 
-    // ── fetch-preview: no saved provider needed, just fetch services from any URL ──
+    // ── fetch-preview: fetch services from any provider URL ──
     if (action === 'fetch-preview') {
       const { apiUrl, apiKey } = body;
       if (!apiUrl || !apiKey) {
@@ -68,7 +84,7 @@ serve(async (req) => {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({ key: apiKey, action: 'services' }),
-        signal: AbortSignal.timeout(20000),
+        signal: AbortSignal.timeout(30000),
       });
 
       const services = await response.json();
@@ -102,14 +118,10 @@ serve(async (req) => {
     console.log(`Syncing provider: ${provider.name} (${provider.api_url})`);
 
     if (action === 'balance') {
-      // Fetch balance from provider API
       const response = await fetch(provider.api_url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          key: provider.api_key,
-          action: 'balance',
-        }),
+        body: new URLSearchParams({ key: provider.api_key, action: 'balance' }),
       });
 
       const data = await response.json();
@@ -118,7 +130,7 @@ serve(async (req) => {
       if (data.balance !== undefined) {
         await supabase
           .from('api_providers')
-          .update({ balance: parseFloat(data.balance) })
+          .update({ balance: parseProviderPrice(data.balance) })
           .eq('id', providerId);
       }
 
@@ -128,14 +140,11 @@ serve(async (req) => {
     }
 
     if (action === 'services') {
-      // Fetch services from provider API
       const response = await fetch(provider.api_url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          key: provider.api_key,
-          action: 'services',
-        }),
+        body: new URLSearchParams({ key: provider.api_key, action: 'services' }),
+        signal: AbortSignal.timeout(60000),
       });
 
       const services = await response.json();
@@ -151,72 +160,74 @@ serve(async (req) => {
       let addedCount = 0;
       let updatedCount = 0;
 
-      for (const service of services) {
-        // Check if service already exists
-        const { data: existingService } = await supabase
-          .from('services')
-          .select('id')
-          .eq('provider_id', providerId)
-          .eq('provider_service_id', String(service.service))
-          .maybeSingle();
-
-        // Determine platform from category
-        let platform = 'Other';
-        const categoryLower = (service.category || '').toLowerCase();
-        const serviceName = (service.name || '').toLowerCase();
+      // Process in batches of 50 for performance
+      const BATCH_SIZE = 50;
+      for (let i = 0; i < services.length; i += BATCH_SIZE) {
+        const batch = services.slice(i, i + BATCH_SIZE);
         
-        if (categoryLower.includes('instagram') || serviceName.includes('instagram')) platform = 'Instagram';
-        else if (categoryLower.includes('youtube') || serviceName.includes('youtube')) platform = 'YouTube';
-        else if (categoryLower.includes('tiktok') || serviceName.includes('tiktok')) platform = 'TikTok';
-        else if (categoryLower.includes('telegram') || serviceName.includes('telegram')) platform = 'Telegram';
-        else if (categoryLower.includes('twitter') || categoryLower.includes('x ') || serviceName.includes('twitter')) platform = 'X';
-        else if (categoryLower.includes('facebook') || serviceName.includes('facebook')) platform = 'Facebook';
-        else if (categoryLower.includes('spotify') || serviceName.includes('spotify')) platform = 'Spotify';
-        else if (categoryLower.includes('discord') || serviceName.includes('discord')) platform = 'Discord';
-        else if (categoryLower.includes('twitch') || serviceName.includes('twitch')) platform = 'Twitch';
-        else if (categoryLower.includes('snapchat') || serviceName.includes('snapchat')) platform = 'Snapchat';
-        else if (categoryLower.includes('whatsapp') || serviceName.includes('whatsapp')) platform = 'WhatsApp';
-        else if (categoryLower.includes('threads') || serviceName.includes('threads')) platform = 'Threads';
-        else if (categoryLower.includes('linkedin') || serviceName.includes('linkedin')) platform = 'LinkedIn';
-        else if (categoryLower.includes('pinterest') || serviceName.includes('pinterest')) platform = 'Pinterest';
+        // Get existing services for this batch
+        const batchIds = batch.map((s: any) => String(s.service));
+        const { data: existingServices } = await supabase
+          .from('services')
+          .select('id, provider_service_id')
+          .eq('provider_id', providerId)
+          .in('provider_service_id', batchIds);
 
-        // Generate unique internal service ID (different from provider's)
-        const internalServiceId = Math.floor(100000 + Math.random() * 900000);
+        const existingMap = new Map((existingServices || []).map((s: any) => [s.provider_service_id, s.id]));
 
-        const serviceData = {
-          name: service.name,
-          description: service.description || service.name || 'No description available',
-          platform,
-          category: service.category || 'General',
-          service_id: internalServiceId,
-          provider_id: providerId,
-          provider_service_id: String(service.service),
-          provider_price: parseFloat(service.rate) || 0,
-          base_price: parseFloat(service.rate) * 1.3, // 30% margin by default
-          min_quantity: parseInt(service.min) || 100,
-          max_quantity: parseInt(service.max) || 50000,
-          refill_supported: service.refill === true || service.refill === 'true',
-          dripfeed_supported: service.dripfeed === true || service.dripfeed === 'true',
-          is_active: true,
-        };
+        const toInsert: any[] = [];
+        const toUpdate: any[] = [];
 
-        if (existingService) {
-          // Update existing service
-          await supabase
-            .from('services')
-            .update({
-              provider_price: serviceData.provider_price,
-              min_quantity: serviceData.min_quantity,
-              max_quantity: serviceData.max_quantity,
-              refill_supported: serviceData.refill_supported,
-              dripfeed_supported: serviceData.dripfeed_supported,
-            })
-            .eq('id', existingService.id);
+        for (const service of batch) {
+          const platform = detectPlatform(service.category || '', service.name || '');
+          const providerPrice = parseProviderPrice(service.rate);
+          const basePrice = providerPrice * 1.3; // 30% default margin
+          const providerServiceId = String(service.service);
+
+          const serviceData = {
+            name: service.name,
+            description: service.description || service.name || 'No description available',
+            platform,
+            category: service.category || 'General',
+            provider_id: providerId,
+            provider_service_id: providerServiceId,
+            provider_price: providerPrice,
+            base_price: basePrice,
+            min_quantity: parseInt(String(service.min)) || 100,
+            max_quantity: parseInt(String(service.max)) || 50000,
+            refill_supported: service.refill === true || service.refill === 'true',
+            dripfeed_supported: service.dripfeed === true || service.dripfeed === 'true',
+            is_active: true,
+          };
+
+          if (existingMap.has(providerServiceId)) {
+            toUpdate.push({ ...serviceData, id: existingMap.get(providerServiceId) });
+          } else {
+            const internalServiceId = Math.floor(100 + Math.random() * 900);
+            toInsert.push({ ...serviceData, service_id: internalServiceId });
+          }
+        }
+
+        // Batch insert
+        if (toInsert.length > 0) {
+          const { error: insertErr } = await supabase.from('services').insert(toInsert);
+          if (!insertErr) addedCount += toInsert.length;
+          else console.error('Batch insert error:', insertErr);
+        }
+
+        // Batch update (upsert)
+        for (const s of toUpdate) {
+          const { id, ...updateData } = s;
+          await supabase.from('services').update({
+            provider_price: updateData.provider_price,
+            base_price: updateData.base_price,
+            min_quantity: updateData.min_quantity,
+            max_quantity: updateData.max_quantity,
+            refill_supported: updateData.refill_supported,
+            dripfeed_supported: updateData.dripfeed_supported,
+            is_active: true,
+          }).eq('id', id);
           updatedCount++;
-        } else {
-          // Insert new service
-          await supabase.from('services').insert(serviceData);
-          addedCount++;
         }
       }
 
@@ -249,3 +260,25 @@ serve(async (req) => {
     });
   }
 });
+
+function detectPlatform(category: string, name: string): string {
+  const text = (category + ' ' + name).toLowerCase();
+  if (text.includes('instagram')) return 'Instagram';
+  if (text.includes('youtube')) return 'YouTube';
+  if (text.includes('tiktok') || text.includes('tik tok')) return 'TikTok';
+  if (text.includes('telegram')) return 'Telegram';
+  if (text.includes('twitter') || text.includes(' x ') || text.match(/\bx\b/)) return 'X';
+  if (text.includes('facebook') || text.includes('fb ')) return 'Facebook';
+  if (text.includes('spotify')) return 'Spotify';
+  if (text.includes('discord')) return 'Discord';
+  if (text.includes('twitch')) return 'Twitch';
+  if (text.includes('snapchat')) return 'Snapchat';
+  if (text.includes('whatsapp')) return 'WhatsApp';
+  if (text.includes('threads')) return 'Threads';
+  if (text.includes('linkedin')) return 'LinkedIn';
+  if (text.includes('pinterest')) return 'Pinterest';
+  if (text.includes('reddit')) return 'Reddit';
+  if (text.includes('clubhouse')) return 'Clubhouse';
+  if (text.includes('apple') || text.includes('itunes')) return 'Apple';
+  return 'Other';
+}

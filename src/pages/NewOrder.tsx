@@ -44,16 +44,10 @@ interface ServiceDisplay {
   provider_service_uuid?: string | null;
 }
 
-const categories = [
-  { id: "all", name: "All Platforms" },
-  { id: "Instagram", name: "Instagram" },
-  { id: "YouTube", name: "YouTube" },
-  { id: "TikTok", name: "TikTok" },
-  { id: "Telegram", name: "Telegram" },
-  { id: "X", name: "X (Twitter)" },
-  { id: "Facebook", name: "Facebook" },
-  { id: "Spotify", name: "Spotify" },
-  { id: "Discord", name: "Discord" },
+const ALL_PLATFORMS = [
+  "Instagram", "YouTube", "TikTok", "Telegram", "X", "Facebook",
+  "Spotify", "Discord", "Twitch", "Snapchat", "WhatsApp", "Threads",
+  "LinkedIn", "Pinterest", "Reddit", "Apple", "Other"
 ];
 
 const NewOrder = () => {
@@ -133,10 +127,13 @@ const NewOrder = () => {
   // Filter services by category and search
   const filteredServices = services.filter(s => {
     const matchesCategory = selectedCategory === "all" || s.platform === selectedCategory;
-    const matchesSearch = searchQuery === "" || 
-      s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      s.service_id.toString().includes(searchQuery) ||
-      s.category.toLowerCase().includes(searchQuery.toLowerCase());
+    const q = searchQuery.toLowerCase().trim();
+    const matchesSearch = q === "" || 
+      s.name.toLowerCase().includes(q) ||
+      s.service_id.toString().includes(q) ||
+      (s.description || "").toLowerCase().includes(q) ||
+      s.platform.toLowerCase().includes(q) ||
+      s.category.toLowerCase().includes(q);
     return matchesCategory && matchesSearch;
   });
 
@@ -374,7 +371,7 @@ const NewOrder = () => {
                         <SelectValue placeholder={t("All Platforms")} />
                       </SelectTrigger>
                       <SelectContent>
-                        {categories.map((cat) => (
+                        {[{ id: "all", name: "All Platforms" }, ...ALL_PLATFORMS.map(p => ({ id: p, name: p }))].map((cat) => (
                           <SelectItem key={cat.id} value={cat.id}>{t(cat.name)}</SelectItem>
                         ))}
                       </SelectContent>
