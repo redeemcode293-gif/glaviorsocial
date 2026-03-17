@@ -368,7 +368,7 @@ const NewOrder = () => {
                         <SelectValue placeholder={t("All Platforms")} />
                       </SelectTrigger>
                       <SelectContent>
-                        {categories.map((cat) => (
+                        {[{ id: "all", name: "All Platforms" }, ...ALL_PLATFORMS.map(p => ({ id: p, name: p }))].map((cat) => (
                           <SelectItem key={cat.id} value={cat.id}>{t(cat.name)}</SelectItem>
                         ))}
                       </SelectContent>
