@@ -44,16 +44,10 @@ interface ServiceDisplay {
   provider_service_uuid?: string | null;
 }
 
-const categories = [
-  { id: "all", name: "All Platforms" },
-  { id: "Instagram", name: "Instagram" },
-  { id: "YouTube", name: "YouTube" },
-  { id: "TikTok", name: "TikTok" },
-  { id: "Telegram", name: "Telegram" },
-  { id: "X", name: "X (Twitter)" },
-  { id: "Facebook", name: "Facebook" },
-  { id: "Spotify", name: "Spotify" },
-  { id: "Discord", name: "Discord" },
+const ALL_PLATFORMS = [
+  "Instagram", "YouTube", "TikTok", "Telegram", "X", "Facebook",
+  "Spotify", "Discord", "Twitch", "Snapchat", "WhatsApp", "Threads",
+  "LinkedIn", "Pinterest", "Reddit", "Apple", "Other"
 ];
 
 const NewOrder = () => {
