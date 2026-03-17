@@ -280,43 +280,65 @@ export function ServiceManagementTab() {
       return;
     }
 
-    let error: any = null;
+    try {
+      // Process in batches of 200 to avoid DB query limits with large selections
+      const BATCH_SIZE = 200;
 
-    switch (bulkActionType) {
-      case 'enable':
-        ({ error } = await supabase.from('services').update({ is_active: true }).in('id', ids));
-        break;
-      case 'disable':
-        ({ error } = await supabase.from('services').update({ is_active: false }).in('id', ids));
-        break;
-      case 'delete':
-        ({ error } = await supabase.from('services').delete().in('id', ids));
-        break;
-      case 'category':
-        ({ error } = await supabase.from('services').update({ category: bulkCategory }).in('id', ids));
-        break;
-      case 'price':
-        // For price changes, we need to update each service individually
-        const selectedServicesList = services.filter(s => ids.includes(s.id));
-        for (const service of selectedServicesList) {
-          let newPrice = service.base_price;
-          if (bulkPriceChange.type === 'percent') {
-            newPrice = service.base_price * (1 + parseFloat(bulkPriceChange.value) / 100);
-          } else {
-            newPrice = service.base_price + parseFloat(bulkPriceChange.value);
-          }
-          await supabase.from('services').update({ base_price: Math.max(0, newPrice) }).eq('id', service.id);
+      const batchUpdate = async (updateData: any) => {
+        for (let i = 0; i < ids.length; i += BATCH_SIZE) {
+          const batch = ids.slice(i, i + BATCH_SIZE);
+          const { error } = await supabase.from('services').update(updateData).in('id', batch);
+          if (error) throw error;
         }
-        break;
-    }
+      };
 
-    if (error) {
-      toast({ title: "Bulk action failed", variant: "destructive" });
-    } else {
+      const batchDelete = async () => {
+        for (let i = 0; i < ids.length; i += BATCH_SIZE) {
+          const batch = ids.slice(i, i + BATCH_SIZE);
+          const { error } = await supabase.from('services').delete().in('id', batch);
+          if (error) throw error;
+        }
+      };
+
+      switch (bulkActionType) {
+        case 'enable':
+          await batchUpdate({ is_active: true });
+          break;
+        case 'disable':
+          await batchUpdate({ is_active: false });
+          break;
+        case 'delete':
+          await batchDelete();
+          break;
+        case 'category':
+          await batchUpdate({ category: bulkCategory });
+          break;
+        case 'price': {
+          const selectedServicesList = services.filter(s => ids.includes(s.id));
+          for (let i = 0; i < selectedServicesList.length; i += BATCH_SIZE) {
+            const batch = selectedServicesList.slice(i, i + BATCH_SIZE);
+            for (const service of batch) {
+              let newPrice = service.base_price;
+              if (bulkPriceChange.type === 'percent') {
+                newPrice = service.base_price * (1 + parseFloat(bulkPriceChange.value) / 100);
+              } else {
+                newPrice = service.base_price + parseFloat(bulkPriceChange.value);
+              }
+              const { error } = await supabase.from('services').update({ base_price: Math.max(0, newPrice) }).eq('id', service.id);
+              if (error) throw error;
+            }
+          }
+          break;
+        }
+      }
+
       toast({ title: "Bulk Action Completed", description: `${ids.length} services updated` });
       setSelectedServices(new Set());
       setBulkActionDialogOpen(false);
       fetchData();
+    } catch (err: any) {
+      console.error('Bulk action error:', err);
+      toast({ title: "Bulk action failed", description: err.message || "Please try again", variant: "destructive" });
     }
   };
 
