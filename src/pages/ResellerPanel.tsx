@@ -24,15 +24,18 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useLocalization } from "@/contexts/LocalizationContext";
+import { useAuth } from "@/hooks/useAuth";
+import type { Tables } from "@/integrations/supabase/types";
 
 const ResellerPanel = () => {
   const [hasPanel, setHasPanel] = useState(false);
-  const [panelData, setPanelData] = useState<any>(null);
+  const [panelData, setPanelData] = useState<Tables<"reseller_panels"> | null>(null);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
   const { t, formatPrice } = useLocalization();
+  const { user } = useAuth();
 
   // Form states for creation
   const [panelName, setPanelName] = useState("");
@@ -47,8 +50,15 @@ const ResellerPanel = () => {
   const [editLogoUrl, setEditLogoUrl] = useState("");
 
   useEffect(() => {
-    checkPanel();
-  }, []);
+    if (user) {
+      void checkPanel();
+      return;
+    }
+
+    setHasPanel(false);
+    setPanelData(null);
+    setLoading(false);
+  }, [user]);
 
   useEffect(() => {
     if (panelData) {
@@ -60,7 +70,6 @@ const ResellerPanel = () => {
   }, [panelData]);
 
   const checkPanel = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
     if (user) {
       const { data, error } = await supabase
         .from('reseller_panels')
@@ -87,8 +96,6 @@ const ResellerPanel = () => {
     }
 
     setCreating(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    
     if (user) {
       const { data, error } = await supabase
         .from('reseller_panels')

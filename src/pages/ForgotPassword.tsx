@@ -42,7 +42,7 @@ const ForgotPassword = () => {
         title: "Reset link sent!",
         description: "Check your email for password reset instructions.",
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Password reset error:', error);
       toast({
         title: "Error",

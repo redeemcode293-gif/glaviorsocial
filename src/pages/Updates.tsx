@@ -1,24 +1,52 @@
+import { useEffect, useState } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Megaphone, Sparkles, AlertTriangle, Wrench, Bell, Clock, ChevronRight } from "lucide-react";
 import { useLocalization } from "@/contexts/LocalizationContext";
+import { supabase } from "@/integrations/supabase/client";
+
+interface Announcement {
+  id: string;
+  type: string | null;
+  title: string;
+  content: string;
+  created_at: string;
+}
 
 const Updates = () => {
   const { t } = useLocalization();
+  const [updates, setUpdates] = useState<Announcement[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const updates = [
-    { id: 1, type: "feature", title: t("New TikTok Services Available"), description: t("We've added 15+ new TikTok services including followers, likes, views, and comments."), date: "2024-01-15", isNew: true },
-    { id: 2, type: "maintenance", title: t("Scheduled Maintenance - Jan 18"), description: t("We'll be performing system upgrades on January 18th from 2:00 AM - 4:00 AM UTC."), date: "2024-01-14", isNew: true },
-    { id: 3, type: "improvement", title: t("Faster Order Processing"), description: t("We've optimized our order processing system. Orders are now processed up to 50% faster."), date: "2024-01-12", isNew: false },
-    { id: 4, type: "feature", title: t("API v2 Released"), description: t("Our new API v2 is now available with improved performance and better error handling."), date: "2024-01-10", isNew: false },
-  ];
+  useEffect(() => {
+    void fetchUpdates();
+  }, []);
+
+  const fetchUpdates = async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("announcements")
+      .select("id, type, title, content, created_at")
+      .eq("is_active", true)
+      .order("created_at", { ascending: false });
+
+    if (!error) {
+      setUpdates(data || []);
+    }
+
+    setLoading(false);
+  };
 
   const typeConfig: Record<string, { label: string; icon: typeof Sparkles; color: string; bgColor: string }> = {
     feature: { label: t("New Feature"), icon: Sparkles, color: "text-success", bgColor: "bg-success/10" },
     maintenance: { label: t("Maintenance"), icon: Wrench, color: "text-warning", bgColor: "bg-warning/10" },
     improvement: { label: t("Improvement"), icon: Bell, color: "text-primary", bgColor: "bg-primary/10" },
     alert: { label: t("Alert"), icon: AlertTriangle, color: "text-destructive", bgColor: "bg-destructive/10" },
+    info: { label: t("Update"), icon: Bell, color: "text-primary", bgColor: "bg-primary/10" },
+    update: { label: t("Update"), icon: Bell, color: "text-primary", bgColor: "bg-primary/10" },
+    success: { label: t("Update"), icon: Sparkles, color: "text-success", bgColor: "bg-success/10" },
+    warning: { label: t("Maintenance"), icon: Wrench, color: "text-warning", bgColor: "bg-warning/10" },
   };
 
   return (
@@ -39,9 +67,19 @@ const Updates = () => {
         </Card>
 
         <div className="space-y-4">
-          {updates.map((update) => {
-            const config = typeConfig[update.type];
+          {!loading && updates.length === 0 && (
+            <Card className="border-border/30 bg-card/60 backdrop-blur-sm">
+              <CardContent className="p-10 text-center text-muted-foreground">
+                {t("No announcements available right now.")}
+              </CardContent>
+            </Card>
+          )}
+
+          {updates.map((update, index) => {
+            const config = typeConfig[update.type || "info"] || typeConfig.info;
             const Icon = config.icon;
+            const isNew = index < 3;
+
             return (
               <Card key={update.id} className="border-border/30 bg-card/60 backdrop-blur-sm hover:border-border/50 transition-all group cursor-pointer">
                 <CardContent className="p-5">
@@ -53,15 +91,15 @@ const Updates = () => {
                       <div className="flex items-start justify-between gap-3 mb-2">
                         <div className="flex items-center gap-2 flex-wrap">
                           <Badge variant="outline" className={`${config.color} border-current/30 text-xs`}>{config.label}</Badge>
-                          {update.isNew && <Badge className="bg-success text-success-foreground text-xs animate-pulse">{t("NEW")}</Badge>}
+                          {isNew && <Badge className="bg-success text-success-foreground text-xs animate-pulse">{t("NEW")}</Badge>}
                         </div>
                         <div className="flex items-center text-xs text-muted-foreground shrink-0">
                           <Clock className="h-3 w-3 mr-1" />
-                          {update.date}
+                          {new Date(update.created_at).toLocaleDateString()}
                         </div>
                       </div>
                       <h3 className="font-medium text-foreground mb-1 group-hover:text-primary transition-colors">{update.title}</h3>
-                      <p className="text-sm text-muted-foreground line-clamp-2">{update.description}</p>
+                      <p className="text-sm text-muted-foreground whitespace-pre-wrap">{update.content}</p>
                     </div>
                     <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all shrink-0 mt-2" />
                   </div>
@@ -72,7 +110,9 @@ const Updates = () => {
         </div>
 
         <div className="text-center">
-          <p className="text-sm text-muted-foreground">{t("Showing all")} {updates.length} {t("updates")}</p>
+          <p className="text-sm text-muted-foreground">
+            {loading ? t("Loading updates...") : `${t("Showing all")} ${updates.length} ${t("updates")}`}
+          </p>
         </div>
       </div>
     </DashboardLayout>

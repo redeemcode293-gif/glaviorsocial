@@ -21,6 +21,12 @@ import { useAuth } from "@/hooks/useAuth";
 import { useLocalization } from "@/contexts/LocalizationContext";
 import { supabase } from "@/integrations/supabase/client";
 
+
+const generateClientApiKey = () => {
+  const bytes = crypto.getRandomValues(new Uint8Array(30));
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+};
+
 const ApiDocs = () => {
   const [apiKey, setApiKey] = useState<string | null>(null);
   const [showKey, setShowKey] = useState(false);
@@ -174,10 +180,11 @@ const ApiDocs = () => {
         if (existingKey) {
           setApiKey(existingKey.api_key);
         } else {
-          // No active key exists, create one
+          // No active key exists, create one. We send a client-generated fallback so this also works if the DB default is missing.
+          const generatedKey = generateClientApiKey();
           const { data: newKey, error: createError } = await supabase
             .from('api_keys')
-            .insert({ user_id: user.id })
+            .insert({ user_id: user.id, api_key: generatedKey })
             .select('api_key')
             .single();
 
@@ -232,10 +239,11 @@ const ApiDocs = () => {
         .update({ is_active: false })
         .eq('user_id', user.id);
 
-      // Create new key (database generates it securely via gen_random_bytes)
+      // Create a new key with a client-side fallback so regeneration works even if the DB default is missing.
+      const generatedKey = generateClientApiKey();
       const { data: newKey, error } = await supabase
         .from('api_keys')
-        .insert({ user_id: user.id })
+        .insert({ user_id: user.id, api_key: generatedKey })
         .select('api_key')
         .single();
 

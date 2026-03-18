@@ -21,6 +21,7 @@ import Transactions from "./pages/Transactions";
 import ResellerPanel from "./pages/ResellerPanel";
 import Auth from "./pages/Auth";
 import Admin from "./pages/Admin";
+import ForgotPassword from "./pages/ForgotPassword";
 import NotFound from "./pages/NotFound";
 import { AIChatbot } from "./components/AIChatbot";
 
@@ -32,16 +33,18 @@ const App = () => (
       <LocalizationProvider>
         <TooltipProvider>
           <Toaster />
-        <Sonner />
-        <BrowserRouter>
+          <Sonner />
+          <BrowserRouter>
           <Routes>
             {/* Public routes */}
             <Route path="/" element={<Index />} />
             <Route path="/services" element={<Services />} />
             <Route path="/auth" element={<Auth />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/login" element={<Navigate to="/auth" replace />} />
             <Route path="/register" element={<Navigate to="/auth" replace />} />
             <Route path="/signup" element={<Navigate to="/auth" replace />} />
+            <Route path="/ref/:code" element={<Auth />} />
             
             {/* Dashboard routes */}
             <Route path="/dashboard" element={<Dashboard />} />
@@ -66,8 +69,8 @@ const App = () => (
             <Route path="/add-funds" element={<Navigate to="/dashboard/funds" replace />} />
             <Route path="/api-docs" element={<Navigate to="/dashboard/api" replace />} />
             
-            {/* Catch-all - redirect to home */}
-            <Route path="*" element={<Navigate to="/" replace />} />
+            {/* Catch-all */}
+            <Route path="*" element={<NotFound />} />
           </Routes>
             <AIChatbot />
           </BrowserRouter>

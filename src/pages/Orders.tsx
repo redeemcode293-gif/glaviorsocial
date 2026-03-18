@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { 
+import {
   Search,
   RefreshCw,
   CheckCircle2,
@@ -18,12 +18,13 @@ import {
   Copy,
   Filter,
   ShoppingCart,
-  Zap
+  Zap,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { useLocalization } from "@/contexts/LocalizationContext";
 import { supabase } from "@/integrations/supabase/client";
+import type { Tables } from "@/integrations/supabase/types";
 
 const statusConfig: Record<string, { label: string; variant: "default" | "secondary" | "outline" | "destructive"; icon: typeof CheckCircle2 }> = {
   completed: { label: "Completed", variant: "default", icon: CheckCircle2 },
@@ -32,145 +33,160 @@ const statusConfig: Record<string, { label: string; variant: "default" | "second
   cancelled: { label: "Cancelled", variant: "destructive", icon: XCircle },
   partial: { label: "Partial", variant: "secondary", icon: AlertCircle },
   in_progress: { label: "In Progress", variant: "secondary", icon: Zap },
+  failed: { label: "Failed", variant: "destructive", icon: XCircle },
 };
 
+type OrderRow = Tables<"orders">;
+
 const Orders = () => {
-  const [orders, setOrders] = useState<any[]>([]);
+  const [orders, setOrders] = useState<OrderRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [refreshing, setRefreshing] = useState<string | null>(null);
+  const [refreshingAll, setRefreshingAll] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
   const { t, formatPrice } = useLocalization();
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (user) {
-      fetchOrders();
-      setupRealtimeSubscription();
+    if (!user) {
+      setOrders([]);
+      setLoading(false);
+      return;
     }
 
-    return () => {
-      supabase.removeAllChannels();
-    };
-  }, [user]);
-
-  const setupRealtimeSubscription = () => {
-    if (!user) return;
+    void fetchOrders();
 
     const channel = supabase
-      .channel('orders-realtime')
+      .channel(`orders-realtime-${user.id}`)
       .on(
-        'postgres_changes',
+        "postgres_changes",
         {
-          event: '*',
-          schema: 'public',
-          table: 'orders',
+          event: "*",
+          schema: "public",
+          table: "orders",
           filter: `user_id=eq.${user.id}`,
         },
         (payload) => {
-          if (payload.eventType === 'INSERT') {
-            setOrders(prev => [payload.new as any, ...prev]);
-            toast({
-              title: t("New Order"),
-              description: `${t("Order")} #${(payload.new as any).order_number} ${t("has been created")}.`,
-            });
-          } else if (payload.eventType === 'UPDATE') {
-            setOrders(prev => prev.map(order => 
-              order.id === payload.new.id ? { ...order, ...payload.new } : order
-            ));
-            toast({
-              title: t("Order Updated"),
-              description: `${t("Order")} #${(payload.new as any).order_number} ${t("status changed to")} ${t((payload.new as any).status)}.`,
-            });
-          } else if (payload.eventType === 'DELETE') {
-            setOrders(prev => prev.filter(order => order.id !== payload.old.id));
+          if (payload.eventType === "INSERT") {
+            setOrders((prev) => [payload.new as OrderRow, ...prev]);
           }
-        }
+
+          if (payload.eventType === "UPDATE") {
+            setOrders((prev) => prev.map((order) => (order.id === payload.new.id ? { ...order, ...payload.new } : order)));
+          }
+
+          if (payload.eventType === "DELETE") {
+            setOrders((prev) => prev.filter((order) => order.id !== payload.old.id));
+          }
+        },
       )
       .subscribe();
 
-    return channel;
-  };
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [user]);
 
   const fetchOrders = async () => {
     if (!user) return;
-    
+
     setLoading(true);
     const { data, error } = await supabase
-      .from('orders')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false });
+      .from("orders")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false });
 
     if (error) {
-      toast({
-        title: t("Error"),
-        description: t("Failed to fetch orders"),
-        variant: "destructive",
-      });
+      toast({ title: t("Error"), description: t("Failed to fetch orders"), variant: "destructive" });
     } else {
       setOrders(data || []);
     }
+
     setLoading(false);
   };
 
-  const filteredOrders = orders.filter(order => {
-    const matchesSearch = order.order_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          order.link?.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = statusFilter === "all" || order.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
+  const filteredOrders = useMemo(
+    () =>
+      orders.filter((order) => {
+        const matchesSearch =
+          order.order_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          order.link?.toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesStatus = statusFilter === "all" || order.status === statusFilter;
+        return matchesSearch && matchesStatus;
+      }),
+    [orders, searchQuery, statusFilter],
+  );
 
-  const handleRefresh = async (orderId: string) => {
+  const refreshOrderStatus = async (orderId: string) => {
     setRefreshing(orderId);
-    setTimeout(() => {
-      setRefreshing(null);
+
+    try {
+      const { data, error } = await supabase.functions.invoke("check-order-status", {
+        body: { orderId },
+      });
+
+      if (error) throw error;
+
+      await fetchOrders();
       toast({
         title: t("Status Updated"),
-        description: t("Order status has been refreshed."),
+        description: data?.message || t("Order status has been refreshed from the provider."),
       });
-    }, 1000);
+    } catch (error: unknown) {
+      toast({
+        title: t("Refresh Failed"),
+        description: error.message || t("Failed to refresh order status."),
+        variant: "destructive",
+      });
+    } finally {
+      setRefreshing(null);
+    }
   };
 
-  const handleCopyId = (id: string) => {
-    navigator.clipboard.writeText(id);
-    toast({
-      title: t("Copied"),
-      description: t("Order ID copied to clipboard."),
-    });
+  const refreshVisibleOrders = async () => {
+    setRefreshingAll(true);
+
+    try {
+      const refreshableOrders = filteredOrders.filter((order) => !["completed", "cancelled", "failed"].includes(order.status));
+      await Promise.all(refreshableOrders.map((order) => supabase.functions.invoke("check-order-status", { body: { orderId: order.id } })));
+      await fetchOrders();
+      toast({ title: t("Orders Refreshed"), description: t("Latest provider statuses have been pulled.") });
+    } catch (error: unknown) {
+      toast({ title: t("Refresh Failed"), description: error.message || t("Failed to refresh orders."), variant: "destructive" });
+    } finally {
+      setRefreshingAll(false);
+    }
+  };
+
+  const handleCopyId = async (id: string) => {
+    await navigator.clipboard.writeText(id);
+    toast({ title: t("Copied"), description: t("Order ID copied to clipboard.") });
   };
 
   const handleRequestRefill = async (orderId: string) => {
     if (!user) return;
 
-    const { error } = await supabase
-      .from('refills')
-      .insert({
-        order_id: orderId,
-        user_id: user.id,
-        status: 'pending'
-      });
+    const { error } = await supabase.from("refills").insert({
+      order_id: orderId,
+      user_id: user.id,
+      status: "pending",
+    });
 
     if (error) {
-      toast({
-        title: t("Error"),
-        description: t("Failed to request refill"),
-        variant: "destructive",
-      });
+      toast({ title: t("Error"), description: t("Failed to request refill"), variant: "destructive" });
     } else {
-      toast({
-        title: t("Refill Requested"),
-        description: t("Your managed refill request has been submitted."),
-      });
+      toast({ title: t("Refill Requested"), description: t("Your managed refill request has been submitted.") });
     }
   };
 
-  const getProgress = (order: any) => {
-    if (!order.start_count) return 0;
-    const delivered = (order.quantity - (order.remains || 0));
-    return Math.min(100, Math.round((delivered / order.quantity) * 100));
+  const getProgress = (order: OrderRow) => {
+    if (!order.quantity) return 0;
+    const delivered = order.quantity - Number(order.remains || 0);
+    return Math.max(0, Math.min(100, Math.round((delivered / order.quantity) * 100)));
   };
 
   if (loading) {
@@ -187,59 +203,23 @@ const Orders = () => {
   return (
     <DashboardLayout title={t("Orders")} subtitle={t("Track and manage your orders")}>
       <div className="space-y-6 animate-fade-in">
-        {/* Stats Summary */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <Card className="border-border/30 bg-card/60">
-            <CardContent className="p-4">
-              <p className="text-xs text-muted-foreground">{t("Total Orders")}</p>
-              <p className="text-2xl font-display font-bold">{orders.length}</p>
-            </CardContent>
-          </Card>
-          <Card className="border-border/30 bg-card/60">
-            <CardContent className="p-4">
-              <p className="text-xs text-muted-foreground">{t("Pending")}</p>
-              <p className="text-2xl font-display font-bold text-yellow-500">
-                {orders.filter(o => o.status === 'pending').length}
-              </p>
-            </CardContent>
-          </Card>
-          <Card className="border-border/30 bg-card/60">
-            <CardContent className="p-4">
-              <p className="text-xs text-muted-foreground">{t("Processing")}</p>
-              <p className="text-2xl font-display font-bold text-blue-500">
-                {orders.filter(o => o.status === 'processing' || o.status === 'in_progress').length}
-              </p>
-            </CardContent>
-          </Card>
-          <Card className="border-border/30 bg-card/60">
-            <CardContent className="p-4">
-              <p className="text-xs text-muted-foreground">{t("Completed")}</p>
-              <p className="text-2xl font-display font-bold text-success">
-                {orders.filter(o => o.status === 'completed').length}
-              </p>
-            </CardContent>
-          </Card>
+          <Card className="border-border/30 bg-card/60"><CardContent className="p-4"><p className="text-xs text-muted-foreground">{t("Total Orders")}</p><p className="text-2xl font-display font-bold">{orders.length}</p></CardContent></Card>
+          <Card className="border-border/30 bg-card/60"><CardContent className="p-4"><p className="text-xs text-muted-foreground">{t("Pending")}</p><p className="text-2xl font-display font-bold text-yellow-500">{orders.filter((o) => o.status === "pending").length}</p></CardContent></Card>
+          <Card className="border-border/30 bg-card/60"><CardContent className="p-4"><p className="text-xs text-muted-foreground">{t("Processing")}</p><p className="text-2xl font-display font-bold text-blue-500">{orders.filter((o) => ["processing", "in_progress"].includes(o.status)).length}</p></CardContent></Card>
+          <Card className="border-border/30 bg-card/60"><CardContent className="p-4"><p className="text-xs text-muted-foreground">{t("Completed")}</p><p className="text-2xl font-display font-bold text-success">{orders.filter((o) => o.status === "completed").length}</p></CardContent></Card>
         </div>
 
-        {/* Filters */}
         <Card className="border-border/30 bg-card/60 backdrop-blur-sm">
           <CardContent className="p-4">
             <div className="flex flex-col sm:flex-row gap-4">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder={t("Search by order ID or link...")}
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 bg-secondary/30 border-border/30"
-                />
+                <Input placeholder={t("Search by order ID or link...")} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10 bg-secondary/30 border-border/30" />
               </div>
               <div className="flex gap-2">
                 <Select value={statusFilter} onValueChange={setStatusFilter}>
-                  <SelectTrigger className="w-[140px] bg-secondary/30 border-border/30">
-                    <Filter className="h-4 w-4 mr-2" />
-                    <SelectValue placeholder={t("Status")} />
-                  </SelectTrigger>
+                  <SelectTrigger className="w-[140px] bg-secondary/30 border-border/30"><Filter className="h-4 w-4 mr-2" /><SelectValue placeholder={t("Status")} /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">{t("All Status")}</SelectItem>
                     <SelectItem value="pending">{t("Pending")}</SelectItem>
@@ -248,10 +228,11 @@ const Orders = () => {
                     <SelectItem value="completed">{t("Completed")}</SelectItem>
                     <SelectItem value="partial">{t("Partial")}</SelectItem>
                     <SelectItem value="cancelled">{t("Cancelled")}</SelectItem>
+                    <SelectItem value="failed">{t("Failed")}</SelectItem>
                   </SelectContent>
                 </Select>
-                <Button variant="outline" className="border-border/50" onClick={fetchOrders}>
-                  <RefreshCw className="h-4 w-4 mr-2" />
+                <Button variant="outline" className="border-border/50" onClick={refreshVisibleOrders} disabled={refreshingAll}>
+                  <RefreshCw className={`h-4 w-4 mr-2 ${refreshingAll ? "animate-spin" : ""}`} />
                   {t("Refresh")}
                 </Button>
               </div>
@@ -259,7 +240,6 @@ const Orders = () => {
           </CardContent>
         </Card>
 
-        {/* Realtime Indicator */}
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <span className="relative flex h-2 w-2">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
@@ -268,19 +248,14 @@ const Orders = () => {
           {t("Live updates enabled")}
         </div>
 
-        {/* Orders Table */}
         <Card className="border-border/30 bg-card/60 backdrop-blur-sm overflow-hidden">
-          <CardHeader className="border-b border-border/30">
-            <CardTitle className="text-lg font-display">{t("Order History")}</CardTitle>
-          </CardHeader>
+          <CardHeader className="border-b border-border/30"><CardTitle className="text-lg font-display">{t("Order History")}</CardTitle></CardHeader>
           <CardContent className="p-0">
             {filteredOrders.length === 0 ? (
               <div className="text-center py-12">
                 <ShoppingCart className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                 <p className="text-muted-foreground">{t("No orders found")}</p>
-                <Button className="mt-4" onClick={() => navigate('/dashboard/order')}>
-                  {t("Place Your First Order")}
-                </Button>
+                <Button className="mt-4" onClick={() => navigate("/dashboard/order")}>{t("Place Your First Order")}</Button>
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -300,33 +275,18 @@ const Orders = () => {
                       const status = statusConfig[order.status] || statusConfig.pending;
                       const StatusIcon = status.icon;
                       const progress = getProgress(order);
-                      
+
                       return (
-                        <tr 
-                          key={order.id} 
-                          className="border-b border-border/20 hover:bg-secondary/10 transition-colors"
-                        >
+                        <tr key={order.id} className="border-b border-border/20 hover:bg-secondary/10 transition-colors">
                           <td className="p-4">
-                            <div className="flex items-center gap-2">
-                              <button 
-                                onClick={() => handleCopyId(order.order_number)}
-                                className="font-mono text-sm text-primary hover:text-primary/80 transition-colors flex items-center gap-1"
-                              >
-                                #{order.order_number}
-                                <Copy className="h-3 w-3" />
-                              </button>
-                            </div>
-                            <p className="text-xs text-muted-foreground mt-1">
-                              {new Date(order.created_at).toLocaleString()}
-                            </p>
+                            <button onClick={() => void handleCopyId(order.order_number)} className="font-mono text-sm text-primary hover:text-primary/80 transition-colors flex items-center gap-1">
+                              #{order.order_number}
+                              <Copy className="h-3 w-3" />
+                            </button>
+                            <p className="text-xs text-muted-foreground mt-1">{new Date(order.created_at).toLocaleString()}</p>
                           </td>
                           <td className="p-4">
-                            <a 
-                              href={order.link} 
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                              className="text-sm text-muted-foreground hover:text-primary flex items-center gap-1 truncate max-w-[200px]"
-                            >
+                            <a href={order.link} target="_blank" rel="noopener noreferrer" className="text-sm text-muted-foreground hover:text-primary flex items-center gap-1 truncate max-w-[220px]">
                               <ExternalLink className="h-3 w-3 flex-shrink-0" />
                               <span className="truncate">{order.link}</span>
                             </a>
@@ -335,52 +295,23 @@ const Orders = () => {
                           <td className="p-4 hidden md:table-cell">
                             <div className="space-y-1.5">
                               <div className="flex items-center justify-between text-xs">
-                                <span className="text-muted-foreground">
-                                  {(order.quantity - (order.remains || 0)).toLocaleString()} / {order.quantity?.toLocaleString()}
-                                </span>
+                                <span className="text-muted-foreground">{(order.quantity - Number(order.remains || 0)).toLocaleString()} / {order.quantity?.toLocaleString()}</span>
                                 <span className="text-primary font-mono">{progress}%</span>
                               </div>
-                              <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
-                                <div 
-                                  className="h-full bg-gradient-to-r from-primary to-primary-glow rounded-full transition-all duration-500"
-                                  style={{ width: `${progress}%` }}
-                                />
-                              </div>
+                              <div className="h-1.5 bg-secondary rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-primary to-primary-glow rounded-full transition-all duration-500" style={{ width: `${progress}%` }} /></div>
                             </div>
                           </td>
-                          <td className="p-4">
-                            <Badge 
-                              variant={status.variant}
-                              className="flex items-center gap-1 w-fit"
-                            >
-                              <StatusIcon className="h-3 w-3" />
-                              {t(status.label)}
-                            </Badge>
-                          </td>
-                          <td className="p-4 hidden sm:table-cell">
-                            <span className="font-mono text-sm text-foreground">{formatPrice(Number(order.price))}</span>
-                          </td>
+                          <td className="p-4"><Badge variant={status.variant} className="flex items-center gap-1 w-fit"><StatusIcon className="h-3 w-3" />{t(status.label)}</Badge></td>
+                          <td className="p-4 hidden sm:table-cell"><span className="font-mono text-sm text-foreground">{formatPrice(Number(order.price))}</span></td>
                           <td className="p-4">
                             <div className="flex items-center justify-end gap-2">
                               {order.status === "completed" && (
-                                <Button 
-                                  variant="outline" 
-                                  size="sm"
-                                  onClick={() => handleRequestRefill(order.id)}
-                                  className="text-xs border-success/30 text-success hover:bg-success/10"
-                                >
-                                  <RefreshCw className="h-3 w-3 mr-1" />
-                                  {t("Refill")}
+                                <Button variant="outline" size="sm" onClick={() => void handleRequestRefill(order.id)} className="text-xs border-success/30 text-success hover:bg-success/10">
+                                  <RefreshCw className="h-3 w-3 mr-1" />{t("Refill")}
                                 </Button>
                               )}
-                              <Button 
-                                variant="ghost" 
-                                size="icon"
-                                onClick={() => handleRefresh(order.id)}
-                                disabled={refreshing === order.id}
-                                className="h-8 w-8"
-                              >
-                                <RefreshCw className={`h-4 w-4 ${refreshing === order.id ? 'animate-spin' : ''}`} />
+                              <Button variant="ghost" size="icon" onClick={() => void refreshOrderStatus(order.id)} disabled={refreshing === order.id} className="h-8 w-8">
+                                <RefreshCw className={`h-4 w-4 ${refreshing === order.id ? "animate-spin" : ""}`} />
                               </Button>
                             </div>
                           </td>
