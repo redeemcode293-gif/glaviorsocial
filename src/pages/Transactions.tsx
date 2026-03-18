@@ -16,6 +16,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useLocalization } from "@/contexts/LocalizationContext";
+import { useAuth } from "@/hooks/useAuth";
 
 interface Transaction {
   id: string;
@@ -33,17 +34,23 @@ const Transactions = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const { toast } = useToast();
   const { t, formatPrice } = useLocalization();
+  const { user } = useAuth();
 
   useEffect(() => {
-    fetchTransactions();
-  }, []);
+    if (user) {
+      void fetchTransactions();
+      return;
+    }
+
+    setTransactions([]);
+    setLoading(false);
+  }, [user]);
 
   const fetchTransactions = async () => {
+    if (!user) return;
+
     setLoading(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    
-    if (user) {
-      const { data, error } = await supabase
+    const { data, error } = await supabase
         .from('transactions')
         .select('*')
         .eq('user_id', user.id)
@@ -58,7 +65,6 @@ const Transactions = () => {
       } else {
         setTransactions(data || []);
       }
-    }
     setLoading(false);
   };
 
@@ -177,7 +183,7 @@ const Transactions = () => {
                     className="pl-9 bg-secondary/30 border-border/30 w-full sm:w-56 md:w-64 h-9 text-sm"
                   />
                 </div>
-                <Button variant="outline" size="icon" onClick={fetchTransactions} className="border-border/30 h-9 w-9">
+                <Button variant="outline" size="icon" onClick={() => void fetchTransactions()} className="border-border/30 h-9 w-9">
                   <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
                 </Button>
               </div>
