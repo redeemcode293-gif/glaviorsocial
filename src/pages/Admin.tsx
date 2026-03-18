@@ -70,6 +70,7 @@ const Admin = () => {
   const [balanceAdjustment, setBalanceAdjustment] = useState("");
   const [adjustmentType, setAdjustmentType] = useState<"add" | "deduct">("add");
   const [userSearchQuery, setUserSearchQuery] = useState("");
+  const [userRoles, setUserRoles] = useState<Record<string, string[]>>({});
   
   // Provider form state
   const [showProviderDialog, setShowProviderDialog] = useState(false);
@@ -203,6 +204,17 @@ const Admin = () => {
       countByCountry[code] = (countByCountry[code] || 0) + 1;
     });
     setUserCountByRegion(countByCountry);
+
+    // Fetch all user roles (owner only)
+    if (effectiveOwner) {
+      const { data: rolesData } = await supabase.from('user_roles').select('user_id, role');
+      const rolesMap: Record<string, string[]> = {};
+      rolesData?.forEach(r => {
+        if (!rolesMap[r.user_id]) rolesMap[r.user_id] = [];
+        rolesMap[r.user_id].push(r.role);
+      });
+      setUserRoles(rolesMap);
+    }
 
     // Fetch services
     const { data: servicesData } = await supabase
@@ -409,6 +421,20 @@ const Admin = () => {
       .eq('id', ticketId);
 
     toast({ title: "Ticket Closed" });
+    fetchAdminData();
+  };
+
+  const toggleAdminRole = async (userId: string) => {
+    const currentRoles = userRoles[userId] || [];
+    const hasAdmin = currentRoles.includes('admin');
+
+    if (hasAdmin) {
+      await supabase.from('user_roles').delete().eq('user_id', userId).eq('role', 'admin');
+      toast({ title: "Admin Revoked", description: "User is no longer an admin" });
+    } else {
+      await supabase.from('user_roles').insert({ user_id: userId, role: 'admin' });
+      toast({ title: "Admin Granted", description: "User can now access the admin panel" });
+    }
     fetchAdminData();
   };
 
@@ -719,11 +745,16 @@ const Admin = () => {
                       <tbody>
                         {filteredUsers.map((user) => {
                           const userWallet = wallets[user.user_id];
+                          const roles = userRoles[user.user_id] || [];
                           return (
                             <tr key={user.id} className="border-b border-border/20 hover:bg-secondary/10">
                               <td className="p-3">
                                 <div>
-                                  <p className="font-medium text-foreground">{user.full_name || user.email?.split('@')[0] || 'N/A'}</p>
+                                  <div className="flex items-center gap-2">
+                                    <p className="font-medium text-foreground">{user.full_name || user.email?.split('@')[0] || 'N/A'}</p>
+                                    {roles.includes('owner') && <Badge className="text-[10px] py-0 bg-gold/20 text-gold border-gold/30"><Crown className="h-2.5 w-2.5 mr-0.5" />Owner</Badge>}
+                                    {roles.includes('admin') && !roles.includes('owner') && <Badge variant="destructive" className="text-[10px] py-0"><Shield className="h-2.5 w-2.5 mr-0.5" />Admin</Badge>}
+                                  </div>
                                   <p className="text-sm text-muted-foreground">{user.email}</p>
                                 </div>
                               </td>
@@ -813,6 +844,12 @@ const Admin = () => {
                                         <Eye className="h-4 w-4 mr-2" />
                                         View Details
                                       </DropdownMenuItem>
+                                      {isOwner && !roles.includes('owner') && (
+                                        <DropdownMenuItem onClick={() => toggleAdminRole(user.user_id)}>
+                                          <Shield className="h-4 w-4 mr-2" />
+                                          {roles.includes('admin') ? 'Revoke Admin' : 'Grant Admin'}
+                                        </DropdownMenuItem>
+                                      )}
                                       <DropdownMenuItem 
                                         className="text-destructive"
                                         onClick={async () => {
