@@ -164,7 +164,7 @@ export function ServiceManagementTab() {
     }
   };
 
-  const fixCorruptedPrices = async () => {
+const fixCorruptedPrices = async () => {
     setIsFixingPrices(true);
     setPriceFixProgress({ done: 0, total: 0 });
 
@@ -181,7 +181,7 @@ export function ServiceManagementTab() {
           .range(offset, offset + FETCH_BATCH - 1);
 
         if (error) throw error;
-        if (!data || data.length === 0) break;
+if (!data || data.length === 0) break;
 
         corruptedServices.push(...data);
 

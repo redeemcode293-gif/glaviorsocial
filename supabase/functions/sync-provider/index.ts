@@ -40,6 +40,39 @@ type PanelServiceRecord = {
   service_id: number;
 };
 
+type ProviderServiceRecord = {
+  service: string | number;
+  name: string;
+  category: string;
+  rate: string | number;
+  min: string | number;
+  max: string | number;
+  refill?: boolean | string;
+  dripfeed?: boolean | string;
+  description?: string;
+};
+
+type StoredServiceRecord = {
+  id: string;
+  service_id: number;
+  name: string;
+  description: string | null;
+  platform: string;
+  category: string;
+  base_price: number;
+  min_quantity: number;
+  max_quantity: number;
+  refill_supported: boolean | null;
+  dripfeed_supported: boolean | null;
+  is_active: boolean;
+};
+
+type PanelServiceRecord = {
+  id: string;
+  provider_service_uuid: string;
+  service_id: number;
+};
+
 /**
  * Locale-aware price parser.
  * Handles INR format (1,00,000.19 or 15,650.19) and USD format (15650.19).
