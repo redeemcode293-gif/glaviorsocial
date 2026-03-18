@@ -70,6 +70,81 @@ function detectPlatform(category: string, name: string): string {
   return "Other";
 }
 
+type SyncedProviderService = {
+  id: string;
+  service_id: number;
+  name: string;
+  description: string | null;
+  platform: string;
+  category: string;
+  base_price: number;
+  min_quantity: number;
+  max_quantity: number;
+  refill_supported: boolean | null;
+  dripfeed_supported: boolean | null;
+  is_active: boolean;
+};
+
+function buildPanelPayload(service: SyncedProviderService) {
+  return {
+    name: service.name,
+    description: service.description || service.name,
+    platform: service.platform || "Other",
+    category: service.category || "General",
+    min_quantity: Number(service.min_quantity) || 100,
+    max_quantity: Number(service.max_quantity) || 50000,
+    price: Number(service.base_price) || 0,
+    refill_supported: Boolean(service.refill_supported),
+    dripfeed_supported: Boolean(service.dripfeed_supported),
+    auto_refill_supported: false,
+    is_visible: Boolean(service.is_active),
+    provider_service_uuid: service.id,
+  };
+}
+
+async function syncPanelServices(providerServices: SyncedProviderService[]) {
+  if (!providerServices.length) return;
+
+  const providerIds = providerServices.map((service) => service.id);
+  const desiredPanelIds = providerServices.map((service) => service.service_id);
+
+  const [{ data: existingPanels }, { data: collidingIds }] = await Promise.all([
+    supabase
+      .from("panel_services")
+      .select("id, provider_service_uuid, service_id")
+      .in("provider_service_uuid", providerIds),
+    supabase
+      .from("panel_services")
+      .select("service_id")
+      .in("service_id", desiredPanelIds),
+  ]);
+
+  const panelsByProvider = new Map((existingPanels || []).map((panel) => [panel.provider_service_uuid, panel]));
+  const usedIds = new Set((collidingIds || []).map((panel) => Number(panel.service_id)));
+  const inserts: Array<Record<string, unknown>> = [];
+
+  for (const service of providerServices) {
+    const existingPanel = panelsByProvider.get(service.id);
+    const payload = buildPanelPayload(service);
+
+    if (existingPanel) {
+      const { error } = await supabase.from("panel_services").update(payload).eq("id", existingPanel.id);
+      if (error) throw error;
+      continue;
+    }
+
+    let nextPanelId = Number(service.service_id) || Math.floor(1000 + Math.random() * 9000);
+    while (usedIds.has(nextPanelId)) nextPanelId += 1;
+    usedIds.add(nextPanelId);
+    inserts.push({ service_id: nextPanelId, ...payload });
+  }
+
+  if (inserts.length > 0) {
+    const { error } = await supabase.from("panel_services").insert(inserts);
+    if (error) throw error;
+  }
+}
+
 export const BulkServiceImport = () => {
   const { toast } = useToast();
   const [apiUrl, setApiUrl] = useState("");
@@ -111,8 +186,9 @@ export const BulkServiceImport = () => {
 
       setServices(data.services);
       toast({ title: `Fetched ${data.services.length} services from provider` });
-    } catch (err: any) {
-      toast({ title: "Failed to fetch services", description: err.message, variant: "destructive" });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Unable to fetch provider services";
+      toast({ title: "Failed to fetch services", description: message, variant: "destructive" });
     }
     setLoading(false);
   };
@@ -212,6 +288,7 @@ export const BulkServiceImport = () => {
 
       let addedCount = 0;
       let updatedCount = 0;
+      const syncedProviderServiceIds: string[] = [];
 
       // Process in batches of 50 for speed
       const BATCH_SIZE = 50;
@@ -228,9 +305,10 @@ export const BulkServiceImport = () => {
               .in("provider_service_id", batchIds)
           : { data: [] };
 
-        const existingMap = new Map((existingServices || []).map((s: any) => [s.provider_service_id, s.id]));
+        const existingMap = new Map((existingServices || []).map((service) => [service.provider_service_id, service.id]));
 
-        const toInsertBatch: any[] = [];
+        const toInsertBatch: Array<Record<string, unknown>> = [];
+        const insertedProviderServiceIds: string[] = [];
 
         for (const service of batch) {
           const platform = detectPlatform(service.category, service.name);
@@ -269,10 +347,12 @@ export const BulkServiceImport = () => {
                 is_active: true,
               })
               .eq("id", existingMap.get(providerServiceId));
+            syncedProviderServiceIds.push(providerServiceId);
             updatedCount++;
           } else {
-            const internalServiceId = Math.floor(100 + Math.random() * 900);
+            const internalServiceId = Math.floor(1000 + Math.random() * 9000);
             toInsertBatch.push({ ...serviceData, service_id: internalServiceId });
+            insertedProviderServiceIds.push(providerServiceId);
           }
         }
 
@@ -281,6 +361,7 @@ export const BulkServiceImport = () => {
           const { error: insertErr } = await supabase.from("services").insert(toInsertBatch);
           if (!insertErr) {
             addedCount += toInsertBatch.length;
+            syncedProviderServiceIds.push(...insertedProviderServiceIds);
           } else {
             console.error("Batch insert error:", insertErr);
             // Fallback: insert one by one
@@ -292,6 +373,17 @@ export const BulkServiceImport = () => {
         }
 
         setImportProgress({ done: Math.min(i + BATCH_SIZE, toImport.length), total: toImport.length });
+      }
+
+      if (providerId && syncedProviderServiceIds.length > 0) {
+        const { data: syncedServices, error: syncedServicesError } = await supabase
+          .from('services')
+          .select('id, service_id, name, description, platform, category, base_price, min_quantity, max_quantity, refill_supported, dripfeed_supported, is_active')
+          .eq('provider_id', providerId)
+          .in('provider_service_id', syncedProviderServiceIds);
+
+        if (syncedServicesError) throw syncedServicesError;
+        await syncPanelServices(syncedServices || []);
       }
 
       // Update provider last_sync_at
@@ -307,8 +399,9 @@ export const BulkServiceImport = () => {
         description: `Added: ${addedCount} new, Updated: ${updatedCount} existing. All services are live immediately.`,
       });
       setSelected(new Set());
-    } catch (err: any) {
-      toast({ title: "Import Failed", description: err.message, variant: "destructive" });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Import failed";
+      toast({ title: "Import Failed", description: message, variant: "destructive" });
     }
     setImporting(false);
     setImportProgress({ done: 0, total: 0 });
