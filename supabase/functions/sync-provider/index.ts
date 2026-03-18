@@ -5,6 +5,40 @@ const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+const INR_TO_USD = 1 / 92;
+
+type ProviderServiceRecord = {
+  service: string | number;
+  name: string;
+  category: string;
+  rate: string | number;
+  min: string | number;
+  max: string | number;
+  refill?: boolean | string;
+  dripfeed?: boolean | string;
+  description?: string;
+};
+
+type StoredServiceRecord = {
+  id: string;
+  service_id: number;
+  name: string;
+  description: string | null;
+  platform: string;
+  category: string;
+  base_price: number;
+  min_quantity: number;
+  max_quantity: number;
+  refill_supported: boolean | null;
+  dripfeed_supported: boolean | null;
+  is_active: boolean;
+};
+
+type PanelServiceRecord = {
+  id: string;
+  provider_service_uuid: string;
+  service_id: number;
+};
 
 type ProviderServiceRecord = {
   service: string | number;
@@ -53,6 +87,22 @@ function parseProviderPrice(raw: string | number): number {
   const noCommas = cleaned.replace(/,/g, '');
   const parsed = parseFloat(noCommas);
   return isNaN(parsed) ? 0 : parsed;
+}
+
+function toUsd(raw: string | number, currency?: string): number {
+  const rawValue = parseProviderPrice(raw);
+  if (rawValue === 0) return 0;
+
+  const normalizedCurrency = (currency || 'USD').toUpperCase();
+  if (normalizedCurrency === 'INR' || normalizedCurrency === '₹' || normalizedCurrency === 'RS') {
+    return rawValue * INR_TO_USD;
+  }
+
+  if (rawValue > 50) {
+    return rawValue * INR_TO_USD;
+  }
+
+  return rawValue;
 }
 
 function normalizeServiceText(value: string | null | undefined, fallback: string): string {
@@ -289,7 +339,7 @@ serve(async (req) => {
 
         for (const service of batch) {
           const platform = detectPlatform(service.category || '', service.name || '');
-          const providerPrice = parseProviderPrice(service.rate);
+          const providerPrice = toUsd(service.rate);
           const basePrice = providerPrice * 1.3; // 30% default margin
           const providerServiceId = String(service.service);
 

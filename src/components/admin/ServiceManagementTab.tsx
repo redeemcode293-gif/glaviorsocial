@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Progress } from "@/components/ui/progress";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
@@ -46,6 +47,7 @@ interface Provider {
 
 const PLATFORMS = ['Instagram', 'YouTube', 'TikTok', 'Telegram', 'X', 'Facebook', 'Spotify', 'Discord', 'Twitch', 'Snapchat', 'LinkedIn', 'Pinterest', 'Other'];
 const CATEGORIES = ['Followers', 'Likes', 'Views', 'Comments', 'Shares', 'Subscribers', 'Members', 'Reactions', 'Saves', 'Impressions', 'Reach', 'General', 'Premium', 'Other'];
+const INR_TO_USD = 1 / 92;
 
 export function ServiceManagementTab() {
   const [services, setServices] = useState<Service[]>([]);
@@ -55,6 +57,8 @@ export function ServiceManagementTab() {
   const [platformFilter, setPlatformFilter] = useState<string>("all");
   const [selectedServices, setSelectedServices] = useState<Set<string>>(new Set());
   const [currentPage, setCurrentPage] = useState(1);
+  const [isFixingPrices, setIsFixingPrices] = useState(false);
+  const [priceFixProgress, setPriceFixProgress] = useState({ done: 0, total: 0 });
   
   // Dialogs
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -157,6 +161,81 @@ export function ServiceManagementTab() {
         .delete()
         .in('provider_service_uuid', batch);
       if (error) throw error;
+    }
+  };
+
+const fixCorruptedPrices = async () => {
+    setIsFixingPrices(true);
+    setPriceFixProgress({ done: 0, total: 0 });
+
+    try {
+      const corruptedServices: Service[] = [];
+      const FETCH_BATCH = 1000;
+
+      for (let offset = 0; ; offset += FETCH_BATCH) {
+        const { data, error } = await supabase
+          .from('services')
+          .select('*')
+          .gt('base_price', 50)
+          .order('id')
+          .range(offset, offset + FETCH_BATCH - 1);
+
+        if (error) throw error;
+if (!data || data.length === 0) break;
+
+        corruptedServices.push(...data);
+
+        if (data.length < FETCH_BATCH) break;
+      }
+
+      if (corruptedServices.length === 0) {
+        toast({ title: "No corrupted prices found" });
+        setPriceFixProgress({ done: 0, total: 0 });
+        return;
+      }
+
+      setPriceFixProgress({ done: 0, total: corruptedServices.length });
+
+      const UPDATE_BATCH = 50;
+      for (let i = 0; i < corruptedServices.length; i += UPDATE_BATCH) {
+        const batch = corruptedServices.slice(i, i + UPDATE_BATCH);
+
+        for (const service of batch) {
+          const correctedBasePrice = Number(service.base_price) * INR_TO_USD;
+          const correctedProviderPrice =
+            service.provider_price !== null ? Number(service.provider_price) * INR_TO_USD : null;
+
+          const { error: serviceError } = await supabase
+            .from('services')
+            .update({
+              base_price: correctedBasePrice,
+              provider_price: correctedProviderPrice,
+            })
+            .eq('id', service.id);
+          if (serviceError) throw serviceError;
+
+          const { error: panelError } = await supabase
+            .from('panel_services')
+            .update({ price: correctedBasePrice })
+            .eq('service_id', service.service_id);
+          if (panelError) throw panelError;
+        }
+
+        setPriceFixProgress({
+          done: Math.min(i + UPDATE_BATCH, corruptedServices.length),
+          total: corruptedServices.length,
+        });
+
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+
+      toast({ title: `Fixed ${corruptedServices.length} services — prices now correct` });
+      await fetchData();
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Failed to repair corrupted prices';
+      toast({ title: "Failed to fix corrupted prices", description: message, variant: "destructive" });
+    } finally {
+      setIsFixingPrices(false);
     }
   };
 
@@ -482,6 +561,10 @@ export function ServiceManagementTab() {
               <Button variant="outline" size="icon" onClick={fetchData}>
                 <RefreshCw className="h-4 w-4" />
               </Button>
+              <Button variant="destructive" onClick={fixCorruptedPrices} disabled={isFixingPrices}>
+                {isFixingPrices ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : null}
+                Fix Corrupted Prices
+              </Button>
               <Button onClick={() => { resetEditForm(); setAddDialogOpen(true); }}>
                 <Plus className="h-4 w-4 mr-2" />Add Service
               </Button>
@@ -489,6 +572,18 @@ export function ServiceManagementTab() {
           </div>
         </CardHeader>
         <CardContent>
+          {isFixingPrices && priceFixProgress.total > 0 && (
+            <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 p-4">
+              <div className="mb-2 flex items-center justify-between text-sm">
+                <span className="font-medium text-destructive">Fixing corrupted INR prices</span>
+                <span className="text-destructive">
+                  {priceFixProgress.done}/{priceFixProgress.total}
+                </span>
+              </div>
+              <Progress value={(priceFixProgress.done / priceFixProgress.total) * 100} />
+            </div>
+          )}
+
           {/* Bulk Actions Bar */}
           {selectedServices.size > 0 && (
             <div className="flex items-center gap-4 mb-4 p-3 bg-primary/10 border border-primary/30 rounded-lg">
