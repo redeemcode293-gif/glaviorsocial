@@ -1,5 +1,4 @@
-# Welcome to your Lovable project
-
+TANISHQ
 ## Project info
 
 
