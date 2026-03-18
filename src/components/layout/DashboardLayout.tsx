@@ -7,7 +7,6 @@ import {
   LayoutDashboard,
   ShoppingCart,
   Package,
-  History,
   Wallet,
   RefreshCw,
   Code2,
@@ -49,37 +48,22 @@ interface DashboardLayoutProps {
 export const DashboardLayout = ({ children, title, subtitle }: DashboardLayoutProps) => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, wallet, profile } = useAuth();
   const { t, formatPrice } = useLocalization();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [balance, setBalance] = useState(0);
   const [isAdmin, setIsAdmin] = useState(false);
   const [userEmail, setUserEmail] = useState("");
 
   useEffect(() => {
     if (user) {
-      fetchUserData();
-      checkAdminStatus();
+      setUserEmail(user.email || "");
+      void checkAdminStatus();
+      return;
     }
+
+    setUserEmail("");
+    setIsAdmin(false);
   }, [user]);
-
-  const fetchUserData = async () => {
-    if (!user) return;
-
-    // Fetch wallet balance
-    const { data: wallet } = await supabase
-      .from('wallets')
-      .select('balance')
-      .eq('user_id', user.id)
-      .maybeSingle();
-
-    if (wallet) {
-      setBalance(Number(wallet.balance) || 0);
-    }
-
-    // Get user email
-    setUserEmail(user.email || "");
-  };
 
   const checkAdminStatus = async () => {
     if (!user) return;
@@ -103,9 +87,19 @@ export const DashboardLayout = ({ children, title, subtitle }: DashboardLayoutPr
   };
 
   const getUserInitials = () => {
+    if (profile?.full_name) {
+      return profile.full_name
+        .split(" ")
+        .map((part: string) => part[0])
+        .join("")
+        .slice(0, 2)
+        .toUpperCase();
+    }
+
     if (userEmail) {
       return userEmail.substring(0, 2).toUpperCase();
     }
+
     return "U";
   };
 
@@ -142,7 +136,7 @@ export const DashboardLayout = ({ children, title, subtitle }: DashboardLayoutPr
         <div className="p-4">
           <div className="p-3 rounded-lg bg-gradient-to-r from-primary/10 to-accent/10 border border-primary/20">
             <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">{t("Balance")}</p>
-            <p className="font-display text-xl font-bold text-primary">{formatPrice(balance)}</p>
+            <p className="font-display text-xl font-bold text-primary">{formatPrice(Number(wallet?.balance || 0))}</p>
             <Button 
               size="sm" 
               className="w-full mt-2 h-7 text-xs"

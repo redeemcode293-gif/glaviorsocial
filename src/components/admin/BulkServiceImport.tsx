@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,20 +33,33 @@ interface ProviderService {
 }
 
 const PLATFORMS = ["Instagram", "YouTube", "TikTok", "Telegram", "X", "Facebook", "Spotify", "Discord", "Twitch", "Snapchat", "WhatsApp", "Threads", "LinkedIn", "Pinterest", "Reddit", "Apple", "Other"];
+const INR_TO_USD = 1 / 92;
 
 /**
  * Locale-aware price parser — strips commas (INR thousand separators like 1,00,000.00 or 15,650.19)
  * before parsing so we never produce millions from thousands.
  */
-function parseProviderPrice(raw: string | number): number {
+function parseRate(raw: string | number): number {
   if (typeof raw === 'number') return isNaN(raw) ? 0 : raw;
   if (!raw) return 0;
-  // Remove currency symbols, spaces
-  const cleaned = String(raw).replace(/[₹Rs$€£\s]/g, '').trim();
-  // Remove ALL commas (they're thousand-separators in both INR and USD formats)
-  const noCommas = cleaned.replace(/,/g, '');
-  const parsed = parseFloat(noCommas);
+  const cleaned = String(raw)
+    .replace(/[₹Rs$€£\s]/gi, '')
+    .replace(/,/g, '')
+    .trim();
+  const parsed = parseFloat(cleaned);
   return isNaN(parsed) ? 0 : parsed;
+}
+
+function toUSD(raw: string | number, currency: string) {
+  const rawValue = parseRate(raw);
+  if (rawValue === 0) return 0;
+
+  const normalizedCurrency = (currency || "USD").toUpperCase();
+  if (normalizedCurrency === "INR" || normalizedCurrency === "₹" || normalizedCurrency === "RS") {
+    return rawValue * INR_TO_USD;
+  }
+
+  return rawValue;
 }
 
 function detectPlatform(category: string, name: string): string {
@@ -70,11 +83,87 @@ function detectPlatform(category: string, name: string): string {
   return "Other";
 }
 
+type SyncedProviderService = {
+  id: string;
+  service_id: number;
+  name: string;
+  description: string | null;
+  platform: string;
+  category: string;
+  base_price: number;
+  min_quantity: number;
+  max_quantity: number;
+  refill_supported: boolean | null;
+  dripfeed_supported: boolean | null;
+  is_active: boolean;
+};
+
+function buildPanelPayload(service: SyncedProviderService) {
+  return {
+    name: service.name,
+    description: service.description || service.name,
+    platform: service.platform || "Other",
+    category: service.category || "General",
+    min_quantity: Number(service.min_quantity) || 100,
+    max_quantity: Number(service.max_quantity) || 50000,
+    price: Number(service.base_price) || 0,
+    refill_supported: Boolean(service.refill_supported),
+    dripfeed_supported: Boolean(service.dripfeed_supported),
+    auto_refill_supported: false,
+    is_visible: Boolean(service.is_active),
+    provider_service_uuid: service.id,
+  };
+}
+
+async function syncPanelServices(providerServices: SyncedProviderService[]) {
+  if (!providerServices.length) return;
+
+  const providerIds = providerServices.map((service) => service.id);
+  const desiredPanelIds = providerServices.map((service) => service.service_id);
+
+  const [{ data: existingPanels }, { data: collidingIds }] = await Promise.all([
+    supabase
+      .from("panel_services")
+      .select("id, provider_service_uuid, service_id")
+      .in("provider_service_uuid", providerIds),
+    supabase
+      .from("panel_services")
+      .select("service_id")
+      .in("service_id", desiredPanelIds),
+  ]);
+
+  const panelsByProvider = new Map((existingPanels || []).map((panel) => [panel.provider_service_uuid, panel]));
+  const usedIds = new Set((collidingIds || []).map((panel) => Number(panel.service_id)));
+  const inserts: Array<Record<string, unknown>> = [];
+
+  for (const service of providerServices) {
+    const existingPanel = panelsByProvider.get(service.id);
+    const payload = buildPanelPayload(service);
+
+    if (existingPanel) {
+      const { error } = await supabase.from("panel_services").update(payload).eq("id", existingPanel.id);
+      if (error) throw error;
+      continue;
+    }
+
+    let nextPanelId = Number(service.service_id) || Math.floor(1000 + Math.random() * 9000);
+    while (usedIds.has(nextPanelId)) nextPanelId += 1;
+    usedIds.add(nextPanelId);
+    inserts.push({ service_id: nextPanelId, ...payload });
+  }
+
+  if (inserts.length > 0) {
+    const { error } = await supabase.from("panel_services").insert(inserts);
+    if (error) throw error;
+  }
+}
+
 export const BulkServiceImport = () => {
   const { toast } = useToast();
   const [apiUrl, setApiUrl] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [providerName, setProviderName] = useState("");
+  const [providerCurrency, setProviderCurrency] = useState("INR");
   const [services, setServices] = useState<ProviderService[]>([]);
   const [selected, setSelected] = useState<Set<string | number>>(new Set());
   const [loading, setLoading] = useState(false);
@@ -84,6 +173,7 @@ export const BulkServiceImport = () => {
   const [platformFilter, setPlatformFilter] = useState("all");
   const [marginPercent, setMarginPercent] = useState("30");
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  const [skippedHighPriceCount, setSkippedHighPriceCount] = useState(0);
 
   const fetchServices = async () => {
     if (!apiUrl || !apiKey) {
@@ -93,6 +183,7 @@ export const BulkServiceImport = () => {
     setLoading(true);
     setServices([]);
     setSelected(new Set());
+    setSkippedHighPriceCount(0);
     try {
       const response = await supabase.functions.invoke("sync-provider", {
         body: {
@@ -111,8 +202,9 @@ export const BulkServiceImport = () => {
 
       setServices(data.services);
       toast({ title: `Fetched ${data.services.length} services from provider` });
-    } catch (err: any) {
-      toast({ title: "Failed to fetch services", description: err.message, variant: "destructive" });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Unable to fetch provider services";
+      toast({ title: "Failed to fetch services", description: message, variant: "destructive" });
     }
     setLoading(false);
   };
@@ -134,6 +226,15 @@ export const BulkServiceImport = () => {
     acc[cat].push(s);
     return acc;
   }, {} as Record<string, ProviderService[]>);
+
+  const previewHasHighPrice = useMemo(() => {
+    const margin = parseFloat(marginPercent || "0") / 100;
+    return services.some((service) => {
+      const providerPriceUSD = toUSD(service.rate, providerCurrency);
+      const panelPriceUSD = providerPriceUSD * (1 + margin);
+      return panelPriceUSD > 50;
+    });
+  }, [services, marginPercent, providerCurrency]);
 
   const toggleSelectAll = () => {
     if (selected.size === filteredServices.length) {
@@ -176,6 +277,7 @@ export const BulkServiceImport = () => {
     }
     setImporting(true);
     setImportProgress({ done: 0, total: selected.size });
+    setSkippedHighPriceCount(0);
 
     const margin = parseFloat(marginPercent) / 100;
     const toImport = services.filter((s) => selected.has(s.service));
@@ -212,6 +314,8 @@ export const BulkServiceImport = () => {
 
       let addedCount = 0;
       let updatedCount = 0;
+      const syncedProviderServiceIds: string[] = [];
+      let errors = 0;
 
       // Process in batches of 50 for speed
       const BATCH_SIZE = 50;
@@ -228,16 +332,24 @@ export const BulkServiceImport = () => {
               .in("provider_service_id", batchIds)
           : { data: [] };
 
-        const existingMap = new Map((existingServices || []).map((s: any) => [s.provider_service_id, s.id]));
+        const existingMap = new Map((existingServices || []).map((service) => [service.provider_service_id, service.id]));
 
-        const toInsertBatch: any[] = [];
+        const toInsertBatch: Array<Record<string, unknown>> = [];
+        const insertedProviderServiceIds: string[] = [];
 
         for (const service of batch) {
           const platform = detectPlatform(service.category, service.name);
-          // Use locale-aware parser to avoid INR comma issues
-          const providerPrice = parseProviderPrice(service.rate);
+          const providerPrice = toUSD(service.rate, providerCurrency);
           const basePrice = providerPrice * (1 + margin);
           const providerServiceId = String(service.service);
+
+          if (basePrice > 50) {
+            console.error(
+              `PRICE SANITY FAIL: service ${service.service}, raw rate ${service.rate}, panelUSD=${basePrice}. Skipping.`,
+            );
+            errors += 1;
+            continue;
+          }
 
           const serviceData = {
             name: service.name,
@@ -269,10 +381,12 @@ export const BulkServiceImport = () => {
                 is_active: true,
               })
               .eq("id", existingMap.get(providerServiceId));
+            syncedProviderServiceIds.push(providerServiceId);
             updatedCount++;
           } else {
-            const internalServiceId = Math.floor(100 + Math.random() * 900);
+            const internalServiceId = Math.floor(1000 + Math.random() * 9000);
             toInsertBatch.push({ ...serviceData, service_id: internalServiceId });
+            insertedProviderServiceIds.push(providerServiceId);
           }
         }
 
@@ -281,6 +395,7 @@ export const BulkServiceImport = () => {
           const { error: insertErr } = await supabase.from("services").insert(toInsertBatch);
           if (!insertErr) {
             addedCount += toInsertBatch.length;
+            syncedProviderServiceIds.push(...insertedProviderServiceIds);
           } else {
             console.error("Batch insert error:", insertErr);
             // Fallback: insert one by one
@@ -294,6 +409,17 @@ export const BulkServiceImport = () => {
         setImportProgress({ done: Math.min(i + BATCH_SIZE, toImport.length), total: toImport.length });
       }
 
+      if (providerId && syncedProviderServiceIds.length > 0) {
+        const { data: syncedServices, error: syncedServicesError } = await supabase
+          .from('services')
+          .select('id, service_id, name, description, platform, category, base_price, min_quantity, max_quantity, refill_supported, dripfeed_supported, is_active')
+          .eq('provider_id', providerId)
+          .in('provider_service_id', syncedProviderServiceIds);
+
+        if (syncedServicesError) throw syncedServicesError;
+        await syncPanelServices(syncedServices || []);
+      }
+
       // Update provider last_sync_at
       if (providerId) {
         await supabase
@@ -304,11 +430,13 @@ export const BulkServiceImport = () => {
 
       toast({
         title: "Import Complete ✓",
-        description: `Added: ${addedCount} new, Updated: ${updatedCount} existing. All services are live immediately.`,
+        description: `Added: ${addedCount} new, Updated: ${updatedCount} existing. Skipped: ${errors}. All imported services are live immediately.`,
       });
+      setSkippedHighPriceCount(errors);
       setSelected(new Set());
-    } catch (err: any) {
-      toast({ title: "Import Failed", description: err.message, variant: "destructive" });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Import failed";
+      toast({ title: "Import Failed", description: message, variant: "destructive" });
     }
     setImporting(false);
     setImportProgress({ done: 0, total: 0 });
@@ -331,7 +459,7 @@ export const BulkServiceImport = () => {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="space-y-2">
               <Label>Provider Name (optional)</Label>
               <Input
@@ -350,15 +478,27 @@ export const BulkServiceImport = () => {
                 className="bg-secondary/30 border-border/30"
               />
             </div>
-            <div className="space-y-2">
-              <Label>API Key</Label>
-              <Input
+              <div className="space-y-2">
+                <Label>API Key</Label>
+                <Input
                 type="password"
                 placeholder="Your API key"
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
                 className="bg-secondary/30 border-border/30"
               />
+            </div>
+            <div className="space-y-2">
+              <Label>Provider Currency</Label>
+              <Select value={providerCurrency} onValueChange={setProviderCurrency}>
+                <SelectTrigger className="bg-secondary/30 border-border/30">
+                  <SelectValue placeholder="Select currency" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="INR">INR (₹)</SelectItem>
+                  <SelectItem value="USD">USD ($)</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <Button onClick={fetchServices} disabled={loading} className="w-full md:w-auto">
@@ -439,6 +579,17 @@ export const BulkServiceImport = () => {
                 )}
               </Button>
             </div>
+
+            {previewHasHighPrice && (
+              <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                ⚠️ Warning: Some services have unusually high prices. If your provider charges in Indian Rupees (₹), make sure Provider Currency is set to INR. Current rate: 1 USD = ₹92.
+              </div>
+            )}
+            {skippedHighPriceCount > 0 && (
+              <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                Skipped {skippedHighPriceCount} services during the last import because their computed panel price exceeded $500.
+              </div>
+            )}
           </CardHeader>
 
           <CardContent>
@@ -483,15 +634,17 @@ export const BulkServiceImport = () => {
                         <div className="divide-y divide-border/10">
                           {catServices.map((service) => {
                             const platform = detectPlatform(service.category, service.name);
-                            // Use locale-aware parser
-                            const providerPrice = parseProviderPrice(service.rate);
+                            const providerPrice = toUSD(service.rate, providerCurrency);
                             const ourPrice = providerPrice * (1 + parseFloat(marginPercent) / 100);
+                            const isHighPrice = ourPrice > 50;
 
                             return (
                               <div
                                 key={service.service}
                                 className={`flex items-center gap-3 p-3 hover:bg-secondary/10 transition-colors cursor-pointer ${
                                   selected.has(service.service) ? "bg-primary/5" : ""
+                                } ${
+                                  isHighPrice ? "border-l-4 border-destructive bg-destructive/5" : ""
                                 }`}
                                 onClick={() => toggleService(service.service)}
                               >
@@ -517,10 +670,10 @@ export const BulkServiceImport = () => {
                                   </div>
                                 </div>
                                 <div className="text-right shrink-0 space-y-0.5">
-                                  <p className="text-xs text-muted-foreground">
+                                  <p className={`text-xs ${isHighPrice ? "text-destructive" : "text-muted-foreground"}`}>
                                     Provider: ${providerPrice.toFixed(4)}/1K
                                   </p>
-                                  <p className="text-xs font-medium text-primary">
+                                  <p className={`text-xs font-medium ${isHighPrice ? "text-destructive" : "text-primary"}`}>
                                     Panel: ${ourPrice.toFixed(4)}/1K
                                   </p>
                                 </div>

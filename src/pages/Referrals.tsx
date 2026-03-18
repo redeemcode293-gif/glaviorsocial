@@ -1,22 +1,21 @@
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { 
+import {
   Users,
   Gift,
   DollarSign,
   Copy,
   Share2,
   TrendingUp,
-  CheckCircle2,
-  Clock,
   Percent,
   Twitter,
-  Facebook
+  Facebook,
+  LucideIcon,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -26,7 +25,7 @@ import { useLocalization } from "@/contexts/LocalizationContext";
 interface ReferralStat {
   label: string;
   value: string;
-  icon: any;
+  icon: LucideIcon;
   color: string;
 }
 
@@ -41,7 +40,6 @@ interface ReferralEntry {
 
 const Referrals = () => {
   const [referralLink, setReferralLink] = useState("");
-  const [referralCode, setReferralCode] = useState("");
   const [loading, setLoading] = useState(true);
   const [referralStats, setReferralStats] = useState<ReferralStat[]>([]);
   const [referralHistory, setReferralHistory] = useState<ReferralEntry[]>([]);
@@ -49,45 +47,58 @@ const Referrals = () => {
   const { user, profile } = useAuth();
   const { t, formatPrice } = useLocalization();
 
+  const origin = useMemo(() => window.location.origin.replace(/\/$/, ""), []);
+
   useEffect(() => {
     if (user) {
-      fetchReferralData();
-    } else {
-      setLoading(false);
+      void fetchReferralData();
+      return;
     }
-  }, [user, profile]);
+
+    setLoading(false);
+    setReferralStats([]);
+    setReferralHistory([]);
+    setReferralLink("");
+  }, [user, profile?.referral_code]);
 
   const fetchReferralData = async () => {
+    if (!user) return;
+
     try {
       setLoading(true);
-      
-      if (!user) {
-        setLoading(false);
-        return;
-      }
 
-      // Fetch user profile for referral code
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('id, referral_code')
-        .eq('user_id', user.id)
+      const { data: myProfile } = await supabase
+        .from("profiles")
+        .select("referral_code")
+        .eq("user_id", user.id)
         .maybeSingle();
 
-      if (profile?.referral_code) {
-        setReferralCode(profile.referral_code);
-        setReferralLink(`https://smmdaddy.com/ref/${profile.referral_code}`);
+      if (myProfile?.referral_code) {
+        setReferralLink(`${origin}/ref/${myProfile.referral_code}`);
       }
 
-      // Fetch referrals made by this user
-      const { data: referrals } = await supabase
-        .from('referrals')
-        .select('*')
-        .eq('referrer_id', profile?.id || '');
+      const { data: referrals, error: referralError } = await supabase
+        .from("referrals")
+        .select("*")
+        .eq("referrer_id", user.id)
+        .order("created_at", { ascending: false });
+
+      if (referralError) throw referralError;
+
+      const referredIds = (referrals || []).map((item) => item.referred_id);
+      const { data: referredProfiles } = referredIds.length
+        ? await supabase
+            .from("profiles")
+            .select("user_id, email, full_name")
+            .in("user_id", referredIds)
+        : { data: [] as Array<Record<string, never>> };
+
+      const profileMap = new Map((referredProfiles || []).map((entry) => [entry.user_id, entry]));
 
       const totalReferrals = referrals?.length || 0;
-      const activeReferrals = referrals?.filter(r => r.status === 'active').length || 0;
-      const totalEarnings = referrals?.reduce((sum, r) => sum + (r.total_earnings || 0), 0) || 0;
-      const commissionRate = referrals?.[0]?.commission_rate || 10;
+      const activeReferrals = referrals?.filter((r) => r.status === "active").length || 0;
+      const totalEarnings = referrals?.reduce((sum, r) => sum + Number(r.total_earnings || 0), 0) || 0;
+      const commissionRate = Number(referrals?.[0]?.commission_rate || 10);
 
       setReferralStats([
         { label: t("Total Referrals"), value: totalReferrals.toString(), icon: Users, color: "text-primary" },
@@ -96,40 +107,53 @@ const Referrals = () => {
         { label: t("Commission Rate"), value: `${commissionRate}%`, icon: Percent, color: "text-warning" },
       ]);
 
-      // Transform referrals to history format
-      const history: ReferralEntry[] = (referrals || []).map(ref => ({
-        id: ref.id,
-        user: ref.referred_id.substring(0, 8) + '***',
-        orders: 0,
-        earnings: ref.total_earnings || 0,
-        status: ref.status || 'pending',
-        joined: new Date(ref.created_at).toLocaleDateString()
-      }));
+      const history: ReferralEntry[] = (referrals || []).map((ref) => {
+        const referredProfile = profileMap.get(ref.referred_id);
+        const displayName = referredProfile?.full_name || referredProfile?.email || `${ref.referred_id.slice(0, 8)}***`;
+
+        return {
+          id: ref.id,
+          user: displayName,
+          orders: 0,
+          earnings: Number(ref.total_earnings || 0),
+          status: ref.status || "inactive",
+          joined: new Date(ref.created_at).toLocaleDateString(),
+        };
+      });
 
       setReferralHistory(history);
     } catch (error) {
-      console.error('Error fetching referral data:', error);
+      console.error("Error fetching referral data:", error);
+      toast({
+        title: t("Error"),
+        description: t("Failed to load referral data."),
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(referralLink);
+  const handleCopy = async () => {
+    if (!referralLink) return;
+
+    await navigator.clipboard.writeText(referralLink);
     toast({
       title: t("Link Copied!"),
       description: t("Referral link copied to clipboard."),
     });
   };
 
-  const handleShare = (platform: string) => {
+  const handleShare = (platform: "twitter" | "facebook") => {
+    if (!referralLink) return;
+
     const shareText = t(`Join me on SMM Daddy and get premium SMM services! Use my referral link: ${referralLink}`);
-    const shareUrls: Record<string, string> = {
+    const shareUrls = {
       twitter: `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}`,
       facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(referralLink)}`,
     };
-    
-    window.open(shareUrls[platform], '_blank');
+
+    window.open(shareUrls[platform], "_blank", "noopener,noreferrer");
   };
 
   if (loading) {
@@ -138,7 +162,7 @@ const Referrals = () => {
         <div className="space-y-6">
           <Skeleton className="h-40 w-full" />
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-24" />)}
+            {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-24" />)}
           </div>
           <Skeleton className="h-60 w-full" />
         </div>
@@ -149,7 +173,6 @@ const Referrals = () => {
   return (
     <DashboardLayout title={t("Refer & Earn")} subtitle={t("Invite friends and earn commissions")}>
       <div className="space-y-6 animate-fade-in">
-        {/* Referral Banner */}
         <Card className="border-primary/20 bg-gradient-to-r from-primary/5 via-accent/5 to-primary/5 overflow-hidden relative">
           <div className="absolute inset-0 bg-hero-glow opacity-50" />
           <CardContent className="p-6 relative">
@@ -179,23 +202,11 @@ const Referrals = () => {
                   </Button>
                 </div>
                 <div className="flex justify-center lg:justify-start gap-2 mt-3">
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={() => handleShare('twitter')}
-                    className="border-border/50"
-                    disabled={!referralLink}
-                  >
+                  <Button variant="outline" size="sm" onClick={() => handleShare("twitter")} className="border-border/50" disabled={!referralLink}>
                     <Twitter className="h-4 w-4 mr-1" />
                     Tweet
                   </Button>
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={() => handleShare('facebook')}
-                    className="border-border/50"
-                    disabled={!referralLink}
-                  >
+                  <Button variant="outline" size="sm" onClick={() => handleShare("facebook")} className="border-border/50" disabled={!referralLink}>
                     <Facebook className="h-4 w-4 mr-1" />
                     {t("Share")}
                   </Button>
@@ -205,10 +216,9 @@ const Referrals = () => {
           </CardContent>
         </Card>
 
-        {/* Stats Grid */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {referralStats.map((stat, index) => (
-            <Card 
+            <Card
               key={stat.label}
               className="border-border/30 bg-card/60 backdrop-blur-sm hover:border-border/50 transition-all duration-300 hover:scale-[1.02]"
               style={{ animationDelay: `${index * 100}ms` }}
@@ -228,94 +238,65 @@ const Referrals = () => {
           ))}
         </div>
 
-        {/* How It Works */}
         <Card className="border-border/30 bg-card/60 backdrop-blur-sm">
           <CardHeader>
             <CardTitle className="text-lg font-display">{t("How It Works")}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid md:grid-cols-3 gap-6">
-              <div className="text-center p-4 hover:bg-secondary/10 rounded-lg transition-colors">
-                <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
-                  <Share2 className="h-6 w-6 text-primary" />
+              {[
+                { icon: Share2, title: t("1. Share Your Link"), text: t("Share your unique referral link with friends and followers") },
+                { icon: Users, title: t("2. Friends Sign Up"), text: t("When they register using your link, they're linked to you") },
+                { icon: DollarSign, title: t("3. Earn Commissions"), text: t("Get 10% of every order they place, credited automatically") },
+              ].map((item, index) => (
+                <div key={index} className="text-center p-4 hover:bg-secondary/10 rounded-lg transition-colors">
+                  <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                    <item.icon className="h-6 w-6 text-primary" />
+                  </div>
+                  <h4 className="font-medium text-foreground mb-2">{item.title}</h4>
+                  <p className="text-sm text-muted-foreground">{item.text}</p>
                 </div>
-                <h4 className="font-medium text-foreground mb-2">{t("1. Share Your Link")}</h4>
-                <p className="text-sm text-muted-foreground">{t("Share your unique referral link with friends and followers")}</p>
-              </div>
-              <div className="text-center p-4 hover:bg-secondary/10 rounded-lg transition-colors">
-                <div className="w-12 h-12 rounded-full bg-accent/10 flex items-center justify-center mx-auto mb-4">
-                  <Users className="h-6 w-6 text-accent" />
-                </div>
-                <h4 className="font-medium text-foreground mb-2">{t("2. Friends Sign Up")}</h4>
-                <p className="text-sm text-muted-foreground">{t("When they register using your link, they're linked to you")}</p>
-              </div>
-              <div className="text-center p-4 hover:bg-secondary/10 rounded-lg transition-colors">
-                <div className="w-12 h-12 rounded-full bg-success/10 flex items-center justify-center mx-auto mb-4">
-                  <DollarSign className="h-6 w-6 text-success" />
-                </div>
-                <h4 className="font-medium text-foreground mb-2">{t("3. Earn Commissions")}</h4>
-                <p className="text-sm text-muted-foreground">{t("Get 10% of every order they place, credited automatically")}</p>
-              </div>
+              ))}
             </div>
           </CardContent>
         </Card>
 
-        {/* Referral History */}
         <Card className="border-border/30 bg-card/60 backdrop-blur-sm">
           <CardHeader>
             <CardTitle className="text-lg font-display">{t("Your Referrals")}</CardTitle>
             <CardDescription>{t("Track your referral activity and earnings")}</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-border/30">
-                    <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">{t("User")}</th>
-                    <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">{t("Joined")}</th>
-                    <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">{t("Orders")}</th>
-                    <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">{t("Earnings")}</th>
-                    <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">{t("Status")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {referralHistory.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="p-8 text-center text-muted-foreground">
-                        <Users className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                        <p>{t("No referrals yet. Share your link to start earning!")}</p>
-                      </td>
+            {referralHistory.length === 0 ? (
+              <div className="text-center py-10 text-muted-foreground">{t("No referrals yet")}</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-border/30">
+                      <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">{t("User")}</th>
+                      <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">{t("Joined")}</th>
+                      <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">{t("Orders")}</th>
+                      <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">{t("Earnings")}</th>
+                      <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">{t("Status")}</th>
                     </tr>
-                  ) : (
-                    referralHistory.map((ref) => (
-                      <tr key={ref.id} className="border-b border-border/20 hover:bg-secondary/10 transition-colors">
+                  </thead>
+                  <tbody>
+                    {referralHistory.map((item) => (
+                      <tr key={item.id} className="border-b border-border/20">
+                        <td className="p-3">{item.user}</td>
+                        <td className="p-3">{item.joined}</td>
+                        <td className="p-3">{item.orders}</td>
+                        <td className="p-3 font-mono">{formatPrice(item.earnings)}</td>
                         <td className="p-3">
-                          <span className="font-mono text-sm text-foreground">{ref.user}</span>
-                        </td>
-                        <td className="p-3">
-                          <span className="text-sm text-muted-foreground">{ref.joined}</span>
-                        </td>
-                        <td className="p-3">
-                          <span className="text-sm text-foreground">{ref.orders}</span>
-                        </td>
-                        <td className="p-3">
-                          <span className="font-mono text-sm text-success">{formatPrice(ref.earnings)}</span>
-                        </td>
-                        <td className="p-3">
-                          <Badge variant={ref.status === 'active' ? 'default' : 'secondary'}>
-                            {ref.status === 'active' ? (
-                              <><CheckCircle2 className="h-3 w-3 mr-1" /> {t("Active")}</>
-                            ) : (
-                              <><Clock className="h-3 w-3 mr-1" /> {t("Pending")}</>
-                            )}
-                          </Badge>
+                          <Badge variant={item.status === "active" ? "default" : "secondary"}>{t(item.status)}</Badge>
                         </td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

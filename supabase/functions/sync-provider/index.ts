@@ -5,6 +5,40 @@ const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+const INR_TO_USD = 1 / 92;
+
+type ProviderServiceRecord = {
+  service: string | number;
+  name: string;
+  category: string;
+  rate: string | number;
+  min: string | number;
+  max: string | number;
+  refill?: boolean | string;
+  dripfeed?: boolean | string;
+  description?: string;
+};
+
+type StoredServiceRecord = {
+  id: string;
+  service_id: number;
+  name: string;
+  description: string | null;
+  platform: string;
+  category: string;
+  base_price: number;
+  min_quantity: number;
+  max_quantity: number;
+  refill_supported: boolean | null;
+  dripfeed_supported: boolean | null;
+  is_active: boolean;
+};
+
+type PanelServiceRecord = {
+  id: string;
+  provider_service_uuid: string;
+  service_id: number;
+};
 
 /**
  * Locale-aware price parser.
@@ -20,6 +54,92 @@ function parseProviderPrice(raw: string | number): number {
   const noCommas = cleaned.replace(/,/g, '');
   const parsed = parseFloat(noCommas);
   return isNaN(parsed) ? 0 : parsed;
+}
+
+function toUsd(raw: string | number, currency?: string): number {
+  const rawValue = parseProviderPrice(raw);
+  if (rawValue === 0) return 0;
+
+  const normalizedCurrency = (currency || 'USD').toUpperCase();
+  if (normalizedCurrency === 'INR' || normalizedCurrency === '₹' || normalizedCurrency === 'RS') {
+    return rawValue * INR_TO_USD;
+  }
+
+  return rawValue;
+}
+
+function normalizeServiceText(value: string | null | undefined, fallback: string): string {
+  return (value || fallback || 'General').trim();
+}
+
+function buildPanelServicePayload(service: StoredServiceRecord) {
+  return {
+    name: normalizeServiceText(service.name, 'Untitled Service'),
+    description: service.description || service.name || 'No description available',
+    platform: normalizeServiceText(service.platform, 'Other'),
+    category: normalizeServiceText(service.category, 'General'),
+    min_quantity: Number(service.min_quantity) || 100,
+    max_quantity: Number(service.max_quantity) || 50000,
+    price: Number(service.base_price) || 0,
+    refill_supported: Boolean(service.refill_supported),
+    dripfeed_supported: Boolean(service.dripfeed_supported),
+    auto_refill_supported: false,
+    is_visible: Boolean(service.is_active),
+    provider_service_uuid: service.id,
+  };
+}
+
+async function syncPanelServicesForProviderServices(supabase: ReturnType<typeof createClient>, services: StoredServiceRecord[]) {
+  if (!services.length) return;
+
+  const providerServiceIds = services.map((service) => service.id);
+  const panelIds = services.map((service) => service.service_id);
+
+  const [{ data: existingPanels }, { data: collidingPanels }] = await Promise.all([
+    supabase
+      .from('panel_services')
+      .select('id, provider_service_uuid, service_id')
+      .in('provider_service_uuid', providerServiceIds),
+    supabase
+      .from('panel_services')
+      .select('service_id')
+      .in('service_id', panelIds),
+  ]);
+
+  const panelByProvider = new Map((existingPanels || []).map((panel) => [panel.provider_service_uuid, panel as PanelServiceRecord]));
+  const usedPanelIds = new Set<number>((collidingPanels || []).map((panel) => Number(panel.service_id)));
+  const inserts: Array<Record<string, unknown>> = [];
+
+  for (const service of services) {
+    const existingPanel = panelByProvider.get(service.id);
+    const payload = buildPanelServicePayload(service);
+
+    if (existingPanel) {
+      await supabase
+        .from('panel_services')
+        .update(payload)
+        .eq('id', existingPanel.id);
+      continue;
+    }
+
+    let nextPanelId = Number(service.service_id) || Math.floor(1000 + Math.random() * 9000);
+    while (usedPanelIds.has(nextPanelId)) {
+      nextPanelId += 1;
+    }
+    usedPanelIds.add(nextPanelId);
+
+    inserts.push({
+      service_id: nextPanelId,
+      ...payload,
+    });
+  }
+
+  if (inserts.length > 0) {
+    const { error } = await supabase.from('panel_services').insert(inserts);
+    if (error) {
+      console.error('Panel service sync insert error:', error);
+    }
+  }
 }
 
 serve(async (req) => {
@@ -159,30 +279,39 @@ serve(async (req) => {
 
       let addedCount = 0;
       let updatedCount = 0;
+      const syncedProviderServiceIds: string[] = [];
 
       // Process in batches of 50 for performance
       const BATCH_SIZE = 50;
       for (let i = 0; i < services.length; i += BATCH_SIZE) {
-        const batch = services.slice(i, i + BATCH_SIZE);
+        const batch = services.slice(i, i + BATCH_SIZE) as ProviderServiceRecord[];
         
         // Get existing services for this batch
-        const batchIds = batch.map((s: any) => String(s.service));
+        const batchIds = batch.map((service) => String(service.service));
         const { data: existingServices } = await supabase
           .from('services')
           .select('id, provider_service_id')
           .eq('provider_id', providerId)
           .in('provider_service_id', batchIds);
 
-        const existingMap = new Map((existingServices || []).map((s: any) => [s.provider_service_id, s.id]));
+        const existingMap = new Map((existingServices || []).map((service) => [service.provider_service_id, service.id]));
 
-        const toInsert: any[] = [];
-        const toUpdate: any[] = [];
+        const toInsert: Array<Record<string, unknown>> = [];
+        const toUpdate: Array<Record<string, unknown>> = [];
+        const insertedProviderServiceIds: string[] = [];
 
         for (const service of batch) {
           const platform = detectPlatform(service.category || '', service.name || '');
-          const providerPrice = parseProviderPrice(service.rate);
+          const providerPrice = toUsd(service.rate, provider.currency || 'USD');
           const basePrice = providerPrice * 1.3; // 30% default margin
           const providerServiceId = String(service.service);
+
+          if (basePrice > 50) {
+            console.error(
+              `PRICE SANITY FAIL: service ${service.service}, raw rate ${service.rate}, panelUSD=${basePrice}. Skipping.`,
+            );
+            continue;
+          }
 
           const serviceData = {
             name: service.name,
@@ -203,22 +332,31 @@ serve(async (req) => {
           if (existingMap.has(providerServiceId)) {
             toUpdate.push({ ...serviceData, id: existingMap.get(providerServiceId) });
           } else {
-            const internalServiceId = Math.floor(100 + Math.random() * 900);
+            const internalServiceId = Math.floor(1000 + Math.random() * 9000);
             toInsert.push({ ...serviceData, service_id: internalServiceId });
+            insertedProviderServiceIds.push(providerServiceId);
           }
         }
 
         // Batch insert
         if (toInsert.length > 0) {
           const { error: insertErr } = await supabase.from('services').insert(toInsert);
-          if (!insertErr) addedCount += toInsert.length;
-          else console.error('Batch insert error:', insertErr);
+          if (!insertErr) {
+            addedCount += toInsert.length;
+            syncedProviderServiceIds.push(...insertedProviderServiceIds);
+          } else {
+            console.error('Batch insert error:', insertErr);
+          }
         }
 
         // Batch update (upsert)
         for (const s of toUpdate) {
           const { id, ...updateData } = s;
           await supabase.from('services').update({
+            name: updateData.name,
+            description: updateData.description,
+            platform: updateData.platform,
+            category: updateData.category,
             provider_price: updateData.provider_price,
             base_price: updateData.base_price,
             min_quantity: updateData.min_quantity,
@@ -227,7 +365,22 @@ serve(async (req) => {
             dripfeed_supported: updateData.dripfeed_supported,
             is_active: true,
           }).eq('id', id);
+          syncedProviderServiceIds.push(updateData.provider_service_id);
           updatedCount++;
+        }
+      }
+
+      if (syncedProviderServiceIds.length > 0) {
+        const { data: syncedServices, error: syncedServicesError } = await supabase
+          .from('services')
+          .select('id, service_id, name, description, platform, category, base_price, min_quantity, max_quantity, refill_supported, dripfeed_supported, is_active')
+          .eq('provider_id', providerId)
+          .in('provider_service_id', syncedProviderServiceIds);
+
+        if (syncedServicesError) {
+          console.error('Failed to load synced services for panel sync:', syncedServicesError);
+        } else {
+          await syncPanelServicesForProviderServices(supabase, syncedServices || []);
         }
       }
 
