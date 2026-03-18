@@ -16,7 +16,6 @@ import {
   ArrowUpRight,
   ArrowDownLeft,
   ChevronDown,
-  ChevronRight,
   AlertTriangle,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -534,17 +533,24 @@ const AddFunds = () => {
 
                 {/* Quick amounts */}
                 <div className="flex flex-wrap gap-2">
-                  {(selectedMethod === "upi" ? INR_QUICK : USD_QUICK).map((amt) => (
-                    <Button
-                      key={amt}
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setAmount(amt.toString())}
-                      className={`border-border/50 ${amount === amt.toString() ? "border-primary bg-primary/10" : ""}`}
-                    >
-                      {selectedMethod === "upi" ? `₹${amt}` : `$${amt}`}
-                    </Button>
-                  ))}
+                  {(selectedMethod === "upi" ? INR_QUICK : USD_QUICK).map((amt) => {
+                    const isSelected = amount === amt.toString();
+                    return (
+                      <button
+                        key={amt}
+                        type="button"
+                        onClick={() => setAmount(amt.toString())}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-medium border-2 transition-all ${
+                          isSelected
+                            ? "border-success bg-success/15 text-success"
+                            : "border-border/40 bg-secondary/20 text-muted-foreground hover:border-border hover:text-foreground"
+                        }`}
+                      >
+                        {isSelected && <CheckCircle2 className="inline h-3 w-3 mr-1" />}
+                        {selectedMethod === "upi" ? `₹${amt}` : `$${amt}`}
+                      </button>
+                    );
+                  })}
                 </div>
 
                 {/* Summary pill */}

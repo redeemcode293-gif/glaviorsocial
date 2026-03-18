@@ -343,14 +343,14 @@ export const AIChatbot = () => {
       )}
 
       {isOpen && (
-        <Card className={`fixed bottom-6 right-6 z-50 w-[380px] shadow-2xl border-primary/20 bg-card/95 backdrop-blur-sm ${isMinimized ? "h-16" : "h-[600px]"} transition-all duration-300`}>
-          <div className="flex items-center justify-between p-4 border-b border-border/30 bg-gradient-to-r from-primary/10 to-accent/10 rounded-t-lg">
+        <Card className={`fixed bottom-0 right-0 sm:bottom-6 sm:right-6 z-50 w-full sm:w-[400px] shadow-2xl border-primary/20 bg-card backdrop-blur-sm ${isMinimized ? "h-16" : "h-[100dvh] sm:h-[600px]"} transition-all duration-300 rounded-none sm:rounded-xl`}>
+          <div className="flex items-center justify-between p-4 border-b border-border/30 bg-gradient-to-r from-primary/10 to-accent/10 rounded-t-none sm:rounded-t-xl">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-gradient-to-r from-primary to-accent flex items-center justify-center">
                 <Bot className="h-5 w-5 text-white" />
               </div>
               <div>
-                <span className="font-medium">{t("AI Chatbot")}</span>
+                <span className="font-medium text-foreground">{t("AI Chatbot")}</span>
                 <div className="flex items-center gap-1 text-xs text-muted-foreground">
                   <Sparkles className="h-3 w-3" />
                   {t("Live catalog helper")}
@@ -358,7 +358,7 @@ export const AIChatbot = () => {
               </div>
             </div>
             <div className="flex items-center gap-1">
-              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setIsMinimized(!isMinimized)}>
+              <Button variant="ghost" size="icon" className="h-8 w-8 hidden sm:flex" onClick={() => setIsMinimized(!isMinimized)}>
                 <Minimize2 className="h-4 w-4" />
               </Button>
               <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setIsOpen(false)}>
@@ -369,7 +369,7 @@ export const AIChatbot = () => {
 
           {!isMinimized && (
             <>
-              <div className="flex-1 overflow-y-auto p-4 space-y-4 h-[420px]">
+              <div className="flex-1 overflow-y-auto p-4 space-y-4" style={{ height: "calc(100% - 130px)" }}>
                 {messages.map((message) => (
                   <div key={message.id} className={`flex gap-3 ${message.role === "user" ? "justify-end" : "justify-start"}`}>
                     {message.role === "assistant" && (
@@ -378,8 +378,8 @@ export const AIChatbot = () => {
                       </div>
                     )}
 
-                    <div className={`max-w-[85%] rounded-lg p-3 ${message.role === "user" ? "bg-primary text-primary-foreground" : "bg-secondary/30 border border-border/30"}`}>
-                      <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                    <div className={`max-w-[85%] rounded-lg p-3 ${message.role === "user" ? "bg-primary text-primary-foreground" : "bg-secondary border border-border/50"}`}>
+                      <p className="text-sm whitespace-pre-wrap text-foreground">{message.content}</p>
 
                       {message.type === "service_list" && message.services && (
                         <div className="mt-3 space-y-3">

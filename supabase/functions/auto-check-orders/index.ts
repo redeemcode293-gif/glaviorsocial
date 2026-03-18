@@ -28,6 +28,24 @@ serve(async (req) => {
 
     console.log("[auto-check-orders] Starting sync run");
 
+    // Auto-fail stale pending orders that have no provider_order_id after 15 minutes
+    const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+    const { data: staleOrders } = await supabase
+      .from("orders")
+      .select("id, order_number")
+      .eq("status", "pending")
+      .is("provider_order_id", null)
+      .lt("created_at", fifteenMinutesAgo);
+
+    if (staleOrders && staleOrders.length > 0) {
+      console.log(`[auto-check-orders] Auto-failing ${staleOrders.length} stale pending orders with no provider_order_id`);
+      const staleIds = staleOrders.map((o) => o.id);
+      await supabase
+        .from("orders")
+        .update({ status: "failed" })
+        .in("id", staleIds);
+    }
+
     const { data: activeOrders, error: ordersError } = await supabase
       .from("orders")
       .select(`

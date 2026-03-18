@@ -190,6 +190,16 @@ const NewOrder = () => {
     });
   }, [services, selectedCategory, searchQuery]);
 
+  const groupedFilteredServices = useMemo(() => {
+    if (selectedCategory !== "all") return null;
+    const groups: Record<string, ServiceDisplay[]> = {};
+    for (const service of filteredServices) {
+      if (!groups[service.platform]) groups[service.platform] = [];
+      groups[service.platform].push(service);
+    }
+    return groups;
+  }, [filteredServices, selectedCategory]);
+
   const calculateDisplayPrice = (basePrice: number) => Number(basePrice) * priceMultiplier;
 
   const calculateTotal = (service = selectedService, qtyValue = quantity) => {
@@ -342,50 +352,105 @@ const NewOrder = () => {
                   </div>
 
                   <div className="rounded-lg border border-border/30 bg-secondary/10 overflow-hidden">
-                    <div className="max-h-[320px] overflow-y-auto divide-y divide-border/20">
+                    <div className="max-h-[380px] overflow-y-auto">
                       {isLoading ? (
                         <div className="p-6 flex items-center justify-center text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin mr-2" />{t("Loading services...")}</div>
                       ) : filteredServices.length === 0 ? (
                         <div className="p-6 text-center text-muted-foreground">{t("No services match your search.")}</div>
+                      ) : groupedFilteredServices ? (
+                        Object.entries(groupedFilteredServices).map(([platform, platformServices]) => (
+                          <div key={platform}>
+                            <div className="sticky top-0 z-10 px-4 py-2 bg-secondary/80 backdrop-blur-sm border-b border-border/30 flex items-center gap-2">
+                              <Badge variant="secondary" className="text-xs font-semibold">{platform}</Badge>
+                              <span className="text-xs text-muted-foreground">{platformServices.length} {t("services")}</span>
+                            </div>
+                            <div className="divide-y divide-border/10">
+                              {platformServices.map((service) => {
+                                const selected = selectedService?.id === service.id;
+                                return (
+                                  <button
+                                    key={service.id}
+                                    type="button"
+                                    onClick={() => setSelectedService(service)}
+                                    className={`w-full p-3 text-left transition-all relative ${
+                                      selected
+                                        ? "bg-success/10 border-l-4 border-l-success pl-3"
+                                        : "hover:bg-secondary/20 border-l-4 border-l-transparent"
+                                    }`}
+                                  >
+                                    <div className="flex items-start justify-between gap-4">
+                                      <div className="space-y-0.5 min-w-0 flex-1">
+                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                          <span className="font-mono text-xs text-muted-foreground">#{service.service_id}</span>
+                                          {selected && <Badge className="bg-success text-success-foreground text-xs py-0 px-1.5"><CheckCircle2 className="h-2.5 w-2.5 mr-0.5" />{t("Selected")}</Badge>}
+                                        </div>
+                                        <p className={`font-medium text-sm truncate ${selected ? "text-success" : "text-foreground"}`}>{service.name}</p>
+                                        <p className="text-xs text-muted-foreground/70 truncate">{service.category}</p>
+                                      </div>
+                                      <div className="text-right shrink-0">
+                                        <p className={`font-mono text-sm font-semibold ${selected ? "text-success" : "text-primary"}`}>{formatPrice(calculateDisplayPrice(service.price))}/1K</p>
+                                        <p className="text-xs text-muted-foreground">{service.min_quantity.toLocaleString()} – {service.max_quantity.toLocaleString()}</p>
+                                      </div>
+                                    </div>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ))
                       ) : (
-                        filteredServices.map((service) => {
-                          const selected = selectedService?.id === service.id;
-                          return (
-                            <button
-                              key={service.id}
-                              type="button"
-                              onClick={() => setSelectedService(service)}
-                              className={`w-full p-4 text-left transition-colors ${selected ? "bg-primary/10" : "hover:bg-secondary/20"}`}
-                            >
-                              <div className="flex items-start justify-between gap-4">
-                                <div className="space-y-1 min-w-0">
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    <Badge variant="outline" className="font-mono">#{service.service_id}</Badge>
-                                    <Badge variant="secondary">{service.platform}</Badge>
-                                    {selected && <Badge><CheckCircle2 className="h-3 w-3 mr-1" />{t("Selected")}</Badge>}
+                        <div className="divide-y divide-border/10">
+                          {filteredServices.map((service) => {
+                            const selected = selectedService?.id === service.id;
+                            return (
+                              <button
+                                key={service.id}
+                                type="button"
+                                onClick={() => setSelectedService(service)}
+                                className={`w-full p-3 text-left transition-all relative ${
+                                  selected
+                                    ? "bg-success/10 border-l-4 border-l-success"
+                                    : "hover:bg-secondary/20 border-l-4 border-l-transparent"
+                                }`}
+                              >
+                                <div className="flex items-start justify-between gap-4">
+                                  <div className="space-y-0.5 min-w-0 flex-1">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <span className="font-mono text-xs text-muted-foreground">#{service.service_id}</span>
+                                      <Badge variant="outline" className="text-xs py-0 px-1.5">{service.platform}</Badge>
+                                      {selected && <Badge className="bg-success text-success-foreground text-xs py-0 px-1.5"><CheckCircle2 className="h-2.5 w-2.5 mr-0.5" />{t("Selected")}</Badge>}
+                                    </div>
+                                    <p className={`font-medium text-sm truncate ${selected ? "text-success" : "text-foreground"}`}>{service.name}</p>
+                                    <p className="text-xs text-muted-foreground/70 truncate">{service.category}</p>
                                   </div>
-                                  <p className="font-medium text-foreground truncate">{service.name}</p>
-                                  <p className="text-xs text-muted-foreground truncate">{service.category} • {service.description || t("No description available")}</p>
+                                  <div className="text-right shrink-0">
+                                    <p className={`font-mono text-sm font-semibold ${selected ? "text-success" : "text-primary"}`}>{formatPrice(calculateDisplayPrice(service.price))}/1K</p>
+                                    <p className="text-xs text-muted-foreground">{service.min_quantity.toLocaleString()} – {service.max_quantity.toLocaleString()}</p>
+                                  </div>
                                 </div>
-                                <div className="text-right shrink-0">
-                                  <p className="font-mono text-primary">{formatPrice(calculateDisplayPrice(service.price))}/1K</p>
-                                  <p className="text-xs text-muted-foreground">{service.min_quantity.toLocaleString()} - {service.max_quantity.toLocaleString()}</p>
-                                </div>
-                              </div>
-                            </button>
-                          );
-                        })
+                              </button>
+                            );
+                          })}
+                        </div>
                       )}
                     </div>
                   </div>
 
                   {selectedService && (
-                    <div className="p-4 rounded-lg bg-secondary/20 border border-border/30 space-y-3 animate-fade-in">
-                      <p className="text-sm text-muted-foreground">{selectedService.description || t("No description available")}</p>
-                      <div className="flex flex-wrap gap-3">
-                        <Badge variant="outline" className="gap-1"><Zap className="h-3 w-3 text-primary" />{t("Fast Delivery")}</Badge>
-                        <Badge variant="outline" className="gap-1"><Hash className="h-3 w-3" />{t("Min")}: {selectedService.min_quantity} - {t("Max")}: {selectedService.max_quantity.toLocaleString()}</Badge>
-                        {selectedService.refill_supported && <Badge variant="outline" className="gap-1 text-success border-success/30"><RefreshCw className="h-3 w-3" />{t("Drop protection included")}</Badge>}
+                    <div className="p-4 rounded-lg bg-success/5 border border-success/25 space-y-3 animate-fade-in">
+                      <div className="flex items-start gap-2">
+                        <CheckCircle2 className="h-4 w-4 text-success shrink-0 mt-0.5" />
+                        <div className="space-y-1 flex-1">
+                          <p className="font-semibold text-success text-sm">{selectedService.name}</p>
+                          {selectedService.description && (
+                            <p className="text-sm text-success/80 leading-relaxed">{selectedService.description}</p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        <Badge className="bg-success/15 text-success border-success/30 gap-1 border"><Zap className="h-3 w-3" />{t("Fast Delivery")}</Badge>
+                        <Badge className="bg-success/15 text-success border-success/30 gap-1 border"><Hash className="h-3 w-3" />{t("Min")}: {selectedService.min_quantity.toLocaleString()} – {t("Max")}: {selectedService.max_quantity.toLocaleString()}</Badge>
+                        {selectedService.refill_supported && <Badge className="bg-success/15 text-success border-success/30 gap-1 border"><RefreshCw className="h-3 w-3" />{t("Drop Protection")}</Badge>}
                       </div>
                     </div>
                   )}

@@ -36,30 +36,43 @@ const PLATFORMS = ["Instagram", "YouTube", "TikTok", "Telegram", "X", "Facebook"
 const INR_TO_USD = 1 / 92;
 
 /**
- * Locale-aware price parser — strips commas (INR thousand separators like 1,00,000.00 or 15,650.19)
- * before parsing so we never produce millions from thousands.
+ * parseRawPrice — handles INR lakh format (1,00,000.50), INR thousand format
+ * (15,650.19), plain USD (0.50), strips all currency symbols.
+ * KEY FIX: removes ALL commas before parseFloat so "15,650.19" → 15650.19
  */
-function parseRate(raw: string | number): number {
-  if (typeof raw === 'number') return isNaN(raw) ? 0 : raw;
+function parseRawPrice(raw: string | number): number {
+  if (typeof raw === "number") return isNaN(raw) ? 0 : raw;
   if (!raw) return 0;
-  const cleaned = String(raw)
-    .replace(/[₹Rs$€£\s]/gi, '')
-    .replace(/,/g, '')
-    .trim();
+  let cleaned = String(raw).replace(/[₹Rs$€£\s]/gi, "").trim();
+  const dotParts = cleaned.split(".");
+  if (dotParts.length > 2) {
+    const intPart = dotParts.slice(0, -1).join("").replace(/,/g, "");
+    cleaned = intPart + "." + dotParts[dotParts.length - 1];
+  } else {
+    cleaned = cleaned.replace(/,/g, "");
+  }
   const parsed = parseFloat(cleaned);
   return isNaN(parsed) ? 0 : parsed;
 }
 
-function toUSD(raw: string | number, currency: string) {
-  const rawValue = parseRate(raw);
-  if (rawValue === 0) return 0;
-
-  const normalizedCurrency = (currency || "USD").toUpperCase();
-  if (normalizedCurrency === "INR" || normalizedCurrency === "₹" || normalizedCurrency === "RS") {
-    return rawValue * INR_TO_USD;
+/**
+ * toUSD — converts provider price to USD.
+ * - If currency is INR → divide by 92
+ * - If value > 100 with any currency → heuristic: treat as INR, divide by 92
+ * - Otherwise → treat as USD
+ */
+function toUSD(raw: string | number, currency: string): number {
+  const value = parseRawPrice(raw);
+  if (value <= 0 || isNaN(value)) return 0;
+  const cur = (currency || "USD").toUpperCase().trim();
+  if (cur === "INR" || cur === "₹" || cur === "RS") {
+    return value * INR_TO_USD;
   }
-
-  return rawValue;
+  if (value > 100) {
+    console.warn(`[BulkImport] price ${value} > 100 for currency "${cur}" — treating as INR`);
+    return value * INR_TO_USD;
+  }
+  return value;
 }
 
 function detectPlatform(category: string, name: string): string {
@@ -303,6 +316,7 @@ export const BulkServiceImport = () => {
               api_url: apiUrl.trim(),
               api_key: apiKey.trim(),
               status: "active",
+              currency: providerCurrency,
             })
             .select("id")
             .single();
@@ -579,6 +593,42 @@ export const BulkServiceImport = () => {
                 )}
               </Button>
             </div>
+
+            {/* Price Preview Table — first 5 services */}
+            {services.length > 0 && (
+              <div className="mt-2 rounded-lg border border-border/30 overflow-hidden">
+                <div className="px-3 py-2 bg-secondary/20 text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                  Price Preview (first 5 services · verify before importing)
+                </div>
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-border/20">
+                      <th className="text-left px-3 py-2 text-muted-foreground">Service Name</th>
+                      <th className="text-right px-3 py-2 text-muted-foreground">Raw Rate</th>
+                      <th className="text-right px-3 py-2 text-muted-foreground">Provider USD/1K</th>
+                      <th className="text-right px-3 py-2 text-muted-foreground">Panel USD/1K (+{marginPercent}%)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {services.slice(0, 5).map((s) => {
+                      const providerUSD = toUSD(s.rate, providerCurrency);
+                      const panelUSD = providerUSD * (1 + parseFloat(marginPercent || "0") / 100);
+                      const isHigh = panelUSD > 50;
+                      return (
+                        <tr key={s.service} className={`border-b border-border/10 ${isHigh ? "bg-destructive/5" : ""}`}>
+                          <td className="px-3 py-2 truncate max-w-[200px] text-foreground/80">{s.name}</td>
+                          <td className="px-3 py-2 text-right font-mono text-muted-foreground">{s.rate}</td>
+                          <td className="px-3 py-2 text-right font-mono">${providerUSD.toFixed(4)}</td>
+                          <td className={`px-3 py-2 text-right font-mono font-medium ${isHigh ? "text-destructive" : "text-primary"}`}>
+                            {isHigh ? "⚠️ " : ""}${panelUSD.toFixed(4)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
 
             {previewHasHighPrice && (
               <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">

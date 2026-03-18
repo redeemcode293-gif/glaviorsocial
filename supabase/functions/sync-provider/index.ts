@@ -6,6 +6,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 const INR_TO_USD = 1 / 92;
+const MAX_SANE_USD = 500;
 
 type ProviderServiceRecord = {
   service: string | number;
@@ -41,31 +42,41 @@ type PanelServiceRecord = {
 };
 
 /**
- * Locale-aware price parser.
- * Handles INR format (1,00,000.19 or 15,650.19) and USD format (15650.19).
- * Removes commas (thousand-separators in both locales) before parsing.
+ * parseProviderPrice — handles INR lakh format (1,00,000.19), INR thousand format
+ * (15,650.19), plain USD (0.50). Strips all currency symbols and removes ALL commas.
  */
 function parseProviderPrice(raw: string | number): number {
   if (typeof raw === 'number') return isNaN(raw) ? 0 : raw;
   if (!raw) return 0;
-  // Remove currency symbols, spaces, Rs, ₹
-  const cleaned = String(raw).replace(/[₹Rs$€£\s]/g, '').trim();
-  // Remove ALL commas (thousand separators in INR and USD) — keeps decimal dot
-  const noCommas = cleaned.replace(/,/g, '');
-  const parsed = parseFloat(noCommas);
-  return isNaN(parsed) ? 0 : parsed;
+  const stripped = String(raw).replace(/[₹Rs$€£\s]/gi, '').trim();
+  const parts = stripped.split('.');
+  let normalized: string;
+  if (parts.length > 2) {
+    const intPart = parts.slice(0, -1).join('').replace(/,/g, '');
+    normalized = intPart + '.' + parts[parts.length - 1];
+  } else {
+    normalized = stripped.replace(/,/g, '');
+  }
+  const v = parseFloat(normalized);
+  return isNaN(v) ? 0 : v;
 }
 
+/**
+ * toUsd — converts provider price to USD.
+ * - If currency is INR → divide by 92
+ * - If value > 100 with any currency → heuristic: treat as INR, divide by 92
+ * - Otherwise → treat as USD
+ */
 function toUsd(raw: string | number, currency?: string): number {
-  const rawValue = parseProviderPrice(raw);
-  if (rawValue === 0) return 0;
-
-  const normalizedCurrency = (currency || 'USD').toUpperCase();
-  if (normalizedCurrency === 'INR' || normalizedCurrency === '₹' || normalizedCurrency === 'RS') {
-    return rawValue * INR_TO_USD;
+  const value = parseProviderPrice(raw);
+  if (value <= 0 || isNaN(value)) return 0;
+  const cur = (currency || 'USD').toUpperCase().trim();
+  if (cur === 'INR' || cur === '₹' || cur === 'RS') return value * INR_TO_USD;
+  if (value > 100) {
+    console.warn(`[sync-provider] price ${value} for "${cur}" > 100 — treating as INR`);
+    return value * INR_TO_USD;
   }
-
-  return rawValue;
+  return value;
 }
 
 function normalizeServiceText(value: string | null | undefined, fallback: string): string {
@@ -248,9 +259,11 @@ serve(async (req) => {
       console.log('Balance response:', data);
 
       if (data.balance !== undefined) {
+        const providerCurrencyForBalance = ((provider.currency as string) || 'INR').toUpperCase();
+        const balanceUSD = toUsd(data.balance, providerCurrencyForBalance);
         await supabase
           .from('api_providers')
-          .update({ balance: parseProviderPrice(data.balance) })
+          .update({ balance: balanceUSD })
           .eq('id', providerId);
       }
 
@@ -306,9 +319,9 @@ serve(async (req) => {
           const basePrice = providerPrice * 1.3; // 30% default margin
           const providerServiceId = String(service.service);
 
-          if (basePrice > 50) {
+          if (basePrice > MAX_SANE_USD || isNaN(basePrice)) {
             console.error(
-              `PRICE SANITY FAIL: service ${service.service}, raw rate ${service.rate}, panelUSD=${basePrice}. Skipping.`,
+              `PRICE SANITY FAIL: service ${service.service} "${service.name}", raw=${service.rate}, currency=${provider.currency || 'USD'}, panelUSD=${basePrice}. Skipping.`,
             );
             continue;
           }
