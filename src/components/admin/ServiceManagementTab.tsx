@@ -13,7 +13,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { 
   Package, RefreshCw, Search, Plus, Edit, Trash2, Eye, MoreVertical, 
-  Link2, Save, Check, X, ArrowUpDown, Percent, Power, PowerOff, ChevronLeft, ChevronRight
+  Link2, Save, Check, X, ArrowUpDown, Percent, Power, PowerOff, ChevronLeft, ChevronRight,
+  AlertTriangle
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -47,6 +48,9 @@ interface Provider {
 
 const PLATFORMS = ['Instagram', 'YouTube', 'TikTok', 'Telegram', 'X', 'Facebook', 'Spotify', 'Discord', 'Twitch', 'Snapchat', 'LinkedIn', 'Pinterest', 'Other'];
 const CATEGORIES = ['Followers', 'Likes', 'Views', 'Comments', 'Shares', 'Subscribers', 'Members', 'Reactions', 'Saves', 'Impressions', 'Reach', 'General', 'Premium', 'Other'];
+const CORRUPTED_PRICE_THRESHOLD = 50;
+const INR_TO_USD = 1 / 92;
+
 export function ServiceManagementTab() {
   const [services, setServices] = useState<Service[]>([]);
   const [providers, setProviders] = useState<Provider[]>([]);
@@ -55,6 +59,7 @@ export function ServiceManagementTab() {
   const [platformFilter, setPlatformFilter] = useState<string>("all");
   const [selectedServices, setSelectedServices] = useState<Set<string>>(new Set());
   const [currentPage, setCurrentPage] = useState(1);
+  const [corruptedCount, setCorruptedCount] = useState(0);
   const [isFixingPrices, setIsFixingPrices] = useState(false);
   const [priceFixProgress, setPriceFixProgress] = useState({ done: 0, total: 0 });
   
@@ -107,8 +112,10 @@ export function ServiceManagementTab() {
       supabase.from('api_providers').select('id, name, api_url')
     ]);
     
-    setServices(servicesRes.data || []);
+    const svcs = servicesRes.data || [];
+    setServices(svcs);
     setProviders(providersRes.data || []);
+    setCorruptedCount(svcs.filter((s) => Number(s.base_price) > CORRUPTED_PRICE_THRESHOLD).length);
     setLoading(false);
   };
 
@@ -282,7 +289,7 @@ export function ServiceManagementTab() {
         const { data, error } = await supabase
           .from('services')
           .select('*')
-          .gt('base_price', 10)
+          .gt('base_price', CORRUPTED_PRICE_THRESHOLD)
           .order('id')
           .range(offset, offset + FETCH_BATCH - 1);
 
@@ -297,6 +304,7 @@ export function ServiceManagementTab() {
       if (corruptedServices.length === 0) {
         toast({ title: "No corrupted prices found" });
         setPriceFixProgress({ done: 0, total: 0 });
+        setCorruptedCount(0);
         return;
       }
 
@@ -307,9 +315,9 @@ export function ServiceManagementTab() {
         const batch = corruptedServices.slice(i, i + UPDATE_BATCH);
 
         for (const service of batch) {
-          const correctedBasePrice = Number(service.base_price) / 92000;
+          const correctedBasePrice = Number(service.base_price) * INR_TO_USD;
           const correctedProviderPrice =
-            service.provider_price !== null ? Number(service.provider_price) / 92000 : null;
+            service.provider_price !== null ? Number(service.provider_price) * INR_TO_USD : null;
 
           const { error: serviceError } = await supabase
             .from('services')
@@ -335,7 +343,7 @@ export function ServiceManagementTab() {
         await new Promise((resolve) => setTimeout(resolve, 100));
       }
 
-      toast({ title: `Fixed ${corruptedServices.length} services — prices now correct` });
+      toast({ title: `✓ Fixed ${corruptedServices.length} services — prices now correct` });
       await fetchData();
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Failed to repair corrupted prices';
@@ -667,10 +675,12 @@ export function ServiceManagementTab() {
               <Button variant="outline" size="icon" onClick={fetchData}>
                 <RefreshCw className="h-4 w-4" />
               </Button>
-              <Button variant="destructive" onClick={fixCorruptedPrices} disabled={isFixingPrices}>
-                {isFixingPrices ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : null}
-                Fix Corrupted Prices
-              </Button>
+              {corruptedCount > 0 && (
+                <Button variant="destructive" onClick={fixCorruptedPrices} disabled={isFixingPrices} className="gap-2">
+                  {isFixingPrices ? <RefreshCw className="h-4 w-4 animate-spin" /> : <AlertTriangle className="h-4 w-4" />}
+                  Fix INR Prices ({corruptedCount})
+                </Button>
+              )}
               <Button variant="outline" onClick={addAllServicesToPanel}>
                 Add All Live
               </Button>
@@ -684,10 +694,23 @@ export function ServiceManagementTab() {
           </div>
         </CardHeader>
         <CardContent>
+          {corruptedCount > 0 && !isFixingPrices && (
+            <div className="mb-4 rounded-lg border border-destructive/40 bg-destructive/10 p-4 flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-destructive mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-sm font-semibold text-destructive">
+                  ⚠️ {corruptedCount} services have corrupted INR prices (base_price &gt; ${CORRUPTED_PRICE_THRESHOLD})
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  These are raw INR values not converted to USD. Click "Fix INR Prices" to divide them by 92.
+                </p>
+              </div>
+            </div>
+          )}
           {isFixingPrices && priceFixProgress.total > 0 && (
             <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 p-4">
               <div className="mb-2 flex items-center justify-between text-sm">
-                <span className="font-medium text-destructive">Fixing corrupted INR prices</span>
+                <span className="font-medium text-destructive">Fixing corrupted INR prices…</span>
                 <span className="text-destructive">
                   {priceFixProgress.done}/{priceFixProgress.total}
                 </span>
@@ -753,8 +776,9 @@ export function ServiceManagementTab() {
                 <tbody>
                   {paginatedServices.map((service) => {
                     const provider = getProvider(service.provider_id);
+                    const isCorrupted = Number(service.base_price) > CORRUPTED_PRICE_THRESHOLD;
                     return (
-                      <tr key={service.id} className="border-b border-border/20 hover:bg-secondary/10 group">
+                      <tr key={service.id} className={`border-b border-border/20 hover:bg-secondary/10 group ${isCorrupted ? "border-l-4 border-l-destructive bg-destructive/5" : ""}`}>
                         <td className="p-3">
                           <Checkbox 
                             checked={selectedServices.has(service.id)}
@@ -835,13 +859,13 @@ export function ServiceManagementTab() {
                             </div>
                           ) : (
                             <span 
-                              className="font-mono text-sm text-success cursor-pointer hover:underline"
+                              className={`font-mono text-sm cursor-pointer hover:underline ${isCorrupted ? "text-destructive font-bold" : "text-success"}`}
                               onClick={() => {
                                 setInlineEditing({ id: service.id, field: 'base_price' });
                                 setInlineValue(service.base_price.toString());
                               }}
                             >
-                              ${Number(service.base_price).toFixed(4)}
+                              {isCorrupted ? "⚠️ " : ""}${Number(service.base_price).toFixed(4)}
                             </span>
                           )}
                         </td>
