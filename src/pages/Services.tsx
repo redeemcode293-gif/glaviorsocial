@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Navbar } from "@/components/landing/Navbar";
 import { Footer } from "@/components/landing/Footer";
@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { 
+import {
   Search,
   Zap,
   RefreshCw,
@@ -14,7 +14,9 @@ import {
   Loader2,
   Globe,
   Crown,
-  TrendingUp
+  TrendingUp,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { PLATFORMS, getPlatformIcon, getPlatformColor } from "@/components/ui/platform-icons";
@@ -35,19 +37,19 @@ interface ServiceDisplay {
   dripfeed_supported: boolean | null;
 }
 
-// Extract refill days from name (e.g., "30 Days Refill" -> 30)
+const PAGE_SIZE = 24;
+
 const extractRefillDays = (name: string): number | null => {
   const match = name.match(/(\d+)\s*(?:days?|d)\s*refill/i);
   return match ? parseInt(match[1]) : null;
 };
 
-// Determine service tier based on price and name
-const getServiceTier = (service: ServiceDisplay): 'budget' | 'standard' | 'premium' | 'monetization' => {
+const getServiceTier = (service: ServiceDisplay): "budget" | "standard" | "premium" | "monetization" => {
   const name = service.name.toLowerCase();
-  if (name.includes('monetization') || name.includes('monetizable')) return 'monetization';
-  if (name.includes('premium') || name.includes('authority') || name.includes('high quality')) return 'premium';
-  if (name.includes('starter') || name.includes('cheap') || name.includes('budget')) return 'budget';
-  return 'standard';
+  if (name.includes("monetization") || name.includes("monetizable")) return "monetization";
+  if (name.includes("premium") || name.includes("authority") || name.includes("high quality")) return "premium";
+  if (name.includes("starter") || name.includes("cheap") || name.includes("budget")) return "budget";
+  return "standard";
 };
 
 const tierOrder = { budget: 0, standard: 1, premium: 2, monetization: 3 };
@@ -57,24 +59,27 @@ const Services = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [services, setServices] = useState<ServiceDisplay[]>([]);
   const [loadingServices, setLoadingServices] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
   const navigate = useNavigate();
   const { t, formatPrice } = useLocalization();
-  
-  // Use shared regional pricing hook - this handles loading state properly
   const { multiplier: priceMultiplier, loading: loadingPricing } = useRegionalPricing();
 
   useEffect(() => {
     fetchServices();
   }, []);
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedPlatform, searchQuery]);
+
   const fetchServices = async () => {
     try {
       const { data: panelData, error: panelError } = await supabase
-        .from('panel_services')
-        .select('*')
-        .eq('is_visible', true)
-        .order('platform')
-        .order('price', { ascending: true });
+        .from("panel_services")
+        .select("*")
+        .eq("is_visible", true)
+        .order("platform")
+        .order("price", { ascending: true });
 
       if (!panelError && panelData && panelData.length > 0) {
         setServices(panelData);
@@ -83,71 +88,84 @@ const Services = () => {
       }
 
       const { data: servicesData, error: servicesError } = await supabase
-        .from('services')
-        .select('id, service_id, name, description, platform, category, base_price, min_quantity, max_quantity, refill_supported, dripfeed_supported')
-        .eq('is_active', true)
-        .order('platform')
-        .order('base_price', { ascending: true });
+        .from("services")
+        .select("id, service_id, name, description, platform, category, base_price, min_quantity, max_quantity, refill_supported, dripfeed_supported")
+        .eq("is_active", true)
+        .order("platform")
+        .order("base_price", { ascending: true });
 
       if (servicesError) throw servicesError;
-      
+
       if (servicesData) {
-        setServices(servicesData.map(s => ({
-          id: s.id,
-          service_id: s.service_id, // Use actual service_id from database
-          name: s.name,
-          description: s.description,
-          platform: s.platform,
-          category: s.category,
-          price: s.base_price,
-          min_quantity: s.min_quantity,
-          max_quantity: s.max_quantity,
-          refill_supported: s.refill_supported,
-          dripfeed_supported: s.dripfeed_supported,
-        })));
+        setServices(
+          servicesData.map((service) => ({
+            id: service.id,
+            service_id: service.service_id,
+            name: service.name,
+            description: service.description,
+            platform: service.platform,
+            category: service.category,
+            price: service.base_price,
+            min_quantity: service.min_quantity,
+            max_quantity: service.max_quantity,
+            refill_supported: service.refill_supported,
+            dripfeed_supported: service.dripfeed_supported,
+          })),
+        );
       }
     } catch (error) {
-      console.error('Error fetching services:', error);
+      console.error("Error fetching services:", error);
     } finally {
       setLoadingServices(false);
     }
   };
 
-  // Filter and sort services
-  const filteredServices = services
-    .filter((service) => {
-      const matchesPlatform = selectedPlatform === "all" || service.platform === selectedPlatform;
-      const matchesSearch = 
-        service.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (service.description?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false) ||
-        service.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        service.service_id.toString().includes(searchQuery);
-      return matchesPlatform && matchesSearch;
-    })
-    .sort((a, b) => {
-      // Sort by tier first (budget -> standard -> premium -> monetization)
-      const tierA = tierOrder[getServiceTier(a)];
-      const tierB = tierOrder[getServiceTier(b)];
-      if (tierA !== tierB) return tierA - tierB;
-      // Then by price within same tier
-      return a.price - b.price;
-    });
+  const filteredServices = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
 
-  const availablePlatforms = [...new Set(services.map(s => s.platform))];
-  const displayPlatforms = PLATFORMS.filter(p => 
-    p.id === "all" || availablePlatforms.includes(p.id)
-  );
+    return [...services]
+      .filter((service) => {
+        const matchesPlatform = selectedPlatform === "all" || service.platform === selectedPlatform;
+        const matchesSearch =
+          q === "" ||
+          service.name.toLowerCase().includes(q) ||
+          (service.description?.toLowerCase().includes(q) ?? false) ||
+          service.category.toLowerCase().includes(q) ||
+          service.platform.toLowerCase().includes(q) ||
+          service.service_id.toString().includes(q);
+        return matchesPlatform && matchesSearch;
+      })
+      .sort((a, b) => {
+        const tierA = tierOrder[getServiceTier(a)];
+        const tierB = tierOrder[getServiceTier(b)];
+        if (tierA !== tierB) return tierA - tierB;
+        if (a.platform !== b.platform) return a.platform.localeCompare(b.platform);
+        return a.price - b.price;
+      });
+  }, [searchQuery, selectedPlatform, services]);
 
-  // Show loading state until both services AND pricing are loaded
+  const totalPages = Math.max(1, Math.ceil(filteredServices.length / PAGE_SIZE));
+  const safePage = Math.min(currentPage, totalPages);
+  const pagedServices = filteredServices.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
+  const groupedServices = useMemo(() => {
+    return pagedServices.reduce<Record<string, ServiceDisplay[]>>((acc, service) => {
+      if (!acc[service.platform]) acc[service.platform] = [];
+      acc[service.platform].push(service);
+      return acc;
+    }, {});
+  }, [pagedServices]);
+
+  const availablePlatforms = [...new Set(services.map((service) => service.platform))];
+  const displayPlatforms = PLATFORMS.filter((platform) => platform.id === "all" || availablePlatforms.includes(platform.id));
   const isLoading = loadingServices || loadingPricing;
 
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
-      
+
       <main className="pt-24 pb-16">
         <div className="container mx-auto px-4">
-          {/* Header */}
           <div className="text-center mb-12">
             <Badge variant="glow" className="mb-4">{t("SERVICES CATALOG")}</Badge>
             <h1 className="font-display text-4xl md:text-5xl font-bold mb-4">
@@ -159,9 +177,7 @@ const Services = () => {
             </p>
           </div>
 
-          {/* Filters */}
           <div className="flex flex-col gap-4 mb-8">
-            {/* Search */}
             <div className="relative max-w-lg mx-auto w-full">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
@@ -172,7 +188,6 @@ const Services = () => {
               />
             </div>
 
-            {/* Platform Filters with icons */}
             <div className="flex flex-wrap justify-center gap-2">
               {displayPlatforms.map((platform) => {
                 const Icon = platform.icon;
@@ -183,12 +198,14 @@ const Services = () => {
                     variant={isActive ? "default" : "glass"}
                     size="sm"
                     onClick={() => setSelectedPlatform(platform.id)}
-                    className={`flex items-center gap-2 ${isActive ? 'glow-cyan' : ''}`}
+                    className={`flex items-center gap-2 ${isActive ? "glow-cyan" : ""}`}
                   >
-                    <div className={`w-5 h-5 rounded flex items-center justify-center ${
-                      platform.id !== 'all' ? `bg-gradient-to-br ${getPlatformColor(platform.id)}` : ''
-                    }`}>
-                      <Icon className={`h-3 w-3 ${platform.id !== 'all' ? 'text-white' : ''}`} />
+                    <div
+                      className={`w-5 h-5 rounded flex items-center justify-center ${
+                        platform.id !== "all" ? `bg-gradient-to-br ${getPlatformColor(platform.id)}` : ""
+                      }`}
+                    >
+                      <Icon className={`h-3 w-3 ${platform.id !== "all" ? "text-white" : ""}`} />
                     </div>
                     {t(platform.name)}
                   </Button>
@@ -197,7 +214,6 @@ const Services = () => {
             </div>
           </div>
 
-          {/* Loading State - wait for both services AND pricing */}
           {isLoading ? (
             <div className="flex items-center justify-center py-20">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -205,111 +221,142 @@ const Services = () => {
             </div>
           ) : (
             <>
-              {/* Services Grid */}
-              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredServices.map((service) => {
-                  const pricePerK = (Number(service.price) || 0) * priceMultiplier;
-                  const refillDays = extractRefillDays(service.name);
-                  const tier = getServiceTier(service);
-                  const Icon = getPlatformIcon(service.platform);
-                  const colorClass = getPlatformColor(service.platform);
-                  
-                  return (
-                    <Card key={service.id} variant="glass" className="group hover:border-primary/30 transition-all duration-300 relative overflow-hidden">
-                      {/* Tier indicator */}
-                      {tier === 'monetization' && (
-                        <div className="absolute top-3 right-3">
-                          <Badge className="bg-gradient-to-r from-amber-500 to-yellow-400 text-black font-semibold gap-1">
-                            <Crown className="h-3 w-3" />
-                            {t("Monetization")}
-                          </Badge>
-                        </div>
-                      )}
-                      {tier === 'premium' && (
-                        <div className="absolute top-3 right-3">
-                          <Badge className="bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold gap-1">
-                            <TrendingUp className="h-3 w-3" />
-                            {t("Premium")}
-                          </Badge>
-                        </div>
-                      )}
-                      
-                      <CardHeader className="pb-3">
-                        <div className="flex items-start justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${colorClass} flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform`}>
-                              <Icon className="h-5 w-5 text-white" />
-                            </div>
-                            <div className="flex-1 min-w-0 pr-8">
-                              <CardTitle className="text-base line-clamp-2">{t(service.name)}</CardTitle>
-                              <p className="text-xs text-muted-foreground">{t(service.platform)} • ID: {service.service_id}</p>
-                            </div>
-                          </div>
-                        </div>
-                      </CardHeader>
-                      <CardContent className="space-y-4">
-                        {/* Description */}
-                        {service.description && (
-                          <div className="p-3 rounded-lg bg-secondary/20 border border-border/30">
-                            <p className="text-sm text-muted-foreground line-clamp-3">
-                              {t(service.description || "")}
-                            </p>
-                          </div>
-                        )}
-                        
-                        <div className="grid grid-cols-2 gap-3 text-xs">
-                          <div className="flex items-center gap-2 text-muted-foreground">
-                            <Zap className="h-3 w-3 text-primary" />
-                            <span>{t("Fast delivery")}</span>
-                          </div>
-                          <div className="flex items-center gap-2 text-muted-foreground">
-                            {service.refill_supported || refillDays ? (
-                              <>
-                                <RefreshCw className="h-3 w-3 text-emerald-500" />
-                                <span className="text-emerald-400">
-                                  {refillDays ? t(`${refillDays} Days Refill`) : t('Drop Protection')}
-                                </span>
-                              </>
-                            ) : (
-                              <span className="text-muted-foreground/60">—</span>
-                            )}
-                          </div>
-                        </div>
+              {filteredServices.length > 0 && (
+                <div className="mb-8 flex flex-col gap-3 rounded-xl border border-border/40 bg-secondary/10 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-sm text-muted-foreground">
+                    {t("Showing")} {(safePage - 1) * PAGE_SIZE + 1}-{Math.min(safePage * PAGE_SIZE, filteredServices.length)} {t("of")} {filteredServices.length} {t("services")}
+                  </p>
+                  {totalPages > 1 && (
+                    <div className="flex items-center gap-2 self-end sm:self-auto">
+                      <Button variant="outline" size="sm" disabled={safePage === 1} onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}>
+                        <ChevronLeft className="mr-1 h-4 w-4" />
+                        {t("Prev")}
+                      </Button>
+                      <span className="text-sm text-muted-foreground">
+                        {t("Page")} {safePage} {t("of")} {totalPages}
+                      </span>
+                      <Button variant="outline" size="sm" disabled={safePage === totalPages} onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}>
+                        {t("Next")}
+                        <ChevronRight className="ml-1 h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
 
-                        <div className="flex items-center justify-between pt-3 border-t border-border/50">
-                          <div>
-                            <p className="text-xs text-muted-foreground">{t("Price")}</p>
-                            <p className="text-xl font-bold text-gradient-cyan">
-                              {formatPrice(pricePerK)}
-                              <span className="text-xs text-muted-foreground font-normal">/1K</span>
-                            </p>
-                          </div>
-                          <Button 
-                            variant="hero" 
-                            size="sm"
-                            onClick={() => navigate('/dashboard/order')}
-                          >
-                            <ShoppingCart className="h-4 w-4 mr-1" />
-                            {t("Order")}
-                          </Button>
-                        </div>
-                        
-                        <p className="text-[10px] text-muted-foreground">
-                          Min: {service.min_quantity.toLocaleString()} • Max: {service.max_quantity.toLocaleString()}
-                        </p>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
+              <div className="space-y-10">
+                {Object.entries(groupedServices).map(([platform, platformServices]) => (
+                  <section key={platform} className="space-y-4">
+                    <div className="flex items-center gap-3">
+                      <div className={`flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br ${getPlatformColor(platform)}`}>
+                        {(() => {
+                          const Icon = getPlatformIcon(platform);
+                          return <Icon className="h-5 w-5 text-white" />;
+                        })()}
+                      </div>
+                      <div>
+                        <h2 className="text-2xl font-display font-semibold">{t(platform)}</h2>
+                        <p className="text-sm text-muted-foreground">{platformServices.length} {t("services on this page")}</p>
+                      </div>
+                    </div>
+
+                    <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-6">
+                      {platformServices.map((service) => {
+                        const pricePerK = (Number(service.price) || 0) * priceMultiplier;
+                        const refillDays = extractRefillDays(service.name);
+                        const tier = getServiceTier(service);
+                        const Icon = getPlatformIcon(service.platform);
+                        const colorClass = getPlatformColor(service.platform);
+
+                        return (
+                          <Card key={service.id} variant="glass" className="group hover:border-primary/30 transition-all duration-300 relative overflow-hidden">
+                            {tier === "monetization" && (
+                              <div className="absolute top-3 right-3">
+                                <Badge className="bg-gradient-to-r from-amber-500 to-yellow-400 text-black font-semibold gap-1">
+                                  <Crown className="h-3 w-3" />
+                                  {t("Monetization")}
+                                </Badge>
+                              </div>
+                            )}
+                            {tier === "premium" && (
+                              <div className="absolute top-3 right-3">
+                                <Badge className="bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold gap-1">
+                                  <TrendingUp className="h-3 w-3" />
+                                  {t("Premium")}
+                                </Badge>
+                              </div>
+                            )}
+
+                            <CardHeader className="pb-3">
+                              <div className="flex items-start justify-between">
+                                <div className="flex items-center gap-3">
+                                  <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${colorClass} flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform`}>
+                                    <Icon className="h-5 w-5 text-white" />
+                                  </div>
+                                  <div className="flex-1 min-w-0 pr-8">
+                                    <CardTitle className="text-base line-clamp-2">{t(service.name)}</CardTitle>
+                                    <p className="text-xs text-muted-foreground">{t(service.platform)} • ID: {service.service_id}</p>
+                                  </div>
+                                </div>
+                              </div>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                              {service.description && (
+                                <div className="p-3 rounded-lg bg-secondary/20 border border-border/30">
+                                  <p className="text-sm text-muted-foreground line-clamp-3">{t(service.description || "")}</p>
+                                </div>
+                              )}
+
+                              <div className="grid grid-cols-2 gap-3 text-xs">
+                                <div className="flex items-center gap-2 text-muted-foreground">
+                                  <Zap className="h-3 w-3 text-primary" />
+                                  <span>{t("Fast delivery")}</span>
+                                </div>
+                                <div className="flex items-center gap-2 text-muted-foreground">
+                                  {service.refill_supported || refillDays ? (
+                                    <>
+                                      <RefreshCw className="h-3 w-3 text-emerald-500" />
+                                      <span className="text-emerald-400">
+                                        {refillDays ? t(`${refillDays} Days Refill`) : t("Drop Protection")}
+                                      </span>
+                                    </>
+                                  ) : (
+                                    <span className="text-muted-foreground/60">—</span>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div className="flex items-center justify-between pt-3 border-t border-border/50">
+                                <div>
+                                  <p className="text-xs text-muted-foreground">{t("Price")}</p>
+                                  <p className="text-xl font-bold text-gradient-cyan">
+                                    {formatPrice(pricePerK)}
+                                    <span className="text-xs text-muted-foreground font-normal">/1K</span>
+                                  </p>
+                                </div>
+                                <Button variant="hero" size="sm" onClick={() => navigate("/dashboard/order")}>
+                                  <ShoppingCart className="h-4 w-4 mr-1" />
+                                  {t("Order")}
+                                </Button>
+                              </div>
+
+                              <p className="text-[10px] text-muted-foreground">
+                                Min: {service.min_quantity.toLocaleString()} • Max: {service.max_quantity.toLocaleString()}
+                              </p>
+                            </CardContent>
+                          </Card>
+                        );
+                      })}
+                    </div>
+                  </section>
+                ))}
               </div>
 
               {filteredServices.length === 0 && !isLoading && (
                 <div className="text-center py-12">
                   <Globe className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                   <p className="text-muted-foreground">
-                    {services.length === 0 
-                      ? t("No services available. Please check back later.") 
-                      : t("No services found matching your criteria")}
+                    {services.length === 0 ? t("No services available. Please check back later.") : t("No services found matching your criteria")}
                   </p>
                 </div>
               )}
