@@ -63,6 +63,7 @@ const Admin = () => {
   const [tickets, setTickets] = useState<any[]>([]);
   const [deposits, setDeposits] = useState<any[]>([]);
   const [providers, setProviders] = useState<any[]>([]);
+  const [resellers, setResellers] = useState<any[]>([]);
   const [regionalPricing, setRegionalPricing] = useState<any[]>([]);
   const [userCountByRegion, setUserCountByRegion] = useState<Record<string, number>>({});
   const [selectedUser, setSelectedUser] = useState<any>(null);
@@ -71,6 +72,10 @@ const Admin = () => {
   const [adjustmentType, setAdjustmentType] = useState<"add" | "deduct">("add");
   const [userSearchQuery, setUserSearchQuery] = useState("");
   const [userRoles, setUserRoles] = useState<Record<string, string[]>>({});
+  const [showTransferDialog, setShowTransferDialog] = useState(false);
+  const [transferTarget, setTransferTarget] = useState<any>(null);
+  const [currentAdminId, setCurrentAdminId] = useState<string>("");
+  const [updatingOrderStatus, setUpdatingOrderStatus] = useState<string | null>(null);
   
   // Provider form state
   const [showProviderDialog, setShowProviderDialog] = useState(false);
@@ -98,6 +103,8 @@ const Admin = () => {
       navigate('/auth');
       return;
     }
+
+    setCurrentAdminId(user.id);
 
     // Check for owner role first
     const { data: ownerRole } = await supabase
@@ -258,6 +265,13 @@ const Admin = () => {
       .select('*')
       .order('multiplier', { ascending: true });
     setRegionalPricing(pricingData || []);
+
+    // Fetch reseller panels
+    const { data: resellersData } = await supabase
+      .from('reseller_panels')
+      .select('*')
+      .order('created_at', { ascending: false });
+    setResellers(resellersData || []);
   };
 
   // Owner-only: toggle admin_visible on a transaction
@@ -435,6 +449,47 @@ const Admin = () => {
       await supabase.from('user_roles').insert({ user_id: userId, role: 'admin' });
       toast({ title: "Admin Granted", description: "User can now access the admin panel" });
     }
+    fetchAdminData();
+  };
+
+  const transferOwnership = async () => {
+    if (!transferTarget || !currentAdminId) return;
+    const targetRoles = userRoles[transferTarget.user_id] || [];
+    const selfRoles = userRoles[currentAdminId] || [];
+    // Grant owner to target if not already
+    if (!targetRoles.includes('owner')) {
+      await supabase.from('user_roles').insert({ user_id: transferTarget.user_id, role: 'owner' });
+    }
+    // Ensure target also has admin
+    if (!targetRoles.includes('admin')) {
+      await supabase.from('user_roles').insert({ user_id: transferTarget.user_id, role: 'admin' });
+    }
+    // Demote self from owner → keep as admin
+    await supabase.from('user_roles').delete().eq('user_id', currentAdminId).eq('role', 'owner');
+    if (!selfRoles.includes('admin')) {
+      await supabase.from('user_roles').insert({ user_id: currentAdminId, role: 'admin' });
+    }
+    toast({ title: "Ownership Transferred", description: `${transferTarget.email} is now the Owner. You are now an Admin.` });
+    setShowTransferDialog(false);
+    setTransferTarget(null);
+    checkAdminAccess();
+  };
+
+  const updateOrderStatus = async (orderId: string, newStatus: string) => {
+    setUpdatingOrderStatus(orderId);
+    const { error } = await supabase.from('orders').update({ status: newStatus }).eq('id', orderId);
+    if (error) {
+      toast({ title: "Failed to update order", variant: "destructive" });
+    } else {
+      toast({ title: "Order Updated", description: `Status changed to ${newStatus}` });
+      fetchAdminData();
+    }
+    setUpdatingOrderStatus(null);
+  };
+
+  const approveResellerPanel = async (panelId: string, approved: boolean) => {
+    await supabase.from('reseller_panels').update({ is_active: approved }).eq('id', panelId);
+    toast({ title: approved ? "Panel Approved" : "Panel Suspended" });
     fetchAdminData();
   };
 
@@ -689,6 +744,7 @@ const Admin = () => {
               {stats.openTickets > 0 && <Badge variant="secondary" className="ml-1 text-[10px]">{stats.openTickets}</Badge>}
             </TabsTrigger>
             <TabsTrigger value="providers">Providers</TabsTrigger>
+            <TabsTrigger value="resellers">Resellers</TabsTrigger>
             <TabsTrigger value="mapping" className="flex items-center gap-1">
               <Link2 className="h-3 w-3" />
               Service Mapping
@@ -699,7 +755,7 @@ const Admin = () => {
             </TabsTrigger>
             <TabsTrigger value="services">Provider Services</TabsTrigger>
             <TabsTrigger value="orders">Orders</TabsTrigger>
-            <TabsTrigger value="pricing">Regional Pricing</TabsTrigger>
+            {isOwner && <TabsTrigger value="pricing">Regional Pricing</TabsTrigger>}
           </TabsList>
 
           <TabsContent value="users">
@@ -845,10 +901,19 @@ const Admin = () => {
                                         View Details
                                       </DropdownMenuItem>
                                       {isOwner && !roles.includes('owner') && (
-                                        <DropdownMenuItem onClick={() => toggleAdminRole(user.user_id)}>
-                                          <Shield className="h-4 w-4 mr-2" />
-                                          {roles.includes('admin') ? 'Revoke Admin' : 'Grant Admin'}
-                                        </DropdownMenuItem>
+                                        <>
+                                          <DropdownMenuItem onClick={() => toggleAdminRole(user.user_id)}>
+                                            <Shield className="h-4 w-4 mr-2" />
+                                            {roles.includes('admin') ? 'Revoke Admin' : 'Grant Admin'}
+                                          </DropdownMenuItem>
+                                          <DropdownMenuItem 
+                                            className="text-yellow-500"
+                                            onClick={() => { setTransferTarget(user); setShowTransferDialog(true); }}
+                                          >
+                                            <Crown className="h-4 w-4 mr-2" />
+                                            Transfer Ownership
+                                          </DropdownMenuItem>
+                                        </>
                                       )}
                                       <DropdownMenuItem 
                                         className="text-destructive"
@@ -1001,46 +1066,50 @@ const Admin = () => {
                 <div className="flex items-center justify-between">
                   <div>
                     <CardTitle className="text-lg font-display">API Providers</CardTitle>
-                    <CardDescription>Manage external SMM API providers</CardDescription>
+                    <CardDescription>
+                      {isOwner ? "Manage external SMM API providers" : "Provider status overview (sensitive details restricted)"}
+                    </CardDescription>
                   </div>
-                  <Dialog open={showProviderDialog} onOpenChange={setShowProviderDialog}>
-                    <DialogTrigger asChild>
-                      <Button><Plus className="h-4 w-4 mr-2" />Add Provider</Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                      <DialogHeader><DialogTitle>Add API Provider</DialogTitle></DialogHeader>
-                      <div className="space-y-4 py-4">
-                        <div className="space-y-2">
-                          <Label>Provider Name</Label>
-                          <Input 
-                            placeholder="e.g., SMM Panel 1" 
-                            value={providerForm.name}
-                            onChange={(e) => setProviderForm({ ...providerForm, name: e.target.value })}
-                          />
+                  {isOwner && (
+                    <Dialog open={showProviderDialog} onOpenChange={setShowProviderDialog}>
+                      <DialogTrigger asChild>
+                        <Button><Plus className="h-4 w-4 mr-2" />Add Provider</Button>
+                      </DialogTrigger>
+                      <DialogContent>
+                        <DialogHeader><DialogTitle>Add API Provider</DialogTitle></DialogHeader>
+                        <div className="space-y-4 py-4">
+                          <div className="space-y-2">
+                            <Label>Provider Name</Label>
+                            <Input 
+                              placeholder="e.g., SMM Panel 1" 
+                              value={providerForm.name}
+                              onChange={(e) => setProviderForm({ ...providerForm, name: e.target.value })}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>API URL</Label>
+                            <Input 
+                              placeholder="https://provider.com/api/v2" 
+                              value={providerForm.api_url}
+                              onChange={(e) => setProviderForm({ ...providerForm, api_url: e.target.value })}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>API Key</Label>
+                            <Input 
+                              type="password"
+                              placeholder="Your API key" 
+                              value={providerForm.api_key}
+                              onChange={(e) => setProviderForm({ ...providerForm, api_key: e.target.value })}
+                            />
+                          </div>
                         </div>
-                        <div className="space-y-2">
-                          <Label>API URL</Label>
-                          <Input 
-                            placeholder="https://provider.com/api/v2" 
-                            value={providerForm.api_url}
-                            onChange={(e) => setProviderForm({ ...providerForm, api_url: e.target.value })}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>API Key</Label>
-                          <Input 
-                            type="password"
-                            placeholder="Your API key" 
-                            value={providerForm.api_key}
-                            onChange={(e) => setProviderForm({ ...providerForm, api_key: e.target.value })}
-                          />
-                        </div>
-                      </div>
-                      <DialogFooter>
-                        <Button onClick={addProvider}>Add Provider</Button>
-                      </DialogFooter>
-                    </DialogContent>
-                  </Dialog>
+                        <DialogFooter>
+                          <Button onClick={addProvider}>Add Provider</Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
+                  )}
                 </div>
               </CardHeader>
               <CardContent>
@@ -1048,49 +1117,132 @@ const Admin = () => {
                   <div className="text-center py-12">
                     <Activity className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
                     <p className="text-muted-foreground">No providers configured</p>
-                    <p className="text-sm text-muted-foreground mt-1">Add an API provider to sync services</p>
+                    {isOwner && <p className="text-sm text-muted-foreground mt-1">Add an API provider to sync services</p>}
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {providers.map((provider) => (
-                      <div key={provider.id} className="p-4 rounded-lg bg-secondary/10 border border-border/30">
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <div className="flex items-center gap-2 mb-1">
-                              <p className="font-medium text-foreground">{provider.name}</p>
-                              <Badge variant={provider.status === 'active' ? 'default' : 'secondary'}>{provider.status}</Badge>
-                              <Badge variant="outline">Priority: {provider.priority}</Badge>
-                            </div>
-                            <p className="text-sm text-muted-foreground">{provider.api_url}</p>
-                            <div className="flex items-center gap-4 mt-2 text-sm">
-                              <span className="text-success font-mono">Balance: ${Number(provider.balance || 0).toFixed(2)}</span>
-                              {provider.last_sync_at && (
-                                <span className="text-muted-foreground">Last sync: {new Date(provider.last_sync_at).toLocaleString()}</span>
+                    {providers.map((provider, providerIndex) => {
+                      const maskedName = `Provider ${String.fromCharCode(65 + providerIndex)}`;
+                      return (
+                        <div key={provider.id} className="p-4 rounded-lg bg-secondary/10 border border-border/30">
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <div className="flex items-center gap-2 mb-1">
+                                <p className="font-medium text-foreground">
+                                  {isOwner ? provider.name : maskedName}
+                                </p>
+                                <Badge variant={provider.status === 'active' ? 'default' : 'secondary'}>{provider.status || 'active'}</Badge>
+                                {isOwner && <Badge variant="outline">Priority: {provider.priority}</Badge>}
+                              </div>
+                              {isOwner && (
+                                <p className="text-sm text-muted-foreground font-mono">{provider.api_url}</p>
                               )}
+                              <div className="flex items-center gap-4 mt-2 text-sm">
+                                <span className="text-success font-mono">Balance: ${Number(provider.balance || 0).toFixed(2)}</span>
+                                {provider.last_sync_at && (
+                                  <span className="text-muted-foreground">Last sync: {new Date(provider.last_sync_at).toLocaleString()}</span>
+                                )}
+                              </div>
+                            </div>
+                            {isOwner && (
+                              <div className="flex gap-2">
+                                <Button 
+                                  variant="outline" 
+                                  size="sm" 
+                                  onClick={() => syncProvider(provider.id, 'balance')}
+                                  disabled={syncingProvider === provider.id}
+                                >
+                                  {syncingProvider === provider.id ? <RefreshCw className="h-4 w-4 animate-spin" /> : <DollarSign className="h-4 w-4" />}
+                                  Balance
+                                </Button>
+                                <Button 
+                                  size="sm" 
+                                  onClick={() => syncProvider(provider.id, 'services')}
+                                  disabled={syncingProvider === provider.id}
+                                >
+                                  {syncingProvider === provider.id ? <RefreshCw className="h-4 w-4 animate-spin mr-1" /> : <RefreshCw className="h-4 w-4 mr-1" />}
+                                  Sync Services
+                                </Button>
+                                <Button variant="destructive" size="icon" className="h-8 w-8" onClick={() => deleteProvider(provider.id)}>
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Resellers Tab */}
+          <TabsContent value="resellers">
+            <Card className="border-border/30 bg-card/60">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-lg font-display flex items-center gap-2">
+                      <Globe className="h-5 w-5 text-primary" />
+                      Reseller Panels
+                    </CardTitle>
+                    <CardDescription>Manage reseller subscriptions — $25/month per panel</CardDescription>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="text-right">
+                      <p className="text-xs text-muted-foreground">Monthly Revenue</p>
+                      <p className="text-lg font-display font-bold text-success">
+                        ${(resellers.filter(r => r.is_active).length * 25).toFixed(2)}
+                      </p>
+                    </div>
+                    <Badge variant="outline" className="text-sm px-3 py-1">
+                      {resellers.filter(r => r.is_active).length} Active
+                    </Badge>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {resellers.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Globe className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
+                    <p className="text-muted-foreground">No reseller panels yet</p>
+                    <p className="text-sm text-muted-foreground mt-1">Users can create panels from the Reseller Panel section for $25/month</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {resellers.map((panel) => (
+                      <div key={panel.id} className="p-4 rounded-lg bg-secondary/10 border border-border/30">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <p className="font-medium text-foreground">{panel.panel_name}</p>
+                              <Badge variant={panel.is_active ? 'success' : 'secondary'}>
+                                {panel.is_active ? 'Active' : 'Inactive'}
+                              </Badge>
+                              <Badge variant="gold" className="text-xs">$25/mo</Badge>
+                            </div>
+                            <p className="text-sm text-muted-foreground font-mono">
+                              {panel.subdomain}.smmdaddy.com
+                              {panel.custom_domain && ` · ${panel.custom_domain}`}
+                            </p>
+                            <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
+                              <span>Margin: {panel.pricing_margin}%</span>
+                              <span>Created: {new Date(panel.created_at).toLocaleDateString()}</span>
                             </div>
                           </div>
-                          <div className="flex gap-2">
-                            <Button 
-                              variant="outline" 
-                              size="sm" 
-                              onClick={() => syncProvider(provider.id, 'balance')}
-                              disabled={syncingProvider === provider.id}
-                            >
-                              {syncingProvider === provider.id ? <RefreshCw className="h-4 w-4 animate-spin" /> : <DollarSign className="h-4 w-4" />}
-                              Balance
-                            </Button>
-                            <Button 
-                              size="sm" 
-                              onClick={() => syncProvider(provider.id, 'services')}
-                              disabled={syncingProvider === provider.id}
-                            >
-                              {syncingProvider === provider.id ? <RefreshCw className="h-4 w-4 animate-spin mr-1" /> : <RefreshCw className="h-4 w-4 mr-1" />}
-                              Sync Services
-                            </Button>
-                            <Button variant="destructive" size="icon" className="h-8 w-8" onClick={() => deleteProvider(provider.id)}>
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
+                          {isOwner && (
+                            <div className="flex items-center gap-2 shrink-0">
+                              <Button
+                                variant={panel.is_active ? "outline" : "default"}
+                                size="sm"
+                                onClick={() => approveResellerPanel(panel.id, !panel.is_active)}
+                              >
+                                {panel.is_active ? 'Suspend' : 'Activate'}
+                              </Button>
+                            </div>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -1142,7 +1294,7 @@ const Admin = () => {
                           <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Qty</th>
                           <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Price</th>
                           <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Country</th>
-                          <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Multiplier</th>
+                          {isOwner && <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Multiplier</th>}
                           <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Status</th>
                           <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Date</th>
                         </tr>
@@ -1152,9 +1304,9 @@ const Admin = () => {
                           <tr key={order.id} className="border-b border-border/20 hover:bg-secondary/10">
                             <td className="p-3 font-mono text-sm text-primary">{order.order_number}</td>
                             <td className="p-3">
-                              <p className="text-sm truncate max-w-[180px]" title={order.link}>{order.link}</p>
+                              <p className="text-sm truncate max-w-[150px]" title={order.link}>{order.link}</p>
                             </td>
-                            <td className="p-3 font-mono text-sm">{order.quantity.toLocaleString()}</td>
+                            <td className="p-3 font-mono text-sm">{order.quantity?.toLocaleString()}</td>
                             <td className="p-3 font-mono text-sm text-success">${Number(order.price).toFixed(2)}</td>
                             <td className="p-3">
                               {order.user_country_code ? (
@@ -1165,15 +1317,31 @@ const Admin = () => {
                                 <span className="text-muted-foreground text-xs">—</span>
                               )}
                             </td>
+                            {isOwner && (
+                              <td className="p-3">
+                                <Badge variant={Number(order.applied_multiplier) > 1.5 ? 'default' : 'secondary'} className="font-mono text-xs">
+                                  {Number(order.applied_multiplier || 1).toFixed(2)}x
+                                </Badge>
+                              </td>
+                            )}
                             <td className="p-3">
-                              <Badge variant={Number(order.applied_multiplier) > 1.5 ? 'default' : 'secondary'} className="font-mono text-xs">
-                                {Number(order.applied_multiplier || 1).toFixed(2)}x
-                              </Badge>
-                            </td>
-                            <td className="p-3">
-                              <Badge variant={order.status === 'completed' ? 'success' : order.status === 'processing' ? 'cyan' : 'secondary'}>
-                                {order.status}
-                              </Badge>
+                              <Select
+                                defaultValue={order.status}
+                                onValueChange={(val) => updateOrderStatus(order.id, val)}
+                                disabled={updatingOrderStatus === order.id}
+                              >
+                                <SelectTrigger className="w-32 h-7 text-xs bg-secondary/30 border-border/30">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="pending">Pending</SelectItem>
+                                  <SelectItem value="processing">Processing</SelectItem>
+                                  <SelectItem value="completed">Completed</SelectItem>
+                                  <SelectItem value="partial">Partial</SelectItem>
+                                  <SelectItem value="cancelled">Cancelled</SelectItem>
+                                  <SelectItem value="refunded">Refunded</SelectItem>
+                                </SelectContent>
+                              </Select>
                             </td>
                             <td className="p-3 text-xs text-muted-foreground">
                               {new Date(order.created_at).toLocaleDateString()}
@@ -1275,6 +1443,44 @@ const Admin = () => {
           onRefresh={() => fetchAdminData()}
           isOwner={isOwner}
         />
+
+        {/* Transfer Ownership Confirmation Dialog */}
+        <Dialog open={showTransferDialog} onOpenChange={setShowTransferDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-yellow-500">
+                <Crown className="h-5 w-5" />
+                Transfer Ownership
+              </DialogTitle>
+            </DialogHeader>
+            <div className="py-4 space-y-4">
+              <div className="p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
+                <p className="text-sm font-medium text-yellow-400 mb-1">Warning: This action is irreversible!</p>
+                <p className="text-sm text-muted-foreground">
+                  You are about to transfer full ownership to <span className="font-medium text-foreground">{transferTarget?.email}</span>. 
+                  You will be demoted to Admin after this action.
+                </p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm text-muted-foreground">New Owner:</p>
+                <p className="font-medium">{transferTarget?.full_name || transferTarget?.email}</p>
+                <p className="text-sm text-muted-foreground">{transferTarget?.email}</p>
+              </div>
+            </div>
+            <DialogFooter className="gap-2">
+              <Button variant="outline" onClick={() => { setShowTransferDialog(false); setTransferTarget(null); }}>
+                Cancel
+              </Button>
+              <Button 
+                className="bg-yellow-500 hover:bg-yellow-600 text-black"
+                onClick={transferOwnership}
+              >
+                <Crown className="h-4 w-4 mr-2" />
+                Confirm Transfer
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );
