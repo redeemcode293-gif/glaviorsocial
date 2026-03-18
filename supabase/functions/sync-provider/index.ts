@@ -65,10 +65,6 @@ function toUsd(raw: string | number, currency?: string): number {
     return rawValue * INR_TO_USD;
   }
 
-  if (rawValue > 50) {
-    return rawValue * INR_TO_USD;
-  }
-
   return rawValue;
 }
 
@@ -306,9 +302,16 @@ serve(async (req) => {
 
         for (const service of batch) {
           const platform = detectPlatform(service.category || '', service.name || '');
-          const providerPrice = toUsd(service.rate);
+          const providerPrice = toUsd(service.rate, provider.currency || 'USD');
           const basePrice = providerPrice * 1.3; // 30% default margin
           const providerServiceId = String(service.service);
+
+          if (basePrice > 50) {
+            console.error(
+              `PRICE SANITY FAIL: service ${service.service}, raw rate ${service.rate}, panelUSD=${basePrice}. Skipping.`,
+            );
+            continue;
+          }
 
           const serviceData = {
             name: service.name,

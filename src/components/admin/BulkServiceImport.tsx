@@ -59,10 +59,6 @@ function toUSD(raw: string | number, currency: string) {
     return rawValue * INR_TO_USD;
   }
 
-  if (rawValue > 50) {
-    return rawValue * INR_TO_USD;
-  }
-
   return rawValue;
 }
 
@@ -347,9 +343,9 @@ export const BulkServiceImport = () => {
           const basePrice = providerPrice * (1 + margin);
           const providerServiceId = String(service.service);
 
-          if (basePrice > 500) {
+          if (basePrice > 50) {
             console.error(
-              `PRICE SANITY FAILED: service ${service.service} computed $${basePrice} — raw rate: ${service.rate} currency: ${providerCurrency}. Skipping import.`,
+              `PRICE SANITY FAIL: service ${service.service}, raw rate ${service.rate}, panelUSD=${basePrice}. Skipping.`,
             );
             errors += 1;
             continue;

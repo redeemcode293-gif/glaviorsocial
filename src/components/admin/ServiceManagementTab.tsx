@@ -47,8 +47,6 @@ interface Provider {
 
 const PLATFORMS = ['Instagram', 'YouTube', 'TikTok', 'Telegram', 'X', 'Facebook', 'Spotify', 'Discord', 'Twitch', 'Snapchat', 'LinkedIn', 'Pinterest', 'Other'];
 const CATEGORIES = ['Followers', 'Likes', 'Views', 'Comments', 'Shares', 'Subscribers', 'Members', 'Reactions', 'Saves', 'Impressions', 'Reach', 'General', 'Premium', 'Other'];
-const INR_TO_USD = 1 / 92;
-
 export function ServiceManagementTab() {
   const [services, setServices] = useState<Service[]>([]);
   const [providers, setProviders] = useState<Provider[]>([]);
@@ -284,7 +282,7 @@ export function ServiceManagementTab() {
         const { data, error } = await supabase
           .from('services')
           .select('*')
-          .gt('base_price', 50)
+          .gt('base_price', 10)
           .order('id')
           .range(offset, offset + FETCH_BATCH - 1);
 
@@ -309,9 +307,9 @@ export function ServiceManagementTab() {
         const batch = corruptedServices.slice(i, i + UPDATE_BATCH);
 
         for (const service of batch) {
-          const correctedBasePrice = Number(service.base_price) * INR_TO_USD;
+          const correctedBasePrice = Number(service.base_price) / 92000;
           const correctedProviderPrice =
-            service.provider_price !== null ? Number(service.provider_price) * INR_TO_USD : null;
+            service.provider_price !== null ? Number(service.provider_price) / 92000 : null;
 
           const { error: serviceError } = await supabase
             .from('services')
