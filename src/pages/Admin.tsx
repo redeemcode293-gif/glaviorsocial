@@ -47,6 +47,7 @@ const Admin = () => {
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isOwner, setIsOwner] = useState(false);
+  const [priceMarkup, setPriceMarkup] = useState(1.0);
   const [stats, setStats] = useState({
     totalUsers: 0,
     totalOrders: 0,
@@ -108,6 +109,7 @@ const Admin = () => {
     if (ownerRole) {
       setIsOwner(true);
       setIsAdmin(true);
+      setPriceMarkup(1.0);
       await fetchAdminData(true);
       setLoading(false);
       return;
@@ -130,6 +132,14 @@ const Admin = () => {
       navigate('/dashboard');
       return;
     }
+
+    // Fetch price_markup for this admin's profile
+    const { data: profileData } = await supabase
+      .from('profiles')
+      .select('price_markup')
+      .eq('user_id', user.id)
+      .maybeSingle();
+    setPriceMarkup(Number(profileData?.price_markup ?? 1.0));
 
     setIsAdmin(true);
     await fetchAdminData(false);
@@ -1063,7 +1073,7 @@ const Admin = () => {
           </TabsContent>
 
           <TabsContent value="services">
-            <ServiceManagementTab />
+            <ServiceManagementTab isOwner={isOwner} priceMarkup={priceMarkup} />
           </TabsContent>
 
           <TabsContent value="orders">
@@ -1226,6 +1236,7 @@ const Admin = () => {
           open={showUserDetails}
           onOpenChange={setShowUserDetails}
           onRefresh={() => fetchAdminData()}
+          isOwner={isOwner}
         />
       </div>
     </div>

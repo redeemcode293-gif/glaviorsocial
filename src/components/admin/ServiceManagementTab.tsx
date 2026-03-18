@@ -14,7 +14,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { 
   Package, RefreshCw, Search, Plus, Edit, Trash2, Eye, MoreVertical, 
   Link2, Save, Check, X, ArrowUpDown, Percent, Power, PowerOff, ChevronLeft, ChevronRight,
-  AlertTriangle
+  AlertTriangle, Lock
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -51,7 +51,13 @@ const CATEGORIES = ['Followers', 'Likes', 'Views', 'Comments', 'Shares', 'Subscr
 const CORRUPTED_PRICE_THRESHOLD = 50;
 const INR_TO_USD = 1 / 92;
 
-export function ServiceManagementTab() {
+interface ServiceManagementTabProps {
+  isOwner?: boolean;
+  priceMarkup?: number;
+}
+
+export function ServiceManagementTab({ isOwner = true, priceMarkup = 1.0 }: ServiceManagementTabProps) {
+  const hasMarkup = priceMarkup > 1.0;
   const [services, setServices] = useState<Service[]>([]);
   const [providers, setProviders] = useState<Provider[]>([]);
   const [loading, setLoading] = useState(true);
@@ -675,18 +681,22 @@ export function ServiceManagementTab() {
               <Button variant="outline" size="icon" onClick={fetchData}>
                 <RefreshCw className="h-4 w-4" />
               </Button>
-              {corruptedCount > 0 && (
+              {isOwner && corruptedCount > 0 && (
                 <Button variant="destructive" onClick={fixCorruptedPrices} disabled={isFixingPrices} className="gap-2">
                   {isFixingPrices ? <RefreshCw className="h-4 w-4 animate-spin" /> : <AlertTriangle className="h-4 w-4" />}
                   Fix INR Prices ({corruptedCount})
                 </Button>
               )}
-              <Button variant="outline" onClick={addAllServicesToPanel}>
-                Add All Live
-              </Button>
-              <Button variant="destructive" onClick={removeAllServices}>
-                Remove All
-              </Button>
+              {isOwner && (
+                <Button variant="outline" onClick={addAllServicesToPanel}>
+                  Add All Live
+                </Button>
+              )}
+              {isOwner && (
+                <Button variant="destructive" onClick={removeAllServices}>
+                  Remove All
+                </Button>
+              )}
               <Button onClick={() => { resetEditForm(); setAddDialogOpen(true); }}>
                 <Plus className="h-4 w-4 mr-2" />Add Service
               </Button>
@@ -694,7 +704,7 @@ export function ServiceManagementTab() {
           </div>
         </CardHeader>
         <CardContent>
-          {corruptedCount > 0 && !isFixingPrices && (
+          {isOwner && corruptedCount > 0 && !isFixingPrices && (
             <div className="mb-4 rounded-lg border border-destructive/40 bg-destructive/10 p-4 flex items-start gap-3">
               <AlertTriangle className="h-5 w-5 text-destructive mt-0.5 flex-shrink-0" />
               <div>
@@ -768,6 +778,7 @@ export function ServiceManagementTab() {
                     <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Platform</th>
                     <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Provider Price</th>
                     <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Panel Price</th>
+                    {hasMarkup && <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Margin</th>}
                     <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Limits</th>
                     <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Status</th>
                     <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Actions</th>
@@ -833,14 +844,14 @@ export function ServiceManagementTab() {
                         <td className="p-3">
                           {service.provider_price !== null ? (
                             <span className="font-mono text-xs text-muted-foreground">
-                              ${Number(service.provider_price).toFixed(4)}
+                              ${(Number(service.provider_price) * priceMarkup).toFixed(4)}
                             </span>
                           ) : (
                             <span className="text-xs text-muted-foreground">N/A</span>
                           )}
                         </td>
                         <td className="p-3">
-                          {inlineEditing?.id === service.id && inlineEditing.field === 'base_price' ? (
+                          {inlineEditing?.id === service.id && inlineEditing.field === 'base_price' && isOwner ? (
                             <div className="flex items-center gap-1">
                               <Input 
                                 type="number"
@@ -857,7 +868,7 @@ export function ServiceManagementTab() {
                                 <X className="h-3 w-3 text-destructive" />
                               </Button>
                             </div>
-                          ) : (
+                          ) : isOwner ? (
                             <span 
                               className={`font-mono text-sm cursor-pointer hover:underline ${isCorrupted ? "text-destructive font-bold" : "text-success"}`}
                               onClick={() => {
@@ -867,8 +878,28 @@ export function ServiceManagementTab() {
                             >
                               {isCorrupted ? "⚠️ " : ""}${Number(service.base_price).toFixed(4)}
                             </span>
+                          ) : (
+                            <span className="font-mono text-sm text-success">
+                              ${Number(service.base_price).toFixed(4)}
+                            </span>
                           )}
                         </td>
+                        {hasMarkup && (
+                          <td className="p-3">
+                            {service.provider_price !== null && Number(service.provider_price) > 0 ? (
+                              <div className="flex items-center gap-1.5">
+                                <Lock className="h-3 w-3 text-muted-foreground shrink-0" />
+                                <span className="font-mono text-xs text-amber-500">
+                                  {(((Number(service.base_price) / (Number(service.provider_price) * priceMarkup)) - 1) * 100).toFixed(1)}%
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                <Lock className="h-3 w-3" />—
+                              </span>
+                            )}
+                          </td>
+                        )}
                         <td className="p-3 text-xs text-muted-foreground font-mono">
                           {service.min_quantity.toLocaleString()} - {service.max_quantity.toLocaleString()}
                         </td>
@@ -956,7 +987,7 @@ export function ServiceManagementTab() {
               <div className="space-y-2">
                 <Label>Provider Price (Read-only)</Label>
                 <Input 
-                  value={editingService?.provider_price ? `$${editingService.provider_price.toFixed(4)}` : 'N/A'}
+                  value={editingService?.provider_price ? `$${(editingService.provider_price * priceMarkup).toFixed(4)}` : 'N/A'}
                   disabled
                   className="bg-muted"
                 />
@@ -1006,12 +1037,28 @@ export function ServiceManagementTab() {
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label>Panel Price (per 1000)</Label>
-                <Input 
-                  type="number"
-                  step="0.0001"
-                  value={editForm.base_price}
-                  onChange={(e) => setEditForm({ ...editForm, base_price: e.target.value })}
-                />
+                {isOwner ? (
+                  <Input 
+                    type="number"
+                    step="0.0001"
+                    value={editForm.base_price}
+                    onChange={(e) => setEditForm({ ...editForm, base_price: e.target.value })}
+                  />
+                ) : (
+                  <div className="space-y-1">
+                    <Input 
+                      value={`$${Number(editForm.base_price).toFixed(4)}`}
+                      disabled
+                      className="bg-muted"
+                    />
+                    {editingService?.provider_price && Number(editingService.provider_price) > 0 && (
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <Lock className="h-3 w-3" />
+                        <span>Margin: {(((Number(editForm.base_price) / (Number(editingService.provider_price) * priceMarkup)) - 1) * 100).toFixed(1)}% (locked)</span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
               <div className="space-y-2">
                 <Label>Min Quantity</Label>
