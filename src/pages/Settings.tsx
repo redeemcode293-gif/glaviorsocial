@@ -90,7 +90,7 @@ const Settings = () => {
         title: t("Profile Updated"),
         description: t("Your profile has been saved successfully."),
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: t("Error"),
         description: error.message || t("Failed to update profile."),
@@ -102,10 +102,19 @@ const Settings = () => {
   };
 
   const handleChangePassword = async () => {
-    if (!currentPassword || !newPassword || !confirmPassword) {
+    if (!newPassword || !confirmPassword) {
       toast({
         title: t("Missing Fields"),
-        description: t("Please fill all password fields."),
+        description: t("Please enter and confirm your new password."),
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      toast({
+        title: t("Password Too Short"),
+        description: t("Your new password must be at least 6 characters long."),
         variant: "destructive",
       });
       return;
@@ -125,17 +134,24 @@ const Settings = () => {
       const { error } = await supabase.auth.updateUser({
         password: newPassword
       });
-      
+
       if (error) throw error;
-      
+
+      if (user) {
+        await supabase
+          .from('profiles')
+          .update({ last_password_change: new Date().toISOString() })
+          .eq('user_id', user.id);
+      }
+
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
       toast({
         title: t("Password Changed"),
-        description: t("Your password has been updated successfully."),
+        description: t("Your password has been updated successfully. Supabase may ask you to re-authenticate if your session is old."),
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: t("Error"),
         description: error.message || t("Failed to update password."),
@@ -246,11 +262,19 @@ const Settings = () => {
             <Card className="border-border/30 bg-card/60 backdrop-blur-sm">
               <CardHeader>
                 <CardTitle className="text-lg font-display">{t("Change Password")}</CardTitle>
-                <CardDescription>{t("Update your password regularly for security")}</CardDescription>
+                <CardDescription>{t("Update your password regularly for security. Supabase changes the password directly from your active session.")}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
+                <div className="p-4 rounded-lg bg-secondary/20 border border-border/30 flex items-start gap-3">
+                  <AlertTriangle className="h-5 w-5 text-warning mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium text-foreground">{t("Current password cannot be verified in the browser")}</p>
+                    <p className="text-xs text-muted-foreground">{t("Supabase does not expose a client-side verify password method, so this form updates your password using your active session.")}</p>
+                  </div>
+                </div>
+
                 <div className="space-y-2">
-                  <Label htmlFor="current">{t("Current Password")}</Label>
+                  <Label htmlFor="current">{t("Current Password (optional)")}</Label>
                   <div className="relative">
                     <Key className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input

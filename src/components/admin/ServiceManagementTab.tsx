@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { 
   Package, RefreshCw, Search, Plus, Edit, Trash2, Eye, MoreVertical, 
-  Link2, Save, Check, X, ArrowUpDown, Percent, Power, PowerOff
+  Link2, Save, Check, X, ArrowUpDown, Percent, Power, PowerOff, ChevronLeft, ChevronRight
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -54,6 +54,7 @@ export function ServiceManagementTab() {
   const [searchQuery, setSearchQuery] = useState("");
   const [platformFilter, setPlatformFilter] = useState<string>("all");
   const [selectedServices, setSelectedServices] = useState<Set<string>>(new Set());
+  const [currentPage, setCurrentPage] = useState(1);
   
   // Dialogs
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -93,6 +94,10 @@ export function ServiceManagementTab() {
     fetchData();
   }, []);
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, platformFilter]);
+
   const fetchData = async () => {
     setLoading(true);
     const [servicesRes, providersRes] = await Promise.all([
@@ -116,6 +121,43 @@ export function ServiceManagementTab() {
 
   const getProvider = (providerId: string | null) => {
     return providers.find(p => p.id === providerId);
+  };
+
+  const syncPanelVisibility = async (serviceIds: string[], isVisible: boolean) => {
+    if (serviceIds.length === 0) return;
+
+    const BATCH_SIZE = 200;
+    for (let i = 0; i < serviceIds.length; i += BATCH_SIZE) {
+      const batch = serviceIds.slice(i, i + BATCH_SIZE);
+      const { error } = await supabase
+        .from('panel_services')
+        .update({ is_visible: isVisible })
+        .in('provider_service_uuid', batch);
+      if (error) throw error;
+    }
+  };
+
+  const syncPanelDetails = async (serviceId: string, panelPayload: Record<string, unknown>) => {
+    const { error } = await supabase
+      .from('panel_services')
+      .update(panelPayload)
+      .eq('provider_service_uuid', serviceId);
+
+    if (error) throw error;
+  };
+
+  const deleteLinkedPanelServices = async (serviceIds: string[]) => {
+    if (serviceIds.length === 0) return;
+
+    const BATCH_SIZE = 200;
+    for (let i = 0; i < serviceIds.length; i += BATCH_SIZE) {
+      const batch = serviceIds.slice(i, i + BATCH_SIZE);
+      const { error } = await supabase
+        .from('panel_services')
+        .delete()
+        .in('provider_service_uuid', batch);
+      if (error) throw error;
+    }
   };
 
   // Open edit dialog
@@ -142,6 +184,19 @@ export function ServiceManagementTab() {
   const saveService = async () => {
     if (!editingService) return;
 
+    const panelPayload = {
+      name: editForm.name,
+      description: editForm.description || editForm.name,
+      platform: editForm.platform,
+      category: editForm.category,
+      price: parseFloat(editForm.base_price),
+      min_quantity: parseInt(editForm.min_quantity),
+      max_quantity: parseInt(editForm.max_quantity),
+      refill_supported: editForm.refill_supported,
+      dripfeed_supported: editForm.dripfeed_supported,
+      is_visible: editForm.is_active,
+    };
+
     const { error } = await supabase
       .from('services')
       .update({
@@ -159,6 +214,10 @@ export function ServiceManagementTab() {
         speed_estimate: editForm.speed_estimate || null
       })
       .eq('id', editingService.id);
+
+    if (!error) {
+      await syncPanelDetails(editingService.id, panelPayload);
+    }
 
     if (error) {
       toast({ title: "Failed to update service", variant: "destructive" });
@@ -216,10 +275,15 @@ export function ServiceManagementTab() {
 
   // Toggle service status
   const toggleServiceStatus = async (service: Service) => {
+    const nextActiveState = !service.is_active;
     const { error } = await supabase
       .from('services')
-      .update({ is_active: !service.is_active })
+      .update({ is_active: nextActiveState })
       .eq('id', service.id);
+
+    if (!error) {
+      await syncPanelVisibility([service.id], nextActiveState);
+    }
 
     if (error) {
       toast({ title: "Failed to update", variant: "destructive" });
@@ -231,6 +295,7 @@ export function ServiceManagementTab() {
 
   // Delete service
   const deleteService = async (serviceId: string) => {
+    await deleteLinkedPanelServices([serviceId]);
     const { error } = await supabase.from('services').delete().eq('id', serviceId);
     if (error) {
       toast({ title: "Failed to delete", variant: "destructive" });
@@ -242,7 +307,7 @@ export function ServiceManagementTab() {
 
   // Inline edit save
   const saveInlineEdit = async (serviceId: string, field: string, value: string) => {
-    let updateData: any = {};
+    const updateData: Record<string, string | number | boolean> = {};
     
     if (field === 'base_price') {
       updateData.base_price = parseFloat(value);
@@ -253,6 +318,17 @@ export function ServiceManagementTab() {
     }
 
     const { error } = await supabase.from('services').update(updateData).eq('id', serviceId);
+
+    if (!error) {
+      const panelUpdate = field === 'base_price'
+        ? { price: updateData.base_price }
+        : field === 'is_active'
+          ? { is_visible: updateData.is_active }
+          : field === 'name'
+            ? { name: updateData.name, description: updateData.name }
+            : null;
+      if (panelUpdate) await syncPanelDetails(serviceId, panelUpdate);
+    }
     
     if (error) {
       toast({ title: "Failed to update", variant: "destructive" });
@@ -284,7 +360,7 @@ export function ServiceManagementTab() {
       // Process in batches of 200 to avoid DB query limits with large selections
       const BATCH_SIZE = 200;
 
-      const batchUpdate = async (updateData: any) => {
+      const batchUpdate = async (updateData: Record<string, string | number | boolean>) => {
         for (let i = 0; i < ids.length; i += BATCH_SIZE) {
           const batch = ids.slice(i, i + BATCH_SIZE);
           const { error } = await supabase.from('services').update(updateData).in('id', batch);
@@ -303,15 +379,19 @@ export function ServiceManagementTab() {
       switch (bulkActionType) {
         case 'enable':
           await batchUpdate({ is_active: true });
+          await syncPanelVisibility(ids, true);
           break;
         case 'disable':
           await batchUpdate({ is_active: false });
+          await syncPanelVisibility(ids, false);
           break;
         case 'delete':
+          await deleteLinkedPanelServices(ids);
           await batchDelete();
           break;
         case 'category':
           await batchUpdate({ category: bulkCategory });
+          await supabase.from('panel_services').update({ category: bulkCategory }).in('provider_service_uuid', ids);
           break;
         case 'price': {
           const selectedServicesList = services.filter(s => ids.includes(s.id));
@@ -324,8 +404,10 @@ export function ServiceManagementTab() {
               } else {
                 newPrice = service.base_price + parseFloat(bulkPriceChange.value);
               }
-              const { error } = await supabase.from('services').update({ base_price: Math.max(0, newPrice) }).eq('id', service.id);
+              const nextPrice = Math.max(0, newPrice);
+              const { error } = await supabase.from('services').update({ base_price: nextPrice }).eq('id', service.id);
               if (error) throw error;
+              await syncPanelDetails(service.id, { price: nextPrice });
             }
           }
           break;
@@ -336,11 +418,17 @@ export function ServiceManagementTab() {
       setSelectedServices(new Set());
       setBulkActionDialogOpen(false);
       fetchData();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Bulk action error:', err);
-      toast({ title: "Bulk action failed", description: err.message || "Please try again", variant: "destructive" });
+      const message = err instanceof Error ? err.message : 'Please try again';
+      toast({ title: "Bulk action failed", description: message, variant: "destructive" });
     }
   };
+
+  const PAGE_SIZE = 100;
+  const totalPages = Math.max(1, Math.ceil(filteredServices.length / PAGE_SIZE));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const paginatedServices = filteredServices.slice((safeCurrentPage - 1) * PAGE_SIZE, safeCurrentPage * PAGE_SIZE);
 
   // View mapping
   const openMappingDialog = (service: Service) => {
@@ -456,7 +544,7 @@ export function ServiceManagementTab() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredServices.slice(0, 100).map((service) => {
+                  {paginatedServices.map((service) => {
                     const provider = getProvider(service.provider_id);
                     return (
                       <tr key={service.id} className="border-b border-border/20 hover:bg-secondary/10 group">
@@ -592,10 +680,23 @@ export function ServiceManagementTab() {
                   })}
                 </tbody>
               </table>
-              {filteredServices.length > 100 && (
-                <p className="text-sm text-muted-foreground text-center mt-4">
-                  Showing 100 of {filteredServices.length} services
-                </p>
+              {filteredServices.length > 0 && (
+                <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-sm text-muted-foreground">
+                    Showing {(safeCurrentPage - 1) * PAGE_SIZE + 1}-{Math.min(safeCurrentPage * PAGE_SIZE, filteredServices.length)} of {filteredServices.length} services
+                  </p>
+                  {totalPages > 1 && (
+                    <div className="flex items-center gap-2">
+                      <Button variant="outline" size="sm" disabled={safeCurrentPage === 1} onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}>
+                        <ChevronLeft className="h-4 w-4 mr-1" />Prev
+                      </Button>
+                      <span className="text-sm text-muted-foreground">Page {safeCurrentPage} of {totalPages}</span>
+                      <Button variant="outline" size="sm" disabled={safeCurrentPage === totalPages} onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}>
+                        Next<ChevronRight className="h-4 w-4 ml-1" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           )}
