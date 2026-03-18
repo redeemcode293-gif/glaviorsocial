@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -10,19 +11,26 @@ import {
   Bot,
   User,
   Minimize2,
-  Sparkles
+  Sparkles,
+  ShoppingCart,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useLocalization } from "@/contexts/LocalizationContext";
+import { useRegionalPricing } from "@/hooks/useRegionalPricing";
 
 interface Message {
   id: string;
   role: "user" | "assistant";
-  content: string;
   timestamp: Date;
+  type: "text" | "service_list";
+  content: string;
+  services?: PanelService[];
+  query?: string;
 }
 
 interface PanelService {
+  id: string;
+  service_id: number;
   name: string;
   platform: string;
   category: string;
@@ -32,6 +40,10 @@ interface PanelService {
   description: string | null;
   refill_supported: boolean | null;
 }
+
+type BotResponse =
+  | { type: "text"; content: string }
+  | { type: "service_list"; services: PanelService[]; query: string };
 
 const KNOWN_PLATFORMS = [
   "Instagram",
@@ -59,31 +71,24 @@ const getQuickQuestions = (t: (text: string) => string) => [
   t("How do refills work?"),
 ];
 
-const formatUsd = (value: number) => `$${value.toFixed(2)}/1K`;
-
 const getPriceRange = (services: PanelService[]) => {
   if (!services.length) return null;
   const prices = services.map((service) => Number(service.price) || 0).sort((a, b) => a - b);
-  return {
-    min: prices[0],
-    max: prices[prices.length - 1],
-  };
+  return { min: prices[0], max: prices[prices.length - 1] };
 };
 
 const getTopExamples = (services: PanelService[], limit = 3) => {
   return [...services]
     .sort((a, b) => (Number(a.price) || 0) - (Number(b.price) || 0))
     .slice(0, limit)
-    .map((service) => `${service.name} (${formatUsd(Number(service.price) || 0)})`)
+    .map((service) => service.name)
     .join(", ");
 };
 
 const getMatchingServices = (message: string, services: PanelService[]) => {
   const lower = message.toLowerCase();
   const matchedPlatform = KNOWN_PLATFORMS.find((platform) => {
-    if (platform === "X") {
-      return /(^|\s)x(\s|$)|twitter/.test(lower);
-    }
+    if (platform === "X") return /(^|\s)x(\s|$)|twitter/.test(lower);
     return lower.includes(platform.toLowerCase());
   });
 
@@ -119,26 +124,18 @@ const getMatchingServices = (message: string, services: PanelService[]) => {
   return { matches, matchedPlatform, matchedCategory };
 };
 
-const getStaticResponse = (message: string, services: PanelService[], t: (text: string) => string): string => {
+const getStaticResponse = (message: string, services: PanelService[], t: (text: string) => string): BotResponse => {
   const lower = message.toLowerCase();
   const { matches, matchedPlatform, matchedCategory } = getMatchingServices(message, services);
+  const asksForPrices = lower.includes("price") || lower.includes("cost") || lower.includes("how much") || lower.includes("cheap") || lower.includes("cheapest");
+  const namesCatalog = Boolean(matchedPlatform || matchedCategory || lower.includes("service") || lower.includes("recommend"));
 
-  if ((lower.includes("price") || lower.includes("cost") || lower.includes("how much") || lower.includes("cheap")) && services.length > 0) {
-    const scopedServices = matches.length > 0 ? matches : services;
-    const range = getPriceRange(scopedServices);
-    const examples = getTopExamples(scopedServices);
-    const scopeLabel = matchedPlatform || matchedCategory || t("our catalog");
-
-    if (range) {
-      return t(`Pricing for ${scopeLabel} currently ranges from ${formatUsd(range.min)} to ${formatUsd(range.max)}. Some affordable options are ${examples}. Open the Services page or New Order page to see the full live list before checkout.`);
-    }
-  }
-
-  if (matches.length > 0 && (matchedPlatform || matchedCategory || lower.includes("service") || lower.includes("recommend"))) {
-    const range = getPriceRange(matches);
-    const examples = getTopExamples(matches);
-    const scopeLabel = matchedPlatform || matchedCategory || t("matching services");
-    return t(`I found ${matches.length} ${scopeLabel} services. Popular picks include ${examples}.${range ? ` Current pricing spans ${formatUsd(range.min)} to ${formatUsd(range.max)}.` : ""} If you want, tell me a platform plus goal like followers, likes, or views and I’ll narrow it down further.`);
+  if (matches.length > 0 && (asksForPrices || namesCatalog)) {
+    return {
+      type: "service_list",
+      services: [...matches].sort((a, b) => a.price - b.price).slice(0, 20),
+      query: message,
+    };
   }
 
   if (lower.includes("service") || lower.includes("offer") || lower.includes("what do you") || lower.includes("platform")) {
@@ -153,39 +150,44 @@ const getStaticResponse = (message: string, services: PanelService[], t: (text: 
       .map(([platform, count]) => `${platform} (${count})`)
       .join(", ");
 
-    return t(`We currently list ${services.length} services across platforms like ${summary || "Instagram, YouTube, TikTok, Telegram, and more"}. Use the Services page search or the New Order search box to filter by platform, category, or service ID.`);
+    return {
+      type: "text",
+      content: t(`We currently list ${services.length} services across platforms like ${summary || "Instagram, YouTube, TikTok, Telegram, and more"}. Ask me for a platform or a category like followers, members, likes, or views and I can show matching services.`),
+    };
   }
 
   if (lower.includes("order") || lower.includes("place") || lower.includes("buy") || lower.includes("purchase")) {
-    return t("Placing an order is simple: 1) open New Order in your dashboard, 2) search by platform, category, or service ID, 3) choose the service, 4) paste your link and quantity, and 5) confirm the payment. The exact price is shown before you submit.");
-  }
-
-  if (lower.includes("deliver") || lower.includes("time") || lower.includes("how long") || lower.includes("speed") || lower.includes("fast")) {
-    return t("Delivery speed depends on the specific service. Many orders start within minutes, then continue over several hours or days depending on quantity and service type. For best accuracy, check the service description before ordering.");
+    return {
+      type: "text",
+      content: t("Placing an order is simple: 1) open New Order in your dashboard, 2) search by platform, category, or service ID, 3) choose the service, 4) paste your link and quantity, and 5) confirm the payment."),
+    };
   }
 
   if (lower.includes("refill") || lower.includes("drop") || lower.includes("guarantee")) {
-    const refillServices = services.filter((service) => service.refill_supported);
-    return t(`${refillServices.length} live services currently show refill support. If a refill-enabled order drops during its coverage window, request a refill from your Orders page and the team can review it for restoration.`);
-  }
-
-  if (lower.includes("payment") || lower.includes("pay") || lower.includes("crypto") || lower.includes("upi")) {
-    return t("You can fund your wallet first, then place orders from your balance. The platform also supports multiple payment options such as crypto and manual payment flows where available in your dashboard.");
+    const refillServices = services.filter((service) => service.refill_supported).length;
+    return {
+      type: "text",
+      content: t(`${refillServices} live services currently show refill support. Ask me for a platform and I can show refill-enabled options.`),
+    };
   }
 
   if (lower.includes("help") || lower.includes("support") || lower.includes("contact")) {
-    return t("I can help with catalog search, pricing ranges, ordering steps, refills, and delivery expectations. For account-specific issues, open a Support Ticket from your dashboard so the team can inspect your account directly.");
+    return {
+      type: "text",
+      content: t("I can help with catalog search, pricing, ordering, and refill-enabled options. For account-specific issues, please open a Support Ticket from your dashboard."),
+    };
   }
 
-  if (lower.includes("api") || lower.includes("integrate") || lower.includes("reseller")) {
-    return t("Yes, reseller/API access is available. Check the API section of your dashboard for documentation, endpoints, and your personal API key.");
-  }
-
-  return t("I can help you search services, compare pricing ranges, explain ordering, or find refill-enabled options. Try asking something like ‘cheapest Instagram followers’ or ‘YouTube views price range’.");
+  return {
+    type: "text",
+    content: t("Ask me about a platform or service type like ‘Instagram followers price’ or ‘Telegram members cost’ and I’ll show matching services you can buy."),
+  };
 };
 
 export const AIChatbot = () => {
-  const { t } = useLocalization();
+  const navigate = useNavigate();
+  const { t, formatPrice } = useLocalization();
+  const { multiplier: priceMultiplier } = useRegionalPricing();
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -195,41 +197,83 @@ export const AIChatbot = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    setMessages([{
-      id: "1",
-      role: "assistant",
-      content: t("Hi! I can search the live service catalog for you, explain pricing ranges, and help you pick the right order. Ask for a platform, category, or budget and I’ll narrow it down."),
-      timestamp: new Date(),
-    }]);
+    setMessages([
+      {
+        id: "1",
+        role: "assistant",
+        type: "text",
+        content: t("Hi! I can search the live service catalog for you and show services you can buy right away. Ask for a platform, category, or price range."),
+        timestamp: new Date(),
+      },
+    ]);
   }, [t]);
 
   useEffect(() => {
-    fetchServices();
+    void fetchServices();
   }, []);
 
   const fetchServices = async () => {
     try {
-      const { data: panelData } = await supabase
-        .from("panel_services")
-        .select("name, platform, category, price, min_quantity, max_quantity, description, refill_supported")
-        .eq("is_visible", true);
+      const panelServices: PanelService[] = [];
+      let panelPage = 0;
 
-      if (panelData && panelData.length > 0) {
-        setServices(panelData);
+      while (true) {
+        const { data, error } = await supabase
+          .from("panel_services")
+          .select("id, service_id, name, platform, category, price, min_quantity, max_quantity, description, refill_supported")
+          .eq("is_visible", true)
+          .order("platform")
+          .order("price", { ascending: true })
+          .range(panelPage * 1000, (panelPage + 1) * 1000 - 1);
+
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+
+        panelServices.push(...data);
+        if (data.length < 1000) break;
+        panelPage += 1;
+      }
+
+      if (panelServices.length > 0) {
+        setServices(panelServices);
         return;
       }
 
-      const { data: servicesData } = await supabase
-        .from("services")
-        .select("name, platform, category, base_price, min_quantity, max_quantity, description, refill_supported")
-        .eq("is_active", true);
+      const fallbackServices: PanelService[] = [];
+      let servicesPage = 0;
 
-      if (servicesData) {
-        setServices(servicesData.map((service) => ({
-          ...service,
-          price: service.base_price,
-        })));
+      while (true) {
+        const { data, error } = await supabase
+          .from("services")
+          .select("id, service_id, name, platform, category, base_price, min_quantity, max_quantity, description, refill_supported")
+          .eq("is_active", true)
+          .order("platform")
+          .order("base_price", { ascending: true })
+          .range(servicesPage * 1000, (servicesPage + 1) * 1000 - 1);
+
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+
+        fallbackServices.push(
+          ...data.map((service) => ({
+            id: service.id,
+            service_id: service.service_id,
+            name: service.name,
+            platform: service.platform,
+            category: service.category,
+            price: service.base_price,
+            min_quantity: service.min_quantity,
+            max_quantity: service.max_quantity,
+            description: service.description,
+            refill_supported: service.refill_supported,
+          })),
+        );
+
+        if (data.length < 1000) break;
+        servicesPage += 1;
       }
+
+      setServices(fallbackServices);
     } catch (error) {
       console.error("Error fetching services:", error);
     }
@@ -243,6 +287,13 @@ export const AIChatbot = () => {
     scrollToBottom();
   }, [messages]);
 
+  const handleBuyNow = (service: PanelService) => {
+    sessionStorage.setItem("chatbot_selected_service", JSON.stringify({ id: service.id }));
+    setIsOpen(false);
+    setIsMinimized(false);
+    navigate("/dashboard/order");
+  };
+
   const handleSend = (text?: string) => {
     const messageText = text || input;
     if (!messageText.trim()) return;
@@ -250,6 +301,7 @@ export const AIChatbot = () => {
     const userMessage: Message = {
       id: Date.now().toString(),
       role: "user",
+      type: "text",
       content: messageText,
       timestamp: new Date(),
     };
@@ -259,11 +311,15 @@ export const AIChatbot = () => {
     setIsTyping(true);
 
     setTimeout(() => {
+      const response = getStaticResponse(messageText, services, t);
       const aiMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
-        content: getStaticResponse(messageText, services, t),
         timestamp: new Date(),
+        type: response.type,
+        content: response.type === "text" ? response.content : t(`Showing matches for "${response.query}"`),
+        services: response.type === "service_list" ? response.services : undefined,
+        query: response.type === "service_list" ? response.query : undefined,
       };
       setMessages((prev) => [...prev, aiMessage]);
       setIsTyping(false);
@@ -271,9 +327,7 @@ export const AIChatbot = () => {
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") {
-      handleSend();
-    }
+    if (e.key === "Enter") handleSend();
   };
 
   return (
@@ -289,7 +343,7 @@ export const AIChatbot = () => {
       )}
 
       {isOpen && (
-        <Card className={`fixed bottom-6 right-6 z-50 w-[380px] shadow-2xl border-primary/20 bg-card/95 backdrop-blur-sm ${isMinimized ? 'h-16' : 'h-[600px]'} transition-all duration-300`}>
+        <Card className={`fixed bottom-6 right-6 z-50 w-[380px] shadow-2xl border-primary/20 bg-card/95 backdrop-blur-sm ${isMinimized ? "h-16" : "h-[600px]"} transition-all duration-300`}>
           <div className="flex items-center justify-between p-4 border-b border-border/30 bg-gradient-to-r from-primary/10 to-accent/10 rounded-t-lg">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-gradient-to-r from-primary to-accent flex items-center justify-center">
@@ -324,8 +378,36 @@ export const AIChatbot = () => {
                       </div>
                     )}
 
-                    <div className={`max-w-[80%] rounded-lg p-3 ${message.role === "user" ? "bg-primary text-primary-foreground" : "bg-secondary/30 border border-border/30"}`}>
+                    <div className={`max-w-[85%] rounded-lg p-3 ${message.role === "user" ? "bg-primary text-primary-foreground" : "bg-secondary/30 border border-border/30"}`}>
                       <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+
+                      {message.type === "service_list" && message.services && (
+                        <div className="mt-3 space-y-3">
+                          {message.services.map((service) => (
+                            <div key={service.id} className="rounded-lg border border-border/40 bg-background/80 p-3 space-y-3">
+                              <div className="space-y-1">
+                                <p className="text-sm font-medium line-clamp-2">{service.name}</p>
+                                <p className="text-xs font-mono text-muted-foreground">ID: {service.service_id}</p>
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                <Badge variant="outline">{service.platform}</Badge>
+                                <Badge variant="secondary">{service.category}</Badge>
+                                {service.refill_supported && <Badge className="bg-emerald-500/15 text-emerald-400">Refill</Badge>}
+                              </div>
+                              <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                                <div>
+                                  <p className="font-semibold text-primary">{formatPrice(Number(service.price) * priceMultiplier)}/1K</p>
+                                  <p>Min {service.min_quantity.toLocaleString()} • Max {service.max_quantity.toLocaleString()}</p>
+                                </div>
+                                <Button size="sm" onClick={() => handleBuyNow(service)}>
+                                  <ShoppingCart className="h-4 w-4 mr-1" />
+                                  Buy Now
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
 
                     {message.role === "user" && (

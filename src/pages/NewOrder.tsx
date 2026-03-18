@@ -74,28 +74,84 @@ const NewOrder = () => {
     void fetchServices();
   }, []);
 
+  useEffect(() => {
+    if (services.length === 0) return;
+    const stored = sessionStorage.getItem("chatbot_selected_service");
+    if (!stored) return;
+
+    try {
+      const { id } = JSON.parse(stored) as { id?: string };
+      const match = services.find((service) => service.id === id);
+      if (match) setSelectedService(match);
+    } catch {
+      // Ignore invalid session data
+    }
+
+    sessionStorage.removeItem("chatbot_selected_service");
+  }, [services]);
+
   const fetchServices = async () => {
     setLoadingServices(true);
 
-    const { data: panelData, error: panelError } = await supabase
-      .from("panel_services")
-      .select("*")
-      .eq("is_visible", true)
-      .order("platform")
-      .order("name");
+    const panelData: ServiceDisplay[] = [];
+    let panelPage = 0;
 
-    if (!panelError && panelData && panelData.length > 0) {
-      setServices(panelData as ServiceDisplay[]);
+    while (true) {
+      const { data, error } = await supabase
+        .from("panel_services")
+        .select("*")
+        .eq("is_visible", true)
+        .order("platform")
+        .order("name")
+        .range(panelPage * 1000, (panelPage + 1) * 1000 - 1);
+
+      if (error) {
+        panelPage = -1;
+        break;
+      }
+      if (!data || data.length === 0) break;
+
+      panelData.push(...(data as ServiceDisplay[]));
+      if (data.length < 1000) break;
+      panelPage += 1;
+    }
+
+    if (panelPage !== -1 && panelData.length > 0) {
+      setServices(panelData);
       setLoadingServices(false);
       return;
     }
 
-    const { data: servicesData } = await supabase
-      .from("services")
-      .select("id, service_id, name, description, platform, category, base_price, min_quantity, max_quantity, refill_supported, dripfeed_supported")
-      .eq("is_active", true)
-      .order("platform")
-      .order("name");
+    const servicesData: Array<{
+      id: string;
+      service_id: number;
+      name: string;
+      description: string | null;
+      platform: string;
+      category: string;
+      base_price: number;
+      min_quantity: number;
+      max_quantity: number;
+      refill_supported: boolean | null;
+      dripfeed_supported: boolean | null;
+    }> = [];
+    let servicesPage = 0;
+
+    while (true) {
+      const { data, error } = await supabase
+        .from("services")
+        .select("id, service_id, name, description, platform, category, base_price, min_quantity, max_quantity, refill_supported, dripfeed_supported")
+        .eq("is_active", true)
+        .order("platform")
+        .order("name")
+        .range(servicesPage * 1000, (servicesPage + 1) * 1000 - 1);
+
+      if (error || !data || data.length === 0) break;
+
+      servicesData.push(...data);
+      if (data.length < 1000) break;
+      servicesPage += 1;
+    }
 
     setServices(
       (servicesData || []).map((service) => ({

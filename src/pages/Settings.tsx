@@ -15,7 +15,6 @@ import {
   Eye,
   EyeOff,
   Save,
-  Key,
   Smartphone,
   Mail,
   CheckCircle2,
@@ -27,7 +26,6 @@ import { useLocalization } from "@/contexts/LocalizationContext";
 import { supabase } from "@/integrations/supabase/client";
 
 const Settings = () => {
-  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   
@@ -39,7 +37,6 @@ const Settings = () => {
   const [email, setEmail] = useState("");
   
   // Password
-  const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   
@@ -144,7 +141,6 @@ const Settings = () => {
           .eq('user_id', user.id);
       }
 
-      setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
       toast({
@@ -270,28 +266,6 @@ const Settings = () => {
                   <div>
                     <p className="text-sm font-medium text-foreground">{t("Current password cannot be verified in the browser")}</p>
                     <p className="text-xs text-muted-foreground">{t("Supabase does not expose a client-side verify password method, so this form updates your password using your active session.")}</p>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="current">{t("Current Password (optional)")}</Label>
-                  <div className="relative">
-                    <Key className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      id="current"
-                      type={showCurrentPassword ? "text" : "password"}
-                      value={currentPassword}
-                      onChange={(e) => setCurrentPassword(e.target.value)}
-                      className="pl-10 pr-10 bg-secondary/30 border-border/30"
-                      placeholder={t("Enter current password")}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                    >
-                      {showCurrentPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </button>
                   </div>
                 </div>
 

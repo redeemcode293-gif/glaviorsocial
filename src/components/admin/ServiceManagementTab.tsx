@@ -164,7 +164,115 @@ export function ServiceManagementTab() {
     }
   };
 
-const fixCorruptedPrices = async () => {
+  const upsertPanelServices = async (batch: Service[]) => {
+    if (batch.length === 0) return;
+
+    const payload = batch.map((service) => ({
+      service_id: service.service_id,
+      name: service.name,
+      description: service.description || service.name,
+      platform: service.platform,
+      category: service.category,
+      min_quantity: service.min_quantity,
+      max_quantity: service.max_quantity,
+      price: service.base_price,
+      refill_supported: Boolean(service.refill_supported),
+      dripfeed_supported: Boolean(service.dripfeed_supported),
+      auto_refill_supported: false,
+      is_visible: true,
+      provider_service_uuid: service.id,
+    }));
+
+    const { error } = await supabase
+      .from('panel_services')
+      .upsert(payload, { onConflict: 'service_id' });
+
+    if (error) throw error;
+  };
+
+  const fetchAllServices = async () => {
+    const allServices: Service[] = [];
+    const FETCH_BATCH = 1000;
+
+    for (let page = 0; ; page += 1) {
+      const { data, error } = await supabase
+        .from('services')
+        .select('*')
+        .order('service_id', { ascending: true })
+        .range(page * FETCH_BATCH, (page + 1) * FETCH_BATCH - 1);
+
+      if (error) throw error;
+      if (!data || data.length === 0) break;
+
+      allServices.push(...data);
+      if (data.length < FETCH_BATCH) break;
+    }
+
+    return allServices;
+  };
+
+  const addAllServicesToPanel = async () => {
+    if (!window.confirm("Add all services to the live panel?")) return;
+
+    try {
+      const allServices = await fetchAllServices();
+      const BATCH_SIZE = 50;
+
+      for (let i = 0; i < allServices.length; i += BATCH_SIZE) {
+        const batch = allServices.slice(i, i + BATCH_SIZE);
+        const ids = batch.map((service) => service.id);
+
+        const { error } = await supabase
+          .from('services')
+          .update({ is_active: true })
+          .in('id', ids);
+        if (error) throw error;
+
+        await upsertPanelServices(batch.map((service) => ({ ...service, is_active: true })));
+      }
+
+      toast({ title: `${allServices.length} services added to live panel` });
+      await fetchData();
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Failed to add all services';
+      toast({ title: "Failed to add all services", description: message, variant: "destructive" });
+    }
+  };
+
+  const removeAllServices = async () => {
+    if (!window.confirm("Remove all services from the live panel? Users will not see any services until you add them back.")) return;
+
+    try {
+      const allServices = await fetchAllServices();
+      const BATCH_SIZE = 50;
+
+      for (let i = 0; i < allServices.length; i += BATCH_SIZE) {
+        const batch = allServices.slice(i, i + BATCH_SIZE);
+        const serviceIds = batch.map((service) => service.id);
+        const panelServiceIds = batch.map((service) => service.service_id);
+
+        const { error: panelError } = await supabase
+          .from('panel_services')
+          .delete()
+          .in('service_id', panelServiceIds);
+        if (panelError) throw panelError;
+
+        const { error: servicesError } = await supabase
+          .from('services')
+          .update({ is_active: false })
+          .in('id', serviceIds);
+        if (servicesError) throw servicesError;
+      }
+
+      toast({ title: "All services removed from live panel" });
+      await fetchData();
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Failed to remove all services';
+      toast({ title: "Failed to remove all services", description: message, variant: "destructive" });
+    }
+  };
+
+  const fixCorruptedPrices = async () => {
     setIsFixingPrices(true);
     setPriceFixProgress({ done: 0, total: 0 });
 
@@ -181,7 +289,7 @@ const fixCorruptedPrices = async () => {
           .range(offset, offset + FETCH_BATCH - 1);
 
         if (error) throw error;
-if (!data || data.length === 0) break;
+        if (!data || data.length === 0) break;
 
         corruptedServices.push(...data);
 
@@ -564,6 +672,12 @@ if (!data || data.length === 0) break;
               <Button variant="destructive" onClick={fixCorruptedPrices} disabled={isFixingPrices}>
                 {isFixingPrices ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : null}
                 Fix Corrupted Prices
+              </Button>
+              <Button variant="outline" onClick={addAllServicesToPanel}>
+                Add All Live
+              </Button>
+              <Button variant="destructive" onClick={removeAllServices}>
+                Remove All
               </Button>
               <Button onClick={() => { resetEditForm(); setAddDialogOpen(true); }}>
                 <Plus className="h-4 w-4 mr-2" />Add Service
