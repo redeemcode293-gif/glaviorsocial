@@ -284,7 +284,31 @@ const Admin = () => {
     if (error) {
       toast({ title: "Failed to update balance", variant: "destructive" });
     } else {
-      toast({ title: "Balance Updated", description: `New balance: $${newBalance.toFixed(2)}` });
+      const transactionType = adjustmentType === "add" ? "deposit" : "withdrawal";
+      const signedAmount = adjustmentType === "add" ? amount : -amount;
+
+      const { error: transactionError } = await supabase
+        .from('transactions')
+        .insert({
+          user_id: selectedUser.user_id,
+          type: transactionType,
+          amount: signedAmount,
+          status: 'completed',
+          description: `Admin balance ${adjustmentType === "add" ? "credit" : "deduction"}`,
+          reference_id: selectedUser.user_id,
+          admin_visible: true,
+        });
+
+      if (transactionError) {
+        toast({
+          title: "Balance updated with warning",
+          description: transactionError.message,
+          variant: "destructive",
+        });
+      } else {
+        toast({ title: "Balance Updated", description: `New balance: $${newBalance.toFixed(2)}` });
+      }
+
       setSelectedUser(null);
       setBalanceAdjustment("");
       fetchAdminData();
