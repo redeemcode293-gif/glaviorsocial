@@ -1,6 +1,3 @@
--- Enable pgcrypto for gen_random_bytes
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
-
 -- Add status column to profiles for banning users
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS status text DEFAULT 'active';
 
@@ -32,7 +29,7 @@ CREATE POLICY "Users can insert their own login history" ON public.login_history
 CREATE TABLE IF NOT EXISTS public.api_keys (
   id uuid NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id uuid NOT NULL,
-  api_key text NOT NULL UNIQUE DEFAULT encode(extensions.gen_random_bytes(32), 'hex'),
+  api_key text NOT NULL UNIQUE DEFAULT encode(gen_random_bytes(32), 'hex'),
   is_active boolean DEFAULT true,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   last_used_at timestamp with time zone

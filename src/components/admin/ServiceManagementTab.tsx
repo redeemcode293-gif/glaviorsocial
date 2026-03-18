@@ -13,8 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { 
   Package, RefreshCw, Search, Plus, Edit, Trash2, Eye, MoreVertical, 
-  Link2, Save, Check, X, ArrowUpDown, Percent, Power, PowerOff, ChevronLeft, ChevronRight,
-  AlertTriangle, Lock
+  Link2, Save, Check, X, ArrowUpDown, Percent, Power, PowerOff, ChevronLeft, ChevronRight
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -48,16 +47,7 @@ interface Provider {
 
 const PLATFORMS = ['Instagram', 'YouTube', 'TikTok', 'Telegram', 'X', 'Facebook', 'Spotify', 'Discord', 'Twitch', 'Snapchat', 'LinkedIn', 'Pinterest', 'Other'];
 const CATEGORIES = ['Followers', 'Likes', 'Views', 'Comments', 'Shares', 'Subscribers', 'Members', 'Reactions', 'Saves', 'Impressions', 'Reach', 'General', 'Premium', 'Other'];
-const CORRUPTED_PRICE_THRESHOLD = 50;
-const INR_TO_USD = 1 / 92;
-
-interface ServiceManagementTabProps {
-  isOwner?: boolean;
-  priceMarkup?: number;
-}
-
-export function ServiceManagementTab({ isOwner = true, priceMarkup = 1.0 }: ServiceManagementTabProps) {
-  const hasMarkup = priceMarkup > 1.0;
+export function ServiceManagementTab() {
   const [services, setServices] = useState<Service[]>([]);
   const [providers, setProviders] = useState<Provider[]>([]);
   const [loading, setLoading] = useState(true);
@@ -65,7 +55,6 @@ export function ServiceManagementTab({ isOwner = true, priceMarkup = 1.0 }: Serv
   const [platformFilter, setPlatformFilter] = useState<string>("all");
   const [selectedServices, setSelectedServices] = useState<Set<string>>(new Set());
   const [currentPage, setCurrentPage] = useState(1);
-  const [corruptedCount, setCorruptedCount] = useState(0);
   const [isFixingPrices, setIsFixingPrices] = useState(false);
   const [priceFixProgress, setPriceFixProgress] = useState({ done: 0, total: 0 });
   
@@ -118,10 +107,8 @@ export function ServiceManagementTab({ isOwner = true, priceMarkup = 1.0 }: Serv
       supabase.from('api_providers').select('id, name, api_url')
     ]);
     
-    const svcs = servicesRes.data || [];
-    setServices(svcs);
+    setServices(servicesRes.data || []);
     setProviders(providersRes.data || []);
-    setCorruptedCount(svcs.filter((s) => Number(s.base_price) > CORRUPTED_PRICE_THRESHOLD).length);
     setLoading(false);
   };
 
@@ -295,7 +282,7 @@ export function ServiceManagementTab({ isOwner = true, priceMarkup = 1.0 }: Serv
         const { data, error } = await supabase
           .from('services')
           .select('*')
-          .gt('base_price', CORRUPTED_PRICE_THRESHOLD)
+          .gt('base_price', 10)
           .order('id')
           .range(offset, offset + FETCH_BATCH - 1);
 
@@ -310,7 +297,6 @@ export function ServiceManagementTab({ isOwner = true, priceMarkup = 1.0 }: Serv
       if (corruptedServices.length === 0) {
         toast({ title: "No corrupted prices found" });
         setPriceFixProgress({ done: 0, total: 0 });
-        setCorruptedCount(0);
         return;
       }
 
@@ -321,9 +307,9 @@ export function ServiceManagementTab({ isOwner = true, priceMarkup = 1.0 }: Serv
         const batch = corruptedServices.slice(i, i + UPDATE_BATCH);
 
         for (const service of batch) {
-          const correctedBasePrice = Number(service.base_price) * INR_TO_USD;
+          const correctedBasePrice = Number(service.base_price) / 92000;
           const correctedProviderPrice =
-            service.provider_price !== null ? Number(service.provider_price) * INR_TO_USD : null;
+            service.provider_price !== null ? Number(service.provider_price) / 92000 : null;
 
           const { error: serviceError } = await supabase
             .from('services')
@@ -349,7 +335,7 @@ export function ServiceManagementTab({ isOwner = true, priceMarkup = 1.0 }: Serv
         await new Promise((resolve) => setTimeout(resolve, 100));
       }
 
-      toast({ title: `✓ Fixed ${corruptedServices.length} services — prices now correct` });
+      toast({ title: `Fixed ${corruptedServices.length} services — prices now correct` });
       await fetchData();
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Failed to repair corrupted prices';
@@ -681,22 +667,16 @@ export function ServiceManagementTab({ isOwner = true, priceMarkup = 1.0 }: Serv
               <Button variant="outline" size="icon" onClick={fetchData}>
                 <RefreshCw className="h-4 w-4" />
               </Button>
-              {isOwner && corruptedCount > 0 && (
-                <Button variant="destructive" onClick={fixCorruptedPrices} disabled={isFixingPrices} className="gap-2">
-                  {isFixingPrices ? <RefreshCw className="h-4 w-4 animate-spin" /> : <AlertTriangle className="h-4 w-4" />}
-                  Fix INR Prices ({corruptedCount})
-                </Button>
-              )}
-              {isOwner && (
-                <Button variant="outline" onClick={addAllServicesToPanel}>
-                  Add All Live
-                </Button>
-              )}
-              {isOwner && (
-                <Button variant="destructive" onClick={removeAllServices}>
-                  Remove All
-                </Button>
-              )}
+              <Button variant="destructive" onClick={fixCorruptedPrices} disabled={isFixingPrices}>
+                {isFixingPrices ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : null}
+                Fix Corrupted Prices
+              </Button>
+              <Button variant="outline" onClick={addAllServicesToPanel}>
+                Add All Live
+              </Button>
+              <Button variant="destructive" onClick={removeAllServices}>
+                Remove All
+              </Button>
               <Button onClick={() => { resetEditForm(); setAddDialogOpen(true); }}>
                 <Plus className="h-4 w-4 mr-2" />Add Service
               </Button>
@@ -704,23 +684,10 @@ export function ServiceManagementTab({ isOwner = true, priceMarkup = 1.0 }: Serv
           </div>
         </CardHeader>
         <CardContent>
-          {isOwner && corruptedCount > 0 && !isFixingPrices && (
-            <div className="mb-4 rounded-lg border border-destructive/40 bg-destructive/10 p-4 flex items-start gap-3">
-              <AlertTriangle className="h-5 w-5 text-destructive mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="text-sm font-semibold text-destructive">
-                  ⚠️ {corruptedCount} services have corrupted INR prices (base_price &gt; ${CORRUPTED_PRICE_THRESHOLD})
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  These are raw INR values not converted to USD. Click "Fix INR Prices" to divide them by 92.
-                </p>
-              </div>
-            </div>
-          )}
           {isFixingPrices && priceFixProgress.total > 0 && (
             <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 p-4">
               <div className="mb-2 flex items-center justify-between text-sm">
-                <span className="font-medium text-destructive">Fixing corrupted INR prices…</span>
+                <span className="font-medium text-destructive">Fixing corrupted INR prices</span>
                 <span className="text-destructive">
                   {priceFixProgress.done}/{priceFixProgress.total}
                 </span>
@@ -778,7 +745,6 @@ export function ServiceManagementTab({ isOwner = true, priceMarkup = 1.0 }: Serv
                     <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Platform</th>
                     <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Provider Price</th>
                     <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Panel Price</th>
-                    {hasMarkup && <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Margin</th>}
                     <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Limits</th>
                     <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Status</th>
                     <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Actions</th>
@@ -787,9 +753,8 @@ export function ServiceManagementTab({ isOwner = true, priceMarkup = 1.0 }: Serv
                 <tbody>
                   {paginatedServices.map((service) => {
                     const provider = getProvider(service.provider_id);
-                    const isCorrupted = Number(service.base_price) > CORRUPTED_PRICE_THRESHOLD;
                     return (
-                      <tr key={service.id} className={`border-b border-border/20 hover:bg-secondary/10 group ${isCorrupted ? "border-l-4 border-l-destructive bg-destructive/5" : ""}`}>
+                      <tr key={service.id} className="border-b border-border/20 hover:bg-secondary/10 group">
                         <td className="p-3">
                           <Checkbox 
                             checked={selectedServices.has(service.id)}
@@ -844,14 +809,14 @@ export function ServiceManagementTab({ isOwner = true, priceMarkup = 1.0 }: Serv
                         <td className="p-3">
                           {service.provider_price !== null ? (
                             <span className="font-mono text-xs text-muted-foreground">
-                              ${(Number(service.provider_price) * priceMarkup).toFixed(4)}
+                              ${Number(service.provider_price).toFixed(4)}
                             </span>
                           ) : (
                             <span className="text-xs text-muted-foreground">N/A</span>
                           )}
                         </td>
                         <td className="p-3">
-                          {inlineEditing?.id === service.id && inlineEditing.field === 'base_price' && isOwner ? (
+                          {inlineEditing?.id === service.id && inlineEditing.field === 'base_price' ? (
                             <div className="flex items-center gap-1">
                               <Input 
                                 type="number"
@@ -868,38 +833,18 @@ export function ServiceManagementTab({ isOwner = true, priceMarkup = 1.0 }: Serv
                                 <X className="h-3 w-3 text-destructive" />
                               </Button>
                             </div>
-                          ) : isOwner ? (
+                          ) : (
                             <span 
-                              className={`font-mono text-sm cursor-pointer hover:underline ${isCorrupted ? "text-destructive font-bold" : "text-success"}`}
+                              className="font-mono text-sm text-success cursor-pointer hover:underline"
                               onClick={() => {
                                 setInlineEditing({ id: service.id, field: 'base_price' });
                                 setInlineValue(service.base_price.toString());
                               }}
                             >
-                              {isCorrupted ? "⚠️ " : ""}${Number(service.base_price).toFixed(4)}
-                            </span>
-                          ) : (
-                            <span className="font-mono text-sm text-success">
                               ${Number(service.base_price).toFixed(4)}
                             </span>
                           )}
                         </td>
-                        {hasMarkup && (
-                          <td className="p-3">
-                            {service.provider_price !== null && Number(service.provider_price) > 0 ? (
-                              <div className="flex items-center gap-1.5">
-                                <Lock className="h-3 w-3 text-muted-foreground shrink-0" />
-                                <span className="font-mono text-xs text-amber-500">
-                                  {(((Number(service.base_price) / (Number(service.provider_price) * priceMarkup)) - 1) * 100).toFixed(1)}%
-                                </span>
-                              </div>
-                            ) : (
-                              <span className="text-xs text-muted-foreground flex items-center gap-1">
-                                <Lock className="h-3 w-3" />—
-                              </span>
-                            )}
-                          </td>
-                        )}
                         <td className="p-3 text-xs text-muted-foreground font-mono">
                           {service.min_quantity.toLocaleString()} - {service.max_quantity.toLocaleString()}
                         </td>
@@ -987,7 +932,7 @@ export function ServiceManagementTab({ isOwner = true, priceMarkup = 1.0 }: Serv
               <div className="space-y-2">
                 <Label>Provider Price (Read-only)</Label>
                 <Input 
-                  value={editingService?.provider_price ? `$${(editingService.provider_price * priceMarkup).toFixed(4)}` : 'N/A'}
+                  value={editingService?.provider_price ? `$${editingService.provider_price.toFixed(4)}` : 'N/A'}
                   disabled
                   className="bg-muted"
                 />
@@ -1037,28 +982,12 @@ export function ServiceManagementTab({ isOwner = true, priceMarkup = 1.0 }: Serv
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label>Panel Price (per 1000)</Label>
-                {isOwner ? (
-                  <Input 
-                    type="number"
-                    step="0.0001"
-                    value={editForm.base_price}
-                    onChange={(e) => setEditForm({ ...editForm, base_price: e.target.value })}
-                  />
-                ) : (
-                  <div className="space-y-1">
-                    <Input 
-                      value={`$${Number(editForm.base_price).toFixed(4)}`}
-                      disabled
-                      className="bg-muted"
-                    />
-                    {editingService?.provider_price && Number(editingService.provider_price) > 0 && (
-                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <Lock className="h-3 w-3" />
-                        <span>Margin: {(((Number(editForm.base_price) / (Number(editingService.provider_price) * priceMarkup)) - 1) * 100).toFixed(1)}% (locked)</span>
-                      </div>
-                    )}
-                  </div>
-                )}
+                <Input 
+                  type="number"
+                  step="0.0001"
+                  value={editForm.base_price}
+                  onChange={(e) => setEditForm({ ...editForm, base_price: e.target.value })}
+                />
               </div>
               <div className="space-y-2">
                 <Label>Min Quantity</Label>

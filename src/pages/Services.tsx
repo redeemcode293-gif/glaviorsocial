@@ -296,7 +296,7 @@ const Services = () => {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-6">
+                    <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-6">
                       {platformServices.map((service) => {
                         const pricePerK = (Number(service.price) || 0) * priceMultiplier;
                         const refillDays = extractRefillDays(service.name);
@@ -338,8 +338,8 @@ const Services = () => {
                             </CardHeader>
                             <CardContent className="space-y-4">
                               {service.description && (
-                                <div className="p-3 rounded-lg bg-success/5 border border-success/20">
-                                  <p className="text-sm text-success/80 line-clamp-3 leading-relaxed">{t(service.description || "")}</p>
+                                <div className="p-3 rounded-lg bg-secondary/20 border border-border/30">
+                                  <p className="text-sm text-muted-foreground line-clamp-3">{t(service.description || "")}</p>
                                 </div>
                               )}
 

@@ -283,7 +283,6 @@ export type Database = {
           full_name: string | null
           id: string
           last_password_change: string | null
-          price_markup: number
           pricing_override: string | null
           referral_code: string | null
           referred_by: string | null
@@ -301,7 +300,6 @@ export type Database = {
           full_name?: string | null
           id?: string
           last_password_change?: string | null
-          price_markup?: number
           pricing_override?: string | null
           referral_code?: string | null
           referred_by?: string | null
@@ -319,7 +317,6 @@ export type Database = {
           full_name?: string | null
           id?: string
           last_password_change?: string | null
-          price_markup?: number
           pricing_override?: string | null
           referral_code?: string | null
           referred_by?: string | null

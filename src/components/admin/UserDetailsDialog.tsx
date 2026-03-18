@@ -2,8 +2,6 @@ import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
 import { 
@@ -20,9 +18,7 @@ import {
   LogOut,
   Lock,
   Copy,
-  Check,
-  EyeOff,
-  Save
+  Check
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -33,17 +29,14 @@ interface UserDetailsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onRefresh: () => void;
-  isOwner?: boolean;
 }
 
-export const UserDetailsDialog = ({ user, wallet, open, onOpenChange, onRefresh, isOwner = false }: UserDetailsDialogProps) => {
+export const UserDetailsDialog = ({ user, wallet, open, onOpenChange, onRefresh }: UserDetailsDialogProps) => {
   const [orders, setOrders] = useState<any[]>([]);
   const [loginHistory, setLoginHistory] = useState<any[]>([]);
   const [apiKeys, setApiKeys] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
-  const [priceMarkupInput, setPriceMarkupInput] = useState("1.0");
-  const [savingMarkup, setSavingMarkup] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -63,11 +56,6 @@ export const UserDetailsDialog = ({ user, wallet, open, onOpenChange, onRefresh,
       .order('created_at', { ascending: false })
       .limit(10);
     setOrders(ordersData || []);
-
-    // Fetch price_markup from profile (for owner to view/edit)
-    if (isOwner) {
-      setPriceMarkupInput(String(user.price_markup ?? 1.0));
-    }
 
     // Fetch login history
     const { data: historyData } = await supabase
@@ -123,26 +111,6 @@ export const UserDetailsDialog = ({ user, wallet, open, onOpenChange, onRefresh,
       toast({ title: "Failed to send reset email", variant: "destructive" });
     } else {
       toast({ title: "Password reset email sent" });
-    }
-  };
-
-  const savePriceMarkup = async () => {
-    const markup = parseFloat(priceMarkupInput);
-    if (isNaN(markup) || markup < 1) {
-      toast({ title: "Invalid markup value. Must be ≥ 1.0", variant: "destructive" });
-      return;
-    }
-    setSavingMarkup(true);
-    const { error } = await supabase
-      .from('profiles')
-      .update({ price_markup: markup })
-      .eq('user_id', user.user_id);
-    setSavingMarkup(false);
-    if (error) {
-      toast({ title: "Failed to update price markup", variant: "destructive" });
-    } else {
-      toast({ title: `Price markup set to ${markup}x for this admin` });
-      onRefresh();
     }
   };
 
@@ -277,7 +245,7 @@ export const UserDetailsDialog = ({ user, wallet, open, onOpenChange, onRefresh,
               </Card>
             </div>
 
-            <div className="flex gap-2 pt-4 flex-wrap">
+            <div className="flex gap-2 pt-4">
               <Button 
                 variant={user.status === 'active' ? 'destructive' : 'default'} 
                 size="sm"
@@ -295,40 +263,6 @@ export const UserDetailsDialog = ({ user, wallet, open, onOpenChange, onRefresh,
                 Force Password Reset
               </Button>
             </div>
-
-            {isOwner && (
-              <div className="mt-6 rounded-lg border border-amber-500/30 bg-amber-500/5 p-4 space-y-3">
-                <div className="flex items-center gap-2 text-amber-500">
-                  <EyeOff className="h-4 w-4" />
-                  <span className="text-sm font-semibold">Provider Price Visibility (Owner Only)</span>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Set a hidden price multiplier applied to provider prices when this admin views the service panel. 
-                  The admin will see inflated provider prices without knowing the real cost. Set to 1.0 for no markup.
-                </p>
-                <div className="flex items-end gap-3">
-                  <div className="space-y-1 flex-1">
-                    <Label className="text-xs">Price Markup Multiplier</Label>
-                    <Input
-                      type="number"
-                      min="1"
-                      step="0.05"
-                      value={priceMarkupInput}
-                      onChange={(e) => setPriceMarkupInput(e.target.value)}
-                      className="h-8 text-sm font-mono"
-                      placeholder="e.g. 1.5 = 50% markup"
-                    />
-                  </div>
-                  <div className="text-xs text-muted-foreground pb-2 shrink-0">
-                    ×{parseFloat(priceMarkupInput) || 1} = provider price shown {((parseFloat(priceMarkupInput) || 1) * 100).toFixed(0)}% of real
-                  </div>
-                  <Button size="sm" onClick={savePriceMarkup} disabled={savingMarkup} className="shrink-0">
-                    {savingMarkup ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3 mr-1" />}
-                    Save
-                  </Button>
-                </div>
-              </div>
-            )}
           </TabsContent>
 
           <TabsContent value="orders" className="mt-4">

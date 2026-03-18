@@ -11,7 +11,7 @@ CREATE INDEX IF NOT EXISTS idx_orders_provider_order_id
 
 -- Keep server-side API key generation available while allowing client fallback
 ALTER TABLE public.api_keys
-  ALTER COLUMN api_key SET DEFAULT encode(extensions.gen_random_bytes(30), 'hex');
+  ALTER COLUMN api_key SET DEFAULT encode(gen_random_bytes(30), 'hex');
 
 DROP POLICY IF EXISTS "Users can insert their own api keys" ON public.api_keys;
 CREATE POLICY "Users can insert their own api keys" ON public.api_keys
