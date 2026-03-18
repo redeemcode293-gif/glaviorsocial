@@ -2,32 +2,57 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
+const mapProviderStatus = (value: string, fallback: string) => {
+  const providerStatus = value.toLowerCase();
+  if (providerStatus === "completed") return "completed";
+  if (["in progress", "processing"].includes(providerStatus)) return "processing";
+  if (providerStatus === "partial") return "partial";
+  if (["canceled", "cancelled"].includes(providerStatus)) return "cancelled";
+  if (providerStatus === "pending") return "pending";
+  return fallback;
 };
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
+  if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-    const { orderId } = await req.json();
-
-    if (!orderId) {
-      return new Response(JSON.stringify({ error: 'Order ID required' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Get order with service and provider info
+    const token = authHeader.replace("Bearer ", "");
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    if (authError || !user) {
+      return new Response(JSON.stringify({ error: "Invalid authentication token" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const { orderId } = await req.json();
+    if (!orderId) {
+      return new Response(JSON.stringify({ error: "Order ID required" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const { data: order, error: orderError } = await supabase
-      .from('orders')
+      .from("orders")
       .select(`
         *,
         services (
@@ -35,107 +60,99 @@ serve(async (req) => {
           provider_service_id
         )
       `)
-      .eq('id', orderId)
+      .eq("id", orderId)
       .single();
 
     if (orderError || !order) {
-      return new Response(JSON.stringify({ error: 'Order not found' }), {
+      return new Response(JSON.stringify({ error: "Order not found" }), {
         status: 404,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const { data: elevatedRole } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", user.id)
+      .in("role", ["admin", "owner"])
+      .maybeSingle();
+
+    if (order.user_id !== user.id && !elevatedRole) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (!order.provider_order_id) {
+      const dispatch = await supabase.functions.invoke("process-order", {
+        body: { orderId },
+        headers: { Authorization: authHeader },
+      });
+
+      return new Response(JSON.stringify({
+        status: order.status,
+        message: "Order was pending with no provider order id. A provider submission attempt was triggered.",
+        dispatch,
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     if (!order.services?.provider_id) {
-      return new Response(JSON.stringify({ 
-        status: order.status,
-        message: 'No provider assigned'
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      return new Response(JSON.stringify({ status: order.status, message: "No provider assigned" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Get provider
     const { data: provider } = await supabase
-      .from('api_providers')
-      .select('*')
-      .eq('id', order.services.provider_id)
+      .from("api_providers")
+      .select("*")
+      .eq("id", order.services.provider_id)
       .single();
 
     if (!provider) {
-      return new Response(JSON.stringify({ 
-        status: order.status,
-        message: 'Provider not found'
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      return new Response(JSON.stringify({ status: order.status, message: "Provider not found" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Check status with provider (assuming order number is stored)
-    // Note: Real implementation would store provider_order_id
-    const statusData = new URLSearchParams({
+    const body = new URLSearchParams({
       key: provider.api_key,
-      action: 'status',
-      order: orderId // This should be provider_order_id in real impl
+      action: "status",
+      order: String(order.provider_order_id),
     });
 
-    try {
-      const response = await fetch(provider.api_url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: statusData
+    const response = await fetch(provider.api_url, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body,
+    });
+
+    const result = await response.json();
+    if (result.status) {
+      const newStatus = mapProviderStatus(String(result.status), order.status);
+      const startCount = result.start_count !== undefined ? Number(result.start_count) : order.start_count;
+      const remains = result.remains !== undefined ? Number(result.remains) : order.remains;
+
+      await supabase
+        .from("orders")
+        .update({ status: newStatus, start_count: startCount, remains })
+        .eq("id", orderId);
+
+      return new Response(JSON.stringify({ status: newStatus, start_count: startCount, remains, charge: result.charge, rawStatus: result.status }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
-
-      const result = await response.json();
-      console.log('Provider status response:', result);
-
-      if (result.status) {
-        // Map provider status to our status
-        let newStatus = order.status;
-        const providerStatus = result.status.toLowerCase();
-        
-        if (providerStatus === 'completed') newStatus = 'completed';
-        else if (providerStatus === 'in progress' || providerStatus === 'processing') newStatus = 'processing';
-        else if (providerStatus === 'partial') newStatus = 'partial';
-        else if (providerStatus === 'canceled' || providerStatus === 'cancelled') newStatus = 'cancelled';
-        else if (providerStatus === 'pending') newStatus = 'pending';
-
-        // Update order if status changed
-        if (newStatus !== order.status) {
-          await supabase
-            .from('orders')
-            .update({ 
-              status: newStatus,
-              start_count: result.start_count || order.start_count,
-              remains: result.remains || order.remains
-            })
-            .eq('id', orderId);
-        }
-
-        return new Response(JSON.stringify({ 
-          status: newStatus,
-          start_count: result.start_count,
-          remains: result.remains,
-          charge: result.charge
-        }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        });
-      }
-    } catch (err) {
-      console.error('Provider status check failed:', err);
     }
 
-    return new Response(JSON.stringify({ 
-      status: order.status,
-      message: 'Status from local database'
-    }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    return new Response(JSON.stringify({ status: order.status, message: "Status from local database", providerResponse: result }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-
-  } catch (error: any) {
-    console.error('Check status error:', error);
+  } catch (error: unknown) {
+    console.error("check-order-status error", error);
     return new Response(JSON.stringify({ error: error?.message || String(error) }), {
       status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });

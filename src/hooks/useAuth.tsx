@@ -1,13 +1,14 @@
-import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
-import { User, Session } from '@supabase/supabase-js';
+import { useState, useEffect, createContext, useContext, ReactNode, useRef } from 'react';
+import { RealtimeChannel, Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
+import type { Tables } from '@/integrations/supabase/types';
 
 interface AuthContextType {
   user: User | null;
   session: Session | null;
   loading: boolean;
-  profile: any;
-  wallet: any;
+  profile: Tables<'profiles'> | null;
+  wallet: Tables<'wallets'> | null;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
 }
@@ -18,36 +19,36 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
-  const [profile, setProfile] = useState<any>(null);
-  const [wallet, setWallet] = useState<any>(null);
+  const [profile, setProfile] = useState<Tables<'profiles'> | null>(null);
+  const [wallet, setWallet] = useState<Tables<'wallets'> | null>(null);
+  const realtimeChannelRef = useRef<RealtimeChannel | null>(null);
 
-  const fetchUserData = async (userId: string) => {
-    try {
-      // Fetch profile
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('user_id', userId)
-        .maybeSingle();
-      
-      setProfile(profileData);
+  const ensureWalletExists = async (userId: string) => {
+    const { data: walletData, error } = await supabase
+      .from('wallets')
+      .select('*')
+      .eq('user_id', userId)
+      .maybeSingle();
 
-      // Fetch wallet
-      const { data: walletData } = await supabase
-        .from('wallets')
-        .select('*')
-        .eq('user_id', userId)
-        .maybeSingle();
-      
+    if (!error && walletData) {
       setWallet(walletData);
-
-      // If no country detected yet, detect and update
-      if (profileData && !profileData.country) {
-        detectAndUpdateCountry(userId);
-      }
-    } catch (error) {
-      console.error('Error fetching user data:', error);
+      return walletData;
     }
+
+    const { data: createdWallet, error: insertError } = await supabase
+      .from('wallets')
+      .insert({ user_id: userId })
+      .select('*')
+      .single();
+
+    if (insertError) {
+      console.error('Error creating wallet:', insertError);
+      setWallet(walletData ?? null);
+      return walletData ?? null;
+    }
+
+    setWallet(createdWallet);
+    return createdWallet;
   };
 
   const detectAndUpdateCountry = async (userId: string) => {
@@ -58,20 +59,42 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           .from('profiles')
           .update({
             country: response.data.country,
-            country_code: response.data.countryCode
+            country_code: response.data.countryCode,
           })
           .eq('user_id', userId);
-        
-        // Refresh profile after update
+
         const { data: updatedProfile } = await supabase
           .from('profiles')
           .select('*')
           .eq('user_id', userId)
           .maybeSingle();
+
         setProfile(updatedProfile);
       }
     } catch (error) {
       console.error('Error detecting country:', error);
+    }
+  };
+
+  const fetchUserData = async (userId: string) => {
+    try {
+      const [{ data: profileData }, walletData] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select('*')
+          .eq('user_id', userId)
+          .maybeSingle(),
+        ensureWalletExists(userId),
+      ]);
+
+      setProfile(profileData);
+      setWallet(walletData);
+
+      if (profileData && !profileData.country_code) {
+        void detectAndUpdateCountry(userId);
+      }
+    } catch (error) {
+      console.error('Error fetching user data:', error);
     }
   };
 
@@ -81,7 +104,57 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  const cleanupRealtimeSubscription = async () => {
+    if (realtimeChannelRef.current) {
+      await supabase.removeChannel(realtimeChannelRef.current);
+      realtimeChannelRef.current = null;
+    }
+  };
+
+  const setupRealtimeSubscription = async (userId: string) => {
+    await cleanupRealtimeSubscription();
+
+    const channel = supabase
+      .channel(`auth-user-${userId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'wallets',
+          filter: `user_id=eq.${userId}`,
+        },
+        (payload) => {
+          if (payload.eventType === 'DELETE') {
+            setWallet(null);
+            void ensureWalletExists(userId);
+            return;
+          }
+
+          setWallet(payload.new);
+        },
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'profiles',
+          filter: `user_id=eq.${userId}`,
+        },
+        (payload) => {
+          if (payload.eventType !== 'DELETE') {
+            setProfile(payload.new);
+          }
+        },
+      );
+
+    realtimeChannelRef.current = channel;
+    await channel.subscribe();
+  };
+
   const signOut = async () => {
+    await cleanupRealtimeSubscription();
     await supabase.auth.signOut();
     setUser(null);
     setSession(null);
@@ -90,34 +163,36 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   useEffect(() => {
-    // Set up auth state listener FIRST
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      
-      if (session?.user) {
-        // Use setTimeout to defer Supabase calls
-        setTimeout(() => {
-          fetchUserData(session.user.id);
-        }, 0);
+    const handleSession = (nextSession: Session | null) => {
+      setSession(nextSession);
+      setUser(nextSession?.user ?? null);
+
+      if (nextSession?.user) {
+        void fetchUserData(nextSession.user.id);
+        void setupRealtimeSubscription(nextSession.user.id);
       } else {
+        void cleanupRealtimeSubscription();
         setProfile(null);
         setWallet(null);
       }
+
       setLoading(false);
+    };
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      handleSession(nextSession);
     });
 
-    // THEN check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchUserData(session.user.id);
-      }
-      setLoading(false);
+    supabase.auth.getSession().then(({ data: { session: existingSession } }) => {
+      handleSession(existingSession);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      subscription.unsubscribe();
+      void cleanupRealtimeSubscription();
+    };
   }, []);
 
   return (

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useLocation, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,7 +28,24 @@ const Auth = () => {
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("login");
   const navigate = useNavigate();
+  const location = useLocation();
+  const { code } = useParams();
   const { toast } = useToast();
+
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    const referralCode = code || searchParams.get("ref") || "";
+    const authMode = searchParams.get("mode");
+
+    if (referralCode) {
+      localStorage.setItem("referralCode", referralCode);
+      setActiveTab("signup");
+    }
+
+    if (authMode === "reset") {
+      setActiveTab("login");
+    }
+  }, [code, location.search]);
 
   useEffect(() => {
     // Check if already logged in
@@ -116,6 +133,7 @@ const Auth = () => {
     setLoading(true);
 
     const redirectUrl = `${window.location.origin}/`;
+    const referralCode = localStorage.getItem("referralCode") || code || new URLSearchParams(location.search).get("ref") || "";
 
     const { data: signupData, error } = await supabase.auth.signUp({
       email,
@@ -124,6 +142,7 @@ const Auth = () => {
         emailRedirectTo: redirectUrl,
         data: {
           full_name: fullName,
+          referral_code: referralCode || null,
         }
       }
     });
@@ -135,10 +154,37 @@ const Auth = () => {
         variant: "destructive",
       });
     } else {
-      // Detect country silently after signup
       if (signupData?.user?.id) {
-        detectAndStoreCountry(signupData.user.id);
+        if (referralCode) {
+          const { data: referrerProfile } = await supabase
+            .from("profiles")
+            .select("id, user_id")
+            .eq("referral_code", referralCode)
+            .maybeSingle();
+
+          if (referrerProfile?.id && referrerProfile.user_id !== signupData.user.id) {
+            await supabase
+              .from("profiles")
+              .update({ referred_by: referrerProfile.id })
+              .eq("user_id", signupData.user.id);
+
+            await supabase
+              .from("referrals")
+              .upsert(
+                {
+                  referrer_id: referrerProfile.user_id,
+                  referred_id: signupData.user.id,
+                  status: "active",
+                },
+                { onConflict: "referrer_id,referred_id" },
+              );
+          }
+        }
+
+        void detectAndStoreCountry(signupData.user.id);
+        localStorage.removeItem("referralCode");
       }
+
       toast({
         title: "Account Created!",
         description: "Please check your email to verify your account",
@@ -159,7 +205,7 @@ const Auth = () => {
 
     setLoading(true);
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/reset-password`,
+      redirectTo: `${window.location.origin}/auth?mode=reset`,
     });
 
     if (error) {
@@ -282,6 +328,11 @@ const Auth = () => {
 
               <TabsContent value="signup">
                 <form onSubmit={handleSignup} className="space-y-4">
+                {code && (
+                  <div className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm text-primary">
+                    You are signing up with referral code <span className="font-mono font-semibold">{code}</span>.
+                  </div>
+                )}
                   <div className="space-y-2">
                     <Label htmlFor="fullName">Full Name</Label>
                     <div className="relative">

@@ -17,7 +17,7 @@ const currencyData: Record<string, { symbol: string; rate: number }> = {
   USD: { symbol: "$", rate: 1 },
   EUR: { symbol: "€", rate: 0.95 },
   GBP: { symbol: "£", rate: 0.79 },
-  INR: { symbol: "₹", rate: 84.0 },
+  INR: { symbol: "₹", rate: 92.0 },
   AED: { symbol: "د.إ", rate: 3.67 },
   SAR: { symbol: "ر.س", rate: 3.75 },
   CAD: { symbol: "C$", rate: 1.42 },
