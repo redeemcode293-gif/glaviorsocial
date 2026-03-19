@@ -71,7 +71,7 @@ const Refills = () => {
           .from("orders")
           .select("id, order_number, quantity, service_id")
           .in("id", orderIds)
-      : { data: [] as Array<Record<string, never>> };
+      : { data: [] as Array<{ id: string; order_number: string; quantity: number; service_id: string }> };
 
     const serviceIds = (orders || []).map((order) => order.service_id);
     const { data: services } = serviceIds.length
