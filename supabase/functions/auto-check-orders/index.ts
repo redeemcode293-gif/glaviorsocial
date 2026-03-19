@@ -21,6 +21,20 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // ============================================================
+  // SECURITY: Require a shared cron secret to prevent unauthenticated
+  // callers from spamming provider API calls or submitting duplicate orders.
+  // Set CRON_SECRET in Edge Function secrets.
+  // ============================================================
+  const cronSecret = req.headers.get("x-cron-secret");
+  const expectedSecret = Deno.env.get("CRON_SECRET");
+  if (!expectedSecret || cronSecret !== expectedSecret) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -46,6 +60,24 @@ serve(async (req) => {
         .in("id", staleIds);
     }
 
+    interface ServiceInfo {
+      provider_id: string | null;
+      provider_service_id: string | null;
+      is_active: boolean | null;
+    }
+
+    interface ActiveOrder {
+      id: string;
+      order_number: string;
+      status: string;
+      provider_order_id: string | null;
+      start_count: number | null;
+      remains: number | null;
+      link: string;
+      quantity: number;
+      services: ServiceInfo | ServiceInfo[] | null;
+    }
+
     const { data: activeOrders, error: ordersError } = await supabase
       .from("orders")
       .select(`
@@ -64,19 +96,30 @@ serve(async (req) => {
         )
       `)
       .in("status", ["pending", "processing", "in_progress", "partial"])
-      .limit(200);
+      .limit(200) as { data: ActiveOrder[] | null; error: unknown };
 
     if (ordersError) {
-      return new Response(JSON.stringify({ error: ordersError.message }), {
+      const errMsg = ordersError instanceof Error ? ordersError.message : String(ordersError);
+      return new Response(JSON.stringify({ error: errMsg }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const providerIds = [...new Set((activeOrders || []).map((order) => order.services?.provider_id).filter(Boolean))];
+    const getService = (s: ServiceInfo | ServiceInfo[] | null): ServiceInfo | null => {
+      if (!s) return null;
+      return Array.isArray(s) ? (s[0] ?? null) : s;
+    };
+
+    const providerIds = [...new Set(
+      (activeOrders || [])
+        .map((order) => getService(order.services)?.provider_id)
+        .filter((id): id is string => Boolean(id))
+    )];
+
     const { data: providers } = providerIds.length
       ? await supabase.from("api_providers").select("*").in("id", providerIds).eq("status", "active")
-      : { data: [] as Array<Record<string, never>> };
+      : { data: [] as Array<Record<string, string>> };
 
     const providerMap = new Map((providers || []).map((provider) => [provider.id, provider]));
 
@@ -86,7 +129,7 @@ serve(async (req) => {
     let failed = 0;
 
     for (const order of activeOrders || []) {
-      const service = order.services;
+      const service = getService(order.services);
       if (!service?.is_active || !service?.provider_id || !service?.provider_service_id) {
         continue;
       }
@@ -156,7 +199,7 @@ serve(async (req) => {
         }
 
         checked += 1;
-      } catch (error) {
+      } catch (error: unknown) {
         console.error("[auto-check-orders] order failed", order.order_number, error);
         failed += 1;
       }
@@ -167,7 +210,8 @@ serve(async (req) => {
     });
   } catch (error: unknown) {
     console.error("[auto-check-orders] fatal error", error);
-    return new Response(JSON.stringify({ error: error?.message || String(error) }), {
+    const msg = error instanceof Error ? error.message : String(error);
+    return new Response(JSON.stringify({ error: msg }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
