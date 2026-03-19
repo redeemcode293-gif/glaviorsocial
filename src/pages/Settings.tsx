@@ -90,7 +90,7 @@ const Settings = () => {
     } catch (error: unknown) {
       toast({
         title: t("Error"),
-        description: error.message || t("Failed to update profile."),
+        description: error instanceof Error ? error.message : t("Failed to update profile."),
         variant: "destructive",
       });
     } finally {
