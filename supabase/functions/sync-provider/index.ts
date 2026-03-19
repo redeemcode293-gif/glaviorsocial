@@ -278,7 +278,7 @@ serve(async (req) => {
       const response = await fetch(provider.api_url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ key: provider.api_key, action: 'services' }),
+        body: new URLSearchParams({ key: providerApiKey, action: 'services' }),
         signal: AbortSignal.timeout(60000),
       });
 
