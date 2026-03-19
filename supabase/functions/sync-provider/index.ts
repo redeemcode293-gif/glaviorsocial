@@ -246,13 +246,15 @@ serve(async (req) => {
       });
     }
 
+    // Decrypt the stored API key before using it for provider calls
+    const providerApiKey = await decryptApiKey(provider.api_key);
     console.log(`Syncing provider: ${provider.name} (${provider.api_url})`);
 
     if (action === 'balance') {
       const response = await fetch(provider.api_url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ key: provider.api_key, action: 'balance' }),
+        body: new URLSearchParams({ key: providerApiKey, action: 'balance' }),
       });
 
       const data = await response.json();
