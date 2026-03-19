@@ -119,7 +119,7 @@ serve(async (req) => {
     }
 
     const body = new URLSearchParams({
-      key: provider.api_key,
+      key: await decryptApiKey(provider.api_key),
       action: "status",
       order: String(order.provider_order_id),
     });
