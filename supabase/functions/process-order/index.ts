@@ -125,7 +125,7 @@ serve(async (req) => {
     for (const provider of providersToTry) {
       try {
         const body = new URLSearchParams({
-          key: provider.api_key,
+          key: await decryptApiKey(provider.api_key),
           action: "add",
           service: String(service.provider_service_id),
           link: order.link,
