@@ -156,7 +156,7 @@ serve(async (req) => {
 
         lastError = result.error || `Provider ${provider.name} returned no order id`;
       } catch (error: unknown) {
-        lastError = error?.message || String(error);
+        lastError = error instanceof Error ? error.message : String(error);
       }
     }
 
