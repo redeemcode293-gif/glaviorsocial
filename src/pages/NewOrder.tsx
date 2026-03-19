@@ -270,7 +270,7 @@ const NewOrder = () => {
       toast({ title: t("Order Placed Successfully!"), description: t(`Order #${result.order?.order_number} has been submitted.`) });
       resetSingleOrderForm();
     } catch (error: unknown) {
-      toast({ title: t("Order Failed"), description: error.message || t("Failed to place order. Please try again."), variant: "destructive" });
+      toast({ title: t("Order Failed"), description: error instanceof Error ? error.message : t("Failed to place order. Please try again."), variant: "destructive" });
     } finally {
       setIsSubmitting(false);
     }
