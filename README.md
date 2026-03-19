@@ -10,7 +10,7 @@ There are several ways of editing your application.
 *
 
 .
-
+fnfk
 Changes made via Lovable will be committed automatically to this repo.
 
 **Use your preferred IDE**
