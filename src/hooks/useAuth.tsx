@@ -144,7 +144,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         },
         (payload) => {
           if (payload.eventType !== 'DELETE') {
-            setProfile(payload.new);
+            setProfile(payload.new as Parameters<typeof setProfile>[0]);
           }
         },
       );

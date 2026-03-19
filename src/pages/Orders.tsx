@@ -139,7 +139,7 @@ const Orders = () => {
     } catch (error: unknown) {
       toast({
         title: t("Refresh Failed"),
-        description: error.message || t("Failed to refresh order status."),
+        description: error instanceof Error ? error.message : t("Failed to refresh order status."),
         variant: "destructive",
       });
     } finally {
@@ -156,7 +156,7 @@ const Orders = () => {
       await fetchOrders();
       toast({ title: t("Orders Refreshed"), description: t("Latest provider statuses have been pulled.") });
     } catch (error: unknown) {
-      toast({ title: t("Refresh Failed"), description: error.message || t("Failed to refresh orders."), variant: "destructive" });
+      toast({ title: t("Refresh Failed"), description: error instanceof Error ? error.message : t("Failed to refresh orders."), variant: "destructive" });
     } finally {
       setRefreshingAll(false);
     }

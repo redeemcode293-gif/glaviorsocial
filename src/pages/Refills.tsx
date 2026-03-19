@@ -173,7 +173,7 @@ const Refills = () => {
       await fetchRefills();
       toast({ title: t("Refill Requested"), description: t(`Managed refill initiated for order ${order.order_number}.`) });
     } catch (error: unknown) {
-      toast({ title: t("Request Failed"), description: error.message || t("Unable to request refill."), variant: "destructive" });
+      toast({ title: t("Request Failed"), description: error instanceof Error ? error.message : t("Unable to request refill."), variant: "destructive" });
     } finally {
       setRequestingRefill(false);
     }
