@@ -135,7 +135,7 @@ export const UserDetailsDialog = ({ user, wallet, open, onOpenChange, onRefresh,
     setSavingMarkup(true);
     const { error } = await supabase
       .from('profiles')
-      .update({ price_markup: markup })
+      .update({ custom_multiplier: markup })
       .eq('user_id', user.user_id);
     setSavingMarkup(false);
     if (error) {

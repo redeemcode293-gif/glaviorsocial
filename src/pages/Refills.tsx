@@ -79,7 +79,7 @@ const Refills = () => {
           .from("services")
           .select("id, name")
           .in("id", serviceIds)
-      : { data: [] as Array<Record<string, never>> };
+      : { data: [] as Array<{ id: string; name: string }> };
 
     const orderMap = new Map((orders || []).map((order) => [order.id, order]));
     const serviceMap = new Map((services || []).map((service) => [service.id, service]));
