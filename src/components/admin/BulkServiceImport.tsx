@@ -362,7 +362,22 @@ export const BulkServiceImport = () => {
 
         const existingMap = new Map((existingServices || []).map((service) => [service.provider_service_id, service.id]));
 
-        const toInsertBatch: Array<Record<string, unknown>> = [];
+        const toInsertBatch: Array<{
+          service_id: number;
+          name: string;
+          description: string;
+          platform: string;
+          category: string;
+          provider_id: string | null;
+          provider_service_id: string;
+          provider_price: number;
+          base_price: number;
+          min_quantity: number;
+          max_quantity: number;
+          refill_supported: boolean;
+          dripfeed_supported: boolean;
+          is_active: boolean;
+        }> = [];
         const insertedProviderServiceIds: string[] = [];
 
         for (const service of batch) {
