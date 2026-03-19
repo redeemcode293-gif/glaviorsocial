@@ -131,7 +131,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             return;
           }
 
-          setWallet(payload.new);
+          setWallet(payload.new as Parameters<typeof setWallet>[0]);
         },
       )
       .on(
