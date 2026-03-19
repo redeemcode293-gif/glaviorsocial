@@ -147,7 +147,21 @@ async function syncPanelServices(providerServices: SyncedProviderService[]) {
 
   const panelsByProvider = new Map((existingPanels || []).map((panel) => [panel.provider_service_uuid, panel]));
   const usedIds = new Set((collidingIds || []).map((panel) => Number(panel.service_id)));
-  const inserts: Array<Record<string, unknown>> = [];
+  const inserts: Array<{
+    service_id: number;
+    name: string;
+    description: string;
+    platform: string;
+    category: string;
+    min_quantity: number;
+    max_quantity: number;
+    price: number;
+    refill_supported: boolean;
+    dripfeed_supported: boolean;
+    auto_refill_supported: boolean;
+    is_visible: boolean;
+    provider_service_uuid: string;
+  }> = [];
 
   for (const service of providerServices) {
     const existingPanel = panelsByProvider.get(service.id);
