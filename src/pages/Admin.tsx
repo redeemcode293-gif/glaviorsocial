@@ -520,19 +520,19 @@ const Admin = () => {
       return;
     }
 
-    const { error } = await supabase.from('api_providers').insert({
-      name: providerForm.name,
-      api_url: providerForm.api_url,
-      api_key: providerForm.api_key,
-    });
-
-    if (error) {
-      toast({ title: "Failed to add provider", variant: "destructive" });
-    } else {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const { error } = await supabase.functions.invoke('manage-provider', {
+        body: { action: 'create', name: providerForm.name, api_url: providerForm.api_url, api_key: providerForm.api_key },
+        headers: { Authorization: `Bearer ${session?.access_token}` },
+      });
+      if (error) throw error;
       toast({ title: "Provider Added" });
       setShowProviderDialog(false);
       setProviderForm({ name: '', api_url: '', api_key: '' });
       fetchAdminData();
+    } catch {
+      toast({ title: "Failed to add provider", variant: "destructive" });
     }
   };
 

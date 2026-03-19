@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
+import { decryptApiKey } from "../_shared/crypto.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -124,7 +125,7 @@ serve(async (req) => {
     for (const provider of providersToTry) {
       try {
         const body = new URLSearchParams({
-          key: provider.api_key,
+          key: await decryptApiKey(provider.api_key),
           action: "add",
           service: String(service.provider_service_id),
           link: order.link,
@@ -155,7 +156,7 @@ serve(async (req) => {
 
         lastError = result.error || `Provider ${provider.name} returned no order id`;
       } catch (error: unknown) {
-        lastError = error?.message || String(error);
+        lastError = error instanceof Error ? error.message : String(error);
       }
     }
 
@@ -167,7 +168,7 @@ serve(async (req) => {
     });
   } catch (error: unknown) {
     console.error("process-order error", error);
-    return new Response(JSON.stringify({ error: error?.message || String(error) }), {
+    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

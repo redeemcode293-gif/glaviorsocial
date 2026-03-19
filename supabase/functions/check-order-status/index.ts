@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
+import { decryptApiKey } from "../_shared/crypto.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -118,7 +119,7 @@ serve(async (req) => {
     }
 
     const body = new URLSearchParams({
-      key: provider.api_key,
+      key: await decryptApiKey(provider.api_key),
       action: "status",
       order: String(order.provider_order_id),
     });
@@ -150,7 +151,8 @@ serve(async (req) => {
     });
   } catch (error: unknown) {
     console.error("check-order-status error", error);
-    return new Response(JSON.stringify({ error: error?.message || String(error) }), {
+    const msg = error instanceof Error ? error.message : String(error);
+    return new Response(JSON.stringify({ error: msg }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

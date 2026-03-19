@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
+import { decryptApiKey } from "../_shared/crypto.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -121,7 +122,11 @@ serve(async (req) => {
       ? await supabase.from("api_providers").select("*").in("id", providerIds).eq("status", "active")
       : { data: [] as Array<Record<string, string>> };
 
-    const providerMap = new Map((providers || []).map((provider) => [provider.id, provider]));
+    // Decrypt API keys before putting them in the map
+    const decryptedProviders = await Promise.all(
+      (providers || []).map(async (p) => ({ ...p, api_key: await decryptApiKey(p.api_key) }))
+    );
+    const providerMap = new Map(decryptedProviders.map((provider) => [provider.id, provider]));
 
     let processedPending = 0;
     let checked = 0;
