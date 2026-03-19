@@ -148,7 +148,6 @@ export type Database = {
           link: string
           order_number: string
           price: number
-          provider_order_id: string | null
           quantity: number
           remains: number | null
           service_id: string
@@ -168,7 +167,6 @@ export type Database = {
           link: string
           order_number: string
           price: number
-          provider_order_id?: string | null
           quantity: number
           remains?: number | null
           service_id: string
@@ -188,7 +186,6 @@ export type Database = {
           link?: string
           order_number?: string
           price?: number
-          provider_order_id?: string | null
           quantity?: number
           remains?: number | null
           service_id?: string

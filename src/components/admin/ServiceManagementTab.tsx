@@ -15,7 +15,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { 
   Package, RefreshCw, Search, Plus, Edit, Trash2, Eye, MoreVertical, 
   Link2, Save, Check, X, ArrowUpDown, Percent, Power, PowerOff, ChevronLeft, ChevronRight,
-  AlertTriangle
+  AlertTriangle, Lock
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -54,9 +54,15 @@ const INR_TO_USD = 1 / 92;
 
 const SECONDARY_ADMIN_EMAIL = 'samgho54@gmail.com';
 
-export function ServiceManagementTab() {
+interface ServiceManagementTabProps {
+  isOwner?: boolean;
+  priceMarkup?: number;
+}
+
+export function ServiceManagementTab({ isOwner = true, priceMarkup = 1.0 }: ServiceManagementTabProps) {
   const { user } = useAuth();
   const isSecondaryAdmin = user?.email === SECONDARY_ADMIN_EMAIL;
+  const hasMarkup = priceMarkup > 1.0;
   const [services, setServices] = useState<Service[]>([]);
   const [providers, setProviders] = useState<Provider[]>([]);
   const [loading, setLoading] = useState(true);
@@ -67,14 +73,14 @@ export function ServiceManagementTab() {
   const [corruptedCount, setCorruptedCount] = useState(0);
   const [isFixingPrices, setIsFixingPrices] = useState(false);
   const [priceFixProgress, setPriceFixProgress] = useState({ done: 0, total: 0 });
-  
+
   // Dialogs
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [mappingDialogOpen, setMappingDialogOpen] = useState(false);
   const [bulkActionDialogOpen, setBulkActionDialogOpen] = useState(false);
   const [bulkActionType, setBulkActionType] = useState<'enable' | 'disable' | 'price' | 'category' | 'delete'>('enable');
-  
+
   // Edit form state
   const [editingService, setEditingService] = useState<Service | null>(null);
   const [editForm, setEditForm] = useState({
@@ -91,15 +97,15 @@ export function ServiceManagementTab() {
     is_active: true,
     speed_estimate: ''
   });
-  
+
   // Bulk action form
   const [bulkPriceChange, setBulkPriceChange] = useState({ type: 'percent', value: '' });
   const [bulkCategory, setBulkCategory] = useState('General');
-  
+
   // Inline editing
   const [inlineEditing, setInlineEditing] = useState<{ id: string; field: string } | null>(null);
   const [inlineValue, setInlineValue] = useState('');
-  
+
   const { toast } = useToast();
 
   useEffect(() => {
@@ -517,7 +523,7 @@ export function ServiceManagementTab() {
   // Inline edit save
   const saveInlineEdit = async (serviceId: string, field: string, value: string) => {
     const updateData: Record<string, string | number | boolean> = {};
-    
+
     if (field === 'base_price') {
       updateData.base_price = parseFloat(value);
     } else if (field === 'is_active') {
@@ -538,7 +544,7 @@ export function ServiceManagementTab() {
             : null;
       if (panelUpdate) await syncPanelDetails(serviceId, panelUpdate);
     }
-    
+
     if (error) {
       toast({ title: "Failed to update", variant: "destructive" });
     } else {
@@ -559,7 +565,7 @@ export function ServiceManagementTab() {
 
   const executeBulkAction = async () => {
     const ids = Array.from(selectedServices);
-    
+
     if (ids.length === 0) {
       toast({ title: "No services selected", variant: "destructive" });
       return;
@@ -691,18 +697,22 @@ export function ServiceManagementTab() {
               <Button variant="outline" size="icon" onClick={fetchData}>
                 <RefreshCw className="h-4 w-4" />
               </Button>
-              {corruptedCount > 0 && (
+              {isOwner && corruptedCount > 0 && (
                 <Button variant="destructive" onClick={fixCorruptedPrices} disabled={isFixingPrices} className="gap-2">
                   {isFixingPrices ? <RefreshCw className="h-4 w-4 animate-spin" /> : <AlertTriangle className="h-4 w-4" />}
                   Fix INR Prices ({corruptedCount})
                 </Button>
               )}
-              <Button variant="outline" onClick={addAllServicesToPanel}>
-                Add All Live
-              </Button>
-              <Button variant="destructive" onClick={removeAllServices}>
-                Remove All
-              </Button>
+              {isOwner && (
+                <Button variant="outline" onClick={addAllServicesToPanel}>
+                  Add All Live
+                </Button>
+              )}
+              {isOwner && (
+                <Button variant="destructive" onClick={removeAllServices}>
+                  Remove All
+                </Button>
+              )}
               <Button onClick={() => { resetEditForm(); setAddDialogOpen(true); }}>
                 <Plus className="h-4 w-4 mr-2" />Add Service
               </Button>
@@ -710,7 +720,7 @@ export function ServiceManagementTab() {
           </div>
         </CardHeader>
         <CardContent>
-          {corruptedCount > 0 && !isFixingPrices && (
+          {isOwner && corruptedCount > 0 && !isFixingPrices && (
             <div className="mb-4 rounded-lg border border-destructive/40 bg-destructive/10 p-4 flex items-start gap-3">
               <AlertTriangle className="h-5 w-5 text-destructive mt-0.5 flex-shrink-0" />
               <div>
@@ -784,6 +794,7 @@ export function ServiceManagementTab() {
                     <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Platform</th>
                     <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Provider Price</th>
                     <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Panel Price</th>
+                    {hasMarkup && <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Margin</th>}
                     <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Limits</th>
                     <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Status</th>
                     <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase">Actions</th>
@@ -849,14 +860,14 @@ export function ServiceManagementTab() {
                         <td className="p-3">
                           {service.provider_price !== null ? (
                             <span className="font-mono text-xs text-muted-foreground">
-                              ${(Number(service.provider_price) * (isSecondaryAdmin ? 2 : 1)).toFixed(4)}
+                              ${(Number(service.provider_price) * (isSecondaryAdmin ? 2 : priceMarkup)).toFixed(4)}
                             </span>
                           ) : (
                             <span className="text-xs text-muted-foreground">N/A</span>
                           )}
                         </td>
                         <td className="p-3">
-                          {inlineEditing?.id === service.id && inlineEditing.field === 'base_price' ? (
+                          {inlineEditing?.id === service.id && inlineEditing.field === 'base_price' && isOwner ? (
                             <div className="flex items-center gap-1">
                               <Input 
                                 type="number"
@@ -873,7 +884,7 @@ export function ServiceManagementTab() {
                                 <X className="h-3 w-3 text-destructive" />
                               </Button>
                             </div>
-                          ) : (
+                          ) : isOwner ? (
                             <span 
                               className={`font-mono text-sm cursor-pointer hover:underline ${isCorrupted ? "text-destructive font-bold" : "text-success"}`}
                               onClick={() => {
@@ -883,8 +894,28 @@ export function ServiceManagementTab() {
                             >
                               {isCorrupted ? "⚠️ " : ""}${Number(service.base_price).toFixed(4)}
                             </span>
+                          ) : (
+                            <span className="font-mono text-sm text-success">
+                              ${Number(service.base_price).toFixed(4)}
+                            </span>
                           )}
                         </td>
+                        {hasMarkup && (
+                          <td className="p-3">
+                            {service.provider_price !== null && Number(service.provider_price) > 0 ? (
+                              <div className="flex items-center gap-1.5">
+                                <Lock className="h-3 w-3 text-muted-foreground shrink-0" />
+                                <span className="font-mono text-xs text-amber-500">
+                                  {(((Number(service.base_price) / (Number(service.provider_price) * priceMarkup)) - 1) * 100).toFixed(1)}%
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                <Lock className="h-3 w-3" />—
+                              </span>
+                            )}
+                          </td>
+                        )}
                         <td className="p-3 text-xs text-muted-foreground font-mono">
                           {service.min_quantity.toLocaleString()} - {service.max_quantity.toLocaleString()}
                         </td>
@@ -972,13 +1003,13 @@ export function ServiceManagementTab() {
               <div className="space-y-2">
                 <Label>Provider Price (Read-only)</Label>
                 <Input 
-                  value={editingService?.provider_price ? `$${editingService.provider_price.toFixed(4)}` : 'N/A'}
+                  value={editingService?.provider_price ? `$${(editingService.provider_price * priceMarkup).toFixed(4)}` : 'N/A'}
                   disabled
                   className="bg-muted"
                 />
               </div>
             </div>
-            
+
             <div className="space-y-2">
               <Label>Public Service Name</Label>
               <Input 
@@ -987,7 +1018,7 @@ export function ServiceManagementTab() {
                 placeholder="e.g., Instagram Followers – Premium"
               />
             </div>
-            
+
             <div className="space-y-2">
               <Label>Public Description (Markdown supported)</Label>
               <Textarea 
@@ -997,7 +1028,7 @@ export function ServiceManagementTab() {
                 rows={3}
               />
             </div>
-            
+
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Platform</Label>
@@ -1018,16 +1049,32 @@ export function ServiceManagementTab() {
                 </Select>
               </div>
             </div>
-            
+
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label>Panel Price (per 1000)</Label>
-                <Input 
-                  type="number"
-                  step="0.0001"
-                  value={editForm.base_price}
-                  onChange={(e) => setEditForm({ ...editForm, base_price: e.target.value })}
-                />
+                {isOwner ? (
+                  <Input 
+                    type="number"
+                    step="0.0001"
+                    value={editForm.base_price}
+                    onChange={(e) => setEditForm({ ...editForm, base_price: e.target.value })}
+                  />
+                ) : (
+                  <div className="space-y-1">
+                    <Input 
+                      value={`$${Number(editForm.base_price).toFixed(4)}`}
+                      disabled
+                      className="bg-muted"
+                    />
+                    {editingService?.provider_price && Number(editingService.provider_price) > 0 && (
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <Lock className="h-3 w-3" />
+                        <span>Margin: {(((Number(editForm.base_price) / (Number(editingService.provider_price) * priceMarkup)) - 1) * 100).toFixed(1)}% (locked)</span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
               <div className="space-y-2">
                 <Label>Min Quantity</Label>
@@ -1056,7 +1103,7 @@ export function ServiceManagementTab() {
                 placeholder="e.g., 1000-5000 per day"
               />
             </div>
-            
+
             <div className="flex flex-wrap items-center gap-6 pt-2">
               <div className="flex items-center gap-2">
                 <Switch 
@@ -1119,7 +1166,7 @@ export function ServiceManagementTab() {
                 </Select>
               </div>
             </div>
-            
+
             <div className="space-y-2">
               <Label>Service Name</Label>
               <Input 
@@ -1128,7 +1175,7 @@ export function ServiceManagementTab() {
                 placeholder="e.g., Instagram Followers – Premium"
               />
             </div>
-            
+
             <div className="space-y-2">
               <Label>Description</Label>
               <Textarea 
@@ -1138,7 +1185,7 @@ export function ServiceManagementTab() {
                 rows={2}
               />
             </div>
-            
+
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label>Category</Label>
@@ -1168,7 +1215,7 @@ export function ServiceManagementTab() {
                 />
               </div>
             </div>
-            
+
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Min Quantity</Label>
@@ -1187,7 +1234,7 @@ export function ServiceManagementTab() {
                 />
               </div>
             </div>
-            
+
             <div className="flex items-center gap-6">
               <div className="flex items-center gap-2">
                 <Switch 
@@ -1242,12 +1289,12 @@ export function ServiceManagementTab() {
                   <p className="font-mono">{editingService.provider_service_id || 'N/A'}</p>
                 </div>
               </div>
-              
+
               <div className="p-3 bg-secondary/30 rounded-lg">
                 <p className="text-xs text-muted-foreground mb-1">Panel Service Name</p>
                 <p className="font-medium">{editingService.name}</p>
               </div>
-              
+
               <div className="grid grid-cols-2 gap-4">
                 <div className="p-3 bg-secondary/30 rounded-lg">
                   <p className="text-xs text-muted-foreground mb-1">Connected Provider</p>
@@ -1282,88 +1329,4 @@ export function ServiceManagementTab() {
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setMappingDialogOpen(false)}>Close</Button>
-            <Button onClick={() => { setMappingDialogOpen(false); if (editingService) openEditDialog(editingService); }}>
-              <Edit className="h-4 w-4 mr-2" />Edit Service
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Bulk Action Confirmation Dialog */}
-      <Dialog open={bulkActionDialogOpen} onOpenChange={setBulkActionDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="font-display">
-              {bulkActionType === 'enable' && 'Enable Services'}
-              {bulkActionType === 'disable' && 'Disable Services'}
-              {bulkActionType === 'delete' && 'Delete Services'}
-              {bulkActionType === 'price' && 'Adjust Prices'}
-              {bulkActionType === 'category' && 'Change Category'}
-            </DialogTitle>
-            <DialogDescription>
-              This action will affect {selectedServices.size} selected services.
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="py-4">
-            {bulkActionType === 'price' && (
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Adjustment Type</Label>
-                  <Select value={bulkPriceChange.type} onValueChange={(v) => setBulkPriceChange({ ...bulkPriceChange, type: v })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="percent">Percentage (%)</SelectItem>
-                      <SelectItem value="flat">Flat Amount ($)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>{bulkPriceChange.type === 'percent' ? 'Percentage Change' : 'Amount'}</Label>
-                  <Input 
-                    type="number"
-                    step={bulkPriceChange.type === 'percent' ? '1' : '0.01'}
-                    placeholder={bulkPriceChange.type === 'percent' ? 'e.g., 10 for +10%' : 'e.g., 0.50'}
-                    value={bulkPriceChange.value}
-                    onChange={(e) => setBulkPriceChange({ ...bulkPriceChange, value: e.target.value })}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Use negative values to decrease prices (e.g., -10 for -10%)
-                  </p>
-                </div>
-              </div>
-            )}
-            
-            {bulkActionType === 'category' && (
-              <div className="space-y-2">
-                <Label>New Category</Label>
-                <Select value={bulkCategory} onValueChange={setBulkCategory}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-            
-            {bulkActionType === 'delete' && (
-              <p className="text-destructive text-sm">
-                Warning: This action cannot be undone. All selected services will be permanently deleted.
-              </p>
-            )}
-          </div>
-          
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setBulkActionDialogOpen(false)}>Cancel</Button>
-            <Button 
-              variant={bulkActionType === 'delete' ? 'destructive' : 'default'}
-              onClick={executeBulkAction}
-            >
-              Confirm
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
-  );
-}
+            <Button onClick={() => { setMappingDialogOpen(false); if (editing

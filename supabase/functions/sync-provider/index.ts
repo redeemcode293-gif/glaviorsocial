@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { encryptApiKey, decryptApiKey } from "../_shared/crypto.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -246,13 +247,15 @@ serve(async (req) => {
       });
     }
 
+    // Decrypt the stored API key before using it for provider calls
+    const providerApiKey = await decryptApiKey(provider.api_key);
     console.log(`Syncing provider: ${provider.name} (${provider.api_url})`);
 
     if (action === 'balance') {
       const response = await fetch(provider.api_url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ key: provider.api_key, action: 'balance' }),
+        body: new URLSearchParams({ key: providerApiKey, action: 'balance' }),
       });
 
       const data = await response.json();
@@ -276,7 +279,7 @@ serve(async (req) => {
       const response = await fetch(provider.api_url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ key: provider.api_key, action: 'services' }),
+        body: new URLSearchParams({ key: providerApiKey, action: 'services' }),
         signal: AbortSignal.timeout(60000),
       });
 

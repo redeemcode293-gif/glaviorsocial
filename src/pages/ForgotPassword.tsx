@@ -46,7 +46,7 @@ const ForgotPassword = () => {
       console.error('Password reset error:', error);
       toast({
         title: "Error",
-        description: error.message || "Failed to send reset link. Please try again.",
+        description: error instanceof Error ? error.message : "Failed to send reset link. Please try again.",
         variant: "destructive",
       });
     } finally {

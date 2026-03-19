@@ -227,6 +227,34 @@ const ResellerPanel = () => {
             </CardContent>
           </Card>
 
+          {/* Pricing Card */}
+          <Card className="border-success/30 bg-success/5">
+            <CardContent className="p-4 md:p-6">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <Crown className="h-5 w-5 text-success" />
+                    <p className="font-display font-bold text-lg text-foreground">{t("Reseller Panel Subscription")}</p>
+                  </div>
+                  <p className="text-sm text-muted-foreground">{t("Full access to white-label panel features, custom branding, and dedicated support")}</p>
+                  <div className="flex flex-wrap gap-3 mt-3">
+                    {[t("Custom Domain"), t("White-label Branding"), t("Set Your Prices"), t("Real-time Orders"), t("24/7 Support")].map((feature) => (
+                      <div key={feature} className="flex items-center gap-1.5 text-xs text-success">
+                        <Check className="h-3.5 w-3.5" />
+                        <span>{feature}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-4xl font-display font-black text-success">$25</p>
+                  <p className="text-sm text-muted-foreground">{t("per month")}</p>
+                  <Badge className="mt-2 bg-success/20 text-success border-success/30 text-xs">{t("Billed Monthly")}</Badge>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Create Panel Form */}
           <Card className="border-border/30 bg-card/60 backdrop-blur-sm">
             <CardHeader>
@@ -234,7 +262,7 @@ const ResellerPanel = () => {
                 <Sparkles className="h-5 w-5 text-primary" />
                 {t("Create Your Panel")}
               </CardTitle>
-              <CardDescription>{t("Fill in the details to launch your reseller panel")}</CardDescription>
+              <CardDescription>{t("Fill in the details to launch your reseller panel. Our team will activate your subscription after payment.")}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 md:space-y-6">
               <div className="grid sm:grid-cols-2 gap-4 md:gap-6">

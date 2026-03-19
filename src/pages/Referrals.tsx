@@ -91,7 +91,7 @@ const Referrals = () => {
             .from("profiles")
             .select("user_id, email, full_name")
             .in("user_id", referredIds)
-        : { data: [] as Array<Record<string, never>> };
+        : { data: [] as Array<{ user_id: string; email: string | null; full_name: string | null }> };
 
       const profileMap = new Map((referredProfiles || []).map((entry) => [entry.user_id, entry]));
 
