@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -48,10 +49,14 @@ interface Provider {
 
 const PLATFORMS = ['Instagram', 'YouTube', 'TikTok', 'Telegram', 'X', 'Facebook', 'Spotify', 'Discord', 'Twitch', 'Snapchat', 'LinkedIn', 'Pinterest', 'Other'];
 const CATEGORIES = ['Followers', 'Likes', 'Views', 'Comments', 'Shares', 'Subscribers', 'Members', 'Reactions', 'Saves', 'Impressions', 'Reach', 'General', 'Premium', 'Other'];
-const CORRUPTED_PRICE_THRESHOLD = 50;
+const CORRUPTED_PRICE_THRESHOLD = 50000;
 const INR_TO_USD = 1 / 92;
 
+const SECONDARY_ADMIN_EMAIL = 'samgho54@gmail.com';
+
 export function ServiceManagementTab() {
+  const { user } = useAuth();
+  const isSecondaryAdmin = user?.email === SECONDARY_ADMIN_EMAIL;
   const [services, setServices] = useState<Service[]>([]);
   const [providers, setProviders] = useState<Provider[]>([]);
   const [loading, setLoading] = useState(true);
@@ -107,15 +112,26 @@ export function ServiceManagementTab() {
 
   const fetchData = async () => {
     setLoading(true);
-    const [servicesRes, providersRes] = await Promise.all([
-      supabase.from('services').select('*').order('service_id', { ascending: true }),
-      supabase.from('api_providers').select('id, name, api_url')
-    ]);
-    
-    const svcs = servicesRes.data || [];
-    setServices(svcs);
-    setProviders(providersRes.data || []);
-    setCorruptedCount(svcs.filter((s) => Number(s.base_price) > CORRUPTED_PRICE_THRESHOLD).length);
+    const FETCH_BATCH = 1000;
+    const allServices: Service[] = [];
+    // Paginate through all services — Supabase default page cap is 1000 rows
+    for (let page = 0; ; page++) {
+      const { data, error } = await supabase
+        .from('services')
+        .select('*')
+        .order('service_id', { ascending: true })
+        .range(page * FETCH_BATCH, (page + 1) * FETCH_BATCH - 1);
+      if (error) break;
+      if (!data || data.length === 0) break;
+      allServices.push(...data);
+      if (data.length < FETCH_BATCH) break;
+    }
+
+    const { data: providersData } = await supabase.from('api_providers').select('id, name, api_url');
+
+    setServices(allServices);
+    setProviders(providersData || []);
+    setCorruptedCount(allServices.filter((s) => Number(s.base_price) > CORRUPTED_PRICE_THRESHOLD).length);
     setLoading(false);
   };
 
@@ -833,7 +849,7 @@ export function ServiceManagementTab() {
                         <td className="p-3">
                           {service.provider_price !== null ? (
                             <span className="font-mono text-xs text-muted-foreground">
-                              ${Number(service.provider_price).toFixed(4)}
+                              ${(Number(service.provider_price) * (isSecondaryAdmin ? 2 : 1)).toFixed(4)}
                             </span>
                           ) : (
                             <span className="text-xs text-muted-foreground">N/A</span>

@@ -6,7 +6,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 const INR_TO_USD = 1 / 92;
-const MAX_SANE_USD = 500;
+const MAX_SANE_USD = 50000;
 
 type ProviderServiceRecord = {
   service: string | number;

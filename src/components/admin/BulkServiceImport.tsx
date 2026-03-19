@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,6 +34,8 @@ interface ProviderService {
 }
 
 const PLATFORMS = ["Instagram", "YouTube", "TikTok", "Telegram", "X", "Facebook", "Spotify", "Discord", "Twitch", "Snapchat", "WhatsApp", "Threads", "LinkedIn", "Pinterest", "Reddit", "Apple", "Other"];
+const SECONDARY_ADMIN_EMAIL = 'samgho54@gmail.com';
+const SECONDARY_ADMIN_PROVIDER_MULTIPLIER = 2;
 const INR_TO_USD = 1 / 92;
 
 /**
@@ -172,6 +175,8 @@ async function syncPanelServices(providerServices: SyncedProviderService[]) {
 }
 
 export const BulkServiceImport = () => {
+  const { user } = useAuth();
+  const isSecondaryAdmin = user?.email === SECONDARY_ADMIN_EMAIL;
   const { toast } = useToast();
   const [apiUrl, setApiUrl] = useState("");
   const [apiKey, setApiKey] = useState("");
@@ -244,10 +249,11 @@ export const BulkServiceImport = () => {
     const margin = parseFloat(marginPercent || "0") / 100;
     return services.some((service) => {
       const providerPriceUSD = toUSD(service.rate, providerCurrency);
-      const panelPriceUSD = providerPriceUSD * (1 + margin);
-      return panelPriceUSD > 50;
+      const effectiveProviderPrice = isSecondaryAdmin ? providerPriceUSD * SECONDARY_ADMIN_PROVIDER_MULTIPLIER : providerPriceUSD;
+      const panelPriceUSD = effectiveProviderPrice * (1 + margin);
+      return panelPriceUSD > 50000;
     });
-  }, [services, marginPercent, providerCurrency]);
+  }, [services, marginPercent, providerCurrency, isSecondaryAdmin]);
 
   const toggleSelectAll = () => {
     if (selected.size === filteredServices.length) {
@@ -354,10 +360,12 @@ export const BulkServiceImport = () => {
         for (const service of batch) {
           const platform = detectPlatform(service.category, service.name);
           const providerPrice = toUSD(service.rate, providerCurrency);
-          const basePrice = providerPrice * (1 + margin);
+          // For secondary admin: base price is calculated on the 2x marked-up provider price
+          const effectiveProviderPrice = isSecondaryAdmin ? providerPrice * SECONDARY_ADMIN_PROVIDER_MULTIPLIER : providerPrice;
+          const basePrice = effectiveProviderPrice * (1 + margin);
           const providerServiceId = String(service.service);
 
-          if (basePrice > 50) {
+          if (basePrice > 50000) {
             console.error(
               `PRICE SANITY FAIL: service ${service.service}, raw rate ${service.rate}, panelUSD=${basePrice}. Skipping.`,
             );
@@ -611,14 +619,15 @@ export const BulkServiceImport = () => {
                   </thead>
                   <tbody>
                     {services.slice(0, 5).map((s) => {
-                      const providerUSD = toUSD(s.rate, providerCurrency);
-                      const panelUSD = providerUSD * (1 + parseFloat(marginPercent || "0") / 100);
-                      const isHigh = panelUSD > 50;
+                      const realProviderUSD = toUSD(s.rate, providerCurrency);
+                      const displayProviderUSD = isSecondaryAdmin ? realProviderUSD * SECONDARY_ADMIN_PROVIDER_MULTIPLIER : realProviderUSD;
+                      const panelUSD = displayProviderUSD * (1 + parseFloat(marginPercent || "0") / 100);
+                      const isHigh = panelUSD > 50000;
                       return (
                         <tr key={s.service} className={`border-b border-border/10 ${isHigh ? "bg-destructive/5" : ""}`}>
                           <td className="px-3 py-2 truncate max-w-[200px] text-foreground/80">{s.name}</td>
                           <td className="px-3 py-2 text-right font-mono text-muted-foreground">{s.rate}</td>
-                          <td className="px-3 py-2 text-right font-mono">${providerUSD.toFixed(4)}</td>
+                          <td className="px-3 py-2 text-right font-mono">${displayProviderUSD.toFixed(4)}</td>
                           <td className={`px-3 py-2 text-right font-mono font-medium ${isHigh ? "text-destructive" : "text-primary"}`}>
                             {isHigh ? "⚠️ " : ""}${panelUSD.toFixed(4)}
                           </td>
@@ -637,7 +646,7 @@ export const BulkServiceImport = () => {
             )}
             {skippedHighPriceCount > 0 && (
               <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-                Skipped {skippedHighPriceCount} services during the last import because their computed panel price exceeded $500.
+                Skipped {skippedHighPriceCount} services during the last import because their computed panel price exceeded $50,000.
               </div>
             )}
           </CardHeader>
@@ -684,9 +693,10 @@ export const BulkServiceImport = () => {
                         <div className="divide-y divide-border/10">
                           {catServices.map((service) => {
                             const platform = detectPlatform(service.category, service.name);
-                            const providerPrice = toUSD(service.rate, providerCurrency);
+                            const realProviderPrice = toUSD(service.rate, providerCurrency);
+                            const providerPrice = isSecondaryAdmin ? realProviderPrice * SECONDARY_ADMIN_PROVIDER_MULTIPLIER : realProviderPrice;
                             const ourPrice = providerPrice * (1 + parseFloat(marginPercent) / 100);
-                            const isHighPrice = ourPrice > 50;
+                            const isHighPrice = ourPrice > 50000;
 
                             return (
                               <div
