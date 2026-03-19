@@ -73,14 +73,14 @@ export function ServiceManagementTab({ isOwner = true, priceMarkup = 1.0 }: Serv
   const [corruptedCount, setCorruptedCount] = useState(0);
   const [isFixingPrices, setIsFixingPrices] = useState(false);
   const [priceFixProgress, setPriceFixProgress] = useState({ done: 0, total: 0 });
-
+  
   // Dialogs
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [mappingDialogOpen, setMappingDialogOpen] = useState(false);
   const [bulkActionDialogOpen, setBulkActionDialogOpen] = useState(false);
   const [bulkActionType, setBulkActionType] = useState<'enable' | 'disable' | 'price' | 'category' | 'delete'>('enable');
-
+  
   // Edit form state
   const [editingService, setEditingService] = useState<Service | null>(null);
   const [editForm, setEditForm] = useState({
@@ -97,15 +97,15 @@ export function ServiceManagementTab({ isOwner = true, priceMarkup = 1.0 }: Serv
     is_active: true,
     speed_estimate: ''
   });
-
+  
   // Bulk action form
   const [bulkPriceChange, setBulkPriceChange] = useState({ type: 'percent', value: '' });
   const [bulkCategory, setBulkCategory] = useState('General');
-
+  
   // Inline editing
   const [inlineEditing, setInlineEditing] = useState<{ id: string; field: string } | null>(null);
   const [inlineValue, setInlineValue] = useState('');
-
+  
   const { toast } = useToast();
 
   useEffect(() => {
@@ -523,7 +523,7 @@ export function ServiceManagementTab({ isOwner = true, priceMarkup = 1.0 }: Serv
   // Inline edit save
   const saveInlineEdit = async (serviceId: string, field: string, value: string) => {
     const updateData: Record<string, string | number | boolean> = {};
-
+    
     if (field === 'base_price') {
       updateData.base_price = parseFloat(value);
     } else if (field === 'is_active') {
@@ -544,7 +544,7 @@ export function ServiceManagementTab({ isOwner = true, priceMarkup = 1.0 }: Serv
             : null;
       if (panelUpdate) await syncPanelDetails(serviceId, panelUpdate);
     }
-
+    
     if (error) {
       toast({ title: "Failed to update", variant: "destructive" });
     } else {
@@ -565,7 +565,7 @@ export function ServiceManagementTab({ isOwner = true, priceMarkup = 1.0 }: Serv
 
   const executeBulkAction = async () => {
     const ids = Array.from(selectedServices);
-
+    
     if (ids.length === 0) {
       toast({ title: "No services selected", variant: "destructive" });
       return;
@@ -1009,7 +1009,7 @@ export function ServiceManagementTab({ isOwner = true, priceMarkup = 1.0 }: Serv
                 />
               </div>
             </div>
-
+            
             <div className="space-y-2">
               <Label>Public Service Name</Label>
               <Input 
@@ -1018,7 +1018,7 @@ export function ServiceManagementTab({ isOwner = true, priceMarkup = 1.0 }: Serv
                 placeholder="e.g., Instagram Followers – Premium"
               />
             </div>
-
+            
             <div className="space-y-2">
               <Label>Public Description (Markdown supported)</Label>
               <Textarea 
@@ -1028,7 +1028,7 @@ export function ServiceManagementTab({ isOwner = true, priceMarkup = 1.0 }: Serv
                 rows={3}
               />
             </div>
-
+            
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Platform</Label>
@@ -1049,7 +1049,7 @@ export function ServiceManagementTab({ isOwner = true, priceMarkup = 1.0 }: Serv
                 </Select>
               </div>
             </div>
-
+            
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label>Panel Price (per 1000)</Label>
@@ -1103,7 +1103,7 @@ export function ServiceManagementTab({ isOwner = true, priceMarkup = 1.0 }: Serv
                 placeholder="e.g., 1000-5000 per day"
               />
             </div>
-
+            
             <div className="flex flex-wrap items-center gap-6 pt-2">
               <div className="flex items-center gap-2">
                 <Switch 
@@ -1166,7 +1166,7 @@ export function ServiceManagementTab({ isOwner = true, priceMarkup = 1.0 }: Serv
                 </Select>
               </div>
             </div>
-
+            
             <div className="space-y-2">
               <Label>Service Name</Label>
               <Input 
@@ -1175,7 +1175,7 @@ export function ServiceManagementTab({ isOwner = true, priceMarkup = 1.0 }: Serv
                 placeholder="e.g., Instagram Followers – Premium"
               />
             </div>
-
+            
             <div className="space-y-2">
               <Label>Description</Label>
               <Textarea 
@@ -1185,7 +1185,7 @@ export function ServiceManagementTab({ isOwner = true, priceMarkup = 1.0 }: Serv
                 rows={2}
               />
             </div>
-
+            
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label>Category</Label>
@@ -1215,7 +1215,7 @@ export function ServiceManagementTab({ isOwner = true, priceMarkup = 1.0 }: Serv
                 />
               </div>
             </div>
-
+            
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Min Quantity</Label>
@@ -1234,7 +1234,7 @@ export function ServiceManagementTab({ isOwner = true, priceMarkup = 1.0 }: Serv
                 />
               </div>
             </div>
-
+            
             <div className="flex items-center gap-6">
               <div className="flex items-center gap-2">
                 <Switch 
@@ -1289,12 +1289,12 @@ export function ServiceManagementTab({ isOwner = true, priceMarkup = 1.0 }: Serv
                   <p className="font-mono">{editingService.provider_service_id || 'N/A'}</p>
                 </div>
               </div>
-
+              
               <div className="p-3 bg-secondary/30 rounded-lg">
                 <p className="text-xs text-muted-foreground mb-1">Panel Service Name</p>
                 <p className="font-medium">{editingService.name}</p>
               </div>
-
+              
               <div className="grid grid-cols-2 gap-4">
                 <div className="p-3 bg-secondary/30 rounded-lg">
                   <p className="text-xs text-muted-foreground mb-1">Connected Provider</p>
@@ -1329,4 +1329,88 @@ export function ServiceManagementTab({ isOwner = true, priceMarkup = 1.0 }: Serv
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setMappingDialogOpen(false)}>Close</Button>
-            <Button onClick={() => { setMappingDialogOpen(false); if (editing
+            <Button onClick={() => { setMappingDialogOpen(false); if (editingService) openEditDialog(editingService); }}>
+              <Edit className="h-4 w-4 mr-2" />Edit Service
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Action Confirmation Dialog */}
+      <Dialog open={bulkActionDialogOpen} onOpenChange={setBulkActionDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="font-display">
+              {bulkActionType === 'enable' && 'Enable Services'}
+              {bulkActionType === 'disable' && 'Disable Services'}
+              {bulkActionType === 'delete' && 'Delete Services'}
+              {bulkActionType === 'price' && 'Adjust Prices'}
+              {bulkActionType === 'category' && 'Change Category'}
+            </DialogTitle>
+            <DialogDescription>
+              This action will affect {selectedServices.size} selected services.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="py-4">
+            {bulkActionType === 'price' && (
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Adjustment Type</Label>
+                  <Select value={bulkPriceChange.type} onValueChange={(v) => setBulkPriceChange({ ...bulkPriceChange, type: v })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="percent">Percentage (%)</SelectItem>
+                      <SelectItem value="flat">Flat Amount ($)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>{bulkPriceChange.type === 'percent' ? 'Percentage Change' : 'Amount'}</Label>
+                  <Input 
+                    type="number"
+                    step={bulkPriceChange.type === 'percent' ? '1' : '0.01'}
+                    placeholder={bulkPriceChange.type === 'percent' ? 'e.g., 10 for +10%' : 'e.g., 0.50'}
+                    value={bulkPriceChange.value}
+                    onChange={(e) => setBulkPriceChange({ ...bulkPriceChange, value: e.target.value })}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Use negative values to decrease prices (e.g., -10 for -10%)
+                  </p>
+                </div>
+              </div>
+            )}
+            
+            {bulkActionType === 'category' && (
+              <div className="space-y-2">
+                <Label>New Category</Label>
+                <Select value={bulkCategory} onValueChange={setBulkCategory}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            
+            {bulkActionType === 'delete' && (
+              <p className="text-destructive text-sm">
+                Warning: This action cannot be undone. All selected services will be permanently deleted.
+              </p>
+            )}
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkActionDialogOpen(false)}>Cancel</Button>
+            <Button 
+              variant={bulkActionType === 'delete' ? 'destructive' : 'default'}
+              onClick={executeBulkAction}
+            >
+              Confirm
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
