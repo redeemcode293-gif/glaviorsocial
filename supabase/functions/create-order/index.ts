@@ -14,7 +14,8 @@ interface CreateOrderRequest {
   dripfeedRuns?: number | null;
   dripfeedInterval?: number | null;
   autoRefill?: boolean;
-  appliedMultiplier?: number | null;
+  // NOTE: appliedMultiplier from client is intentionally ignored for security.
+  // Multiplier is always resolved server-side from the user's profile + regional_pricing table.
   userCountryCode?: string | null;
 }
 
@@ -53,10 +54,20 @@ serve(async (req) => {
       });
     }
 
+    // Validate quantity is a positive integer
+    const quantity = Math.floor(Number(body.quantity));
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      return new Response(JSON.stringify({ error: "Invalid quantity" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const { data: service, error: serviceError } = await supabase
       .from("services")
       .select("id, name, base_price, min_quantity, max_quantity, provider_id, provider_service_id")
       .eq("id", body.serviceId)
+      .eq("is_active", true)
       .maybeSingle();
 
     if (serviceError || !service) {
@@ -66,7 +77,7 @@ serve(async (req) => {
       });
     }
 
-    if (body.quantity < service.min_quantity || body.quantity > service.max_quantity) {
+    if (quantity < service.min_quantity || quantity > service.max_quantity) {
       return new Response(JSON.stringify({ error: `Quantity must be between ${service.min_quantity} and ${service.max_quantity}` }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -97,8 +108,38 @@ serve(async (req) => {
     }
 
     const basePrice = Number(servicePriceRow?.price ?? service.base_price ?? 0);
-    const appliedMultiplier = Number(body.appliedMultiplier ?? 1);
-    const totalPrice = Number((((basePrice * appliedMultiplier) * body.quantity) / 1000).toFixed(2));
+
+    // ============================================================
+    // SECURITY: Resolve multiplier SERVER-SIDE from user's profile
+    // Never trust client-supplied multiplier values.
+    // ============================================================
+    let appliedMultiplier = 1.0;
+    let resolvedCountryCode: string | null = null;
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("country_code, pricing_override")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (profile?.pricing_override === "provider") {
+      // Owner/admin cost-price override — pay at base, no markup
+      appliedMultiplier = 1.0;
+      resolvedCountryCode = profile.country_code ?? null;
+    } else if (profile?.country_code) {
+      resolvedCountryCode = profile.country_code;
+      const { data: pricing } = await supabase
+        .from("regional_pricing")
+        .select("multiplier")
+        .contains("countries", [profile.country_code])
+        .maybeSingle();
+      appliedMultiplier = Number(pricing?.multiplier ?? 1.40);
+    } else {
+      // No country on profile — use default fallback
+      appliedMultiplier = 1.40;
+    }
+
+    const totalPrice = Number((((basePrice * appliedMultiplier) * quantity) / 1000).toFixed(2));
 
     if (Number(wallet.balance) < totalPrice) {
       return new Response(JSON.stringify({ error: "Insufficient balance" }), {
@@ -131,22 +172,23 @@ serve(async (req) => {
         user_id: user.id,
         service_id: service.id,
         link: body.link,
-        quantity: body.quantity,
+        quantity: quantity,
         price: totalPrice,
         status: "pending",
         order_number: orderNumber,
         dripfeed: body.dripfeed ?? false,
         dripfeed_interval: body.dripfeed ? body.dripfeedInterval ?? null : null,
         auto_refill: body.autoRefill ?? false,
-        applied_multiplier: body.appliedMultiplier ?? 1,
-        user_country_code: body.userCountryCode ?? null,
+        applied_multiplier: appliedMultiplier,
+        user_country_code: resolvedCountryCode,
       })
       .select("*")
       .single();
 
     if (orderError || !order) {
       await supabase.from("wallets").update({ balance: wallet.balance }).eq("user_id", user.id);
-      return new Response(JSON.stringify({ error: orderError?.message || "Failed to create order" }), {
+      const errMsg = orderError instanceof Error ? orderError.message : String(orderError);
+      return new Response(JSON.stringify({ error: errMsg || "Failed to create order" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -186,7 +228,8 @@ serve(async (req) => {
     });
   } catch (error: unknown) {
     console.error("create-order error", error);
-    return new Response(JSON.stringify({ error: error?.message || String(error) }), {
+    const msg = error instanceof Error ? error.message : String(error);
+    return new Response(JSON.stringify({ error: msg }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

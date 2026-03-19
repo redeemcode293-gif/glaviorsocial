@@ -71,7 +71,7 @@ const Refills = () => {
           .from("orders")
           .select("id, order_number, quantity, service_id")
           .in("id", orderIds)
-      : { data: [] as Array<Record<string, never>> };
+      : { data: [] as Array<{ id: string; order_number: string; quantity: number; service_id: string }> };
 
     const serviceIds = (orders || []).map((order) => order.service_id);
     const { data: services } = serviceIds.length
@@ -79,7 +79,7 @@ const Refills = () => {
           .from("services")
           .select("id, name")
           .in("id", serviceIds)
-      : { data: [] as Array<Record<string, never>> };
+      : { data: [] as Array<{ id: string; name: string }> };
 
     const orderMap = new Map((orders || []).map((order) => [order.id, order]));
     const serviceMap = new Map((services || []).map((service) => [service.id, service]));
@@ -173,7 +173,7 @@ const Refills = () => {
       await fetchRefills();
       toast({ title: t("Refill Requested"), description: t(`Managed refill initiated for order ${order.order_number}.`) });
     } catch (error: unknown) {
-      toast({ title: t("Request Failed"), description: error.message || t("Unable to request refill."), variant: "destructive" });
+      toast({ title: t("Request Failed"), description: error instanceof Error ? error.message : t("Unable to request refill."), variant: "destructive" });
     } finally {
       setRequestingRefill(false);
     }

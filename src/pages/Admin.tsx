@@ -141,13 +141,13 @@ const Admin = () => {
       return;
     }
 
-    // Fetch price_markup for this admin's profile
+    // price_markup uses custom_multiplier field
     const { data: profileData } = await supabase
       .from('profiles')
-      .select('price_markup')
+      .select('custom_multiplier')
       .eq('user_id', user.id)
       .maybeSingle();
-    setPriceMarkup(Number(profileData?.price_markup ?? 1.0));
+    setPriceMarkup(Number(profileData?.custom_multiplier ?? 1.0));
 
     setIsAdmin(true);
     await fetchAdminData(false);

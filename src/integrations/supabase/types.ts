@@ -148,7 +148,6 @@ export type Database = {
           link: string
           order_number: string
           price: number
-          provider_order_id: string | null
           quantity: number
           remains: number | null
           service_id: string
@@ -168,7 +167,6 @@ export type Database = {
           link: string
           order_number: string
           price: number
-          provider_order_id?: string | null
           quantity: number
           remains?: number | null
           service_id: string
@@ -188,7 +186,6 @@ export type Database = {
           link?: string
           order_number?: string
           price?: number
-          provider_order_id?: string | null
           quantity?: number
           remains?: number | null
           service_id?: string
@@ -283,7 +280,6 @@ export type Database = {
           full_name: string | null
           id: string
           last_password_change: string | null
-          price_markup: number
           pricing_override: string | null
           referral_code: string | null
           referred_by: string | null
@@ -301,7 +297,6 @@ export type Database = {
           full_name?: string | null
           id?: string
           last_password_change?: string | null
-          price_markup?: number
           pricing_override?: string | null
           referral_code?: string | null
           referred_by?: string | null
@@ -319,7 +314,6 @@ export type Database = {
           full_name?: string | null
           id?: string
           last_password_change?: string | null
-          price_markup?: number
           pricing_override?: string | null
           referral_code?: string | null
           referred_by?: string | null
