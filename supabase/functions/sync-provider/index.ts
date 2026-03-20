@@ -6,7 +6,7 @@ const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
-const INR_TO_USD = 1 / 92;
+
 const MAX_SANE_USD = 50000;
 
 type ProviderServiceRecord = {
@@ -43,8 +43,7 @@ type PanelServiceRecord = {
 };
 
 /**
- * parseProviderPrice — handles INR lakh format (1,00,000.19), INR thousand format
- * (15,650.19), plain USD (0.50). Strips all currency symbols and removes ALL commas.
+ * parseProviderPrice — Strips all currency symbols and removes ALL commas.
  */
 function parseProviderPrice(raw: string | number): number {
   if (typeof raw === 'number') return isNaN(raw) ? 0 : raw;
@@ -63,21 +62,13 @@ function parseProviderPrice(raw: string | number): number {
 }
 
 /**
- * toUsd — converts provider price to USD.
- * - If currency is INR → divide by 92
- * - If value > 100 with any currency → heuristic: treat as INR, divide by 92
- * - Otherwise → treat as USD
+ * toUsd — strict USD conversion.
+ * Mesumax and Nixon provide rates in USD. No division or heuristic guessing is allowed.
  */
-function toUsd(raw: string | number, currency?: string): number {
+function toUsd(raw: string | number): number {
   const value = parseProviderPrice(raw);
   if (value <= 0 || isNaN(value)) return 0;
-  const cur = (currency || 'USD').toUpperCase().trim();
-  if (cur === 'INR' || cur === '₹' || cur === 'RS') return value * INR_TO_USD;
-  if (value > 100) {
-    console.warn(`[sync-provider] price ${value} for "${cur}" > 100 — treating as INR`);
-    return value * INR_TO_USD;
-  }
-  return value;
+  return value; // Trust the raw USD price completely
 }
 
 function normalizeServiceText(value: string | null | undefined, fallback: string): string {
@@ -164,7 +155,6 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Get authorization header to verify admin/owner
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
@@ -173,7 +163,6 @@ serve(async (req) => {
       });
     }
 
-    // Verify user
     const token = authHeader.replace('Bearer ', '');
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
     
@@ -184,7 +173,6 @@ serve(async (req) => {
       });
     }
 
-    // Check admin OR owner role
     const { data: roleData } = await supabase
       .from('user_roles')
       .select('role')
@@ -202,7 +190,6 @@ serve(async (req) => {
     const body = await req.json();
     const { providerId, action } = body;
 
-    // ── fetch-preview: fetch services from any provider URL ──
     if (action === 'fetch-preview') {
       const { apiUrl, apiKey } = body;
       if (!apiUrl || !apiKey) {
@@ -233,7 +220,6 @@ serve(async (req) => {
       });
     }
 
-    // Fetch provider details
     const { data: provider, error: providerError } = await supabase
       .from('api_providers')
       .select('*')
@@ -247,9 +233,7 @@ serve(async (req) => {
       });
     }
 
-    // Decrypt the stored API key before using it for provider calls
     const providerApiKey = await decryptApiKey(provider.api_key);
-    console.log(`Syncing provider: ${provider.name} (${provider.api_url})`);
 
     if (action === 'balance') {
       const response = await fetch(provider.api_url, {
@@ -259,11 +243,9 @@ serve(async (req) => {
       });
 
       const data = await response.json();
-      console.log('Balance response:', data);
 
       if (data.balance !== undefined) {
-        const providerCurrencyForBalance = ((provider.currency as string) || 'INR').toUpperCase();
-        const balanceUSD = toUsd(data.balance, providerCurrencyForBalance);
+        const balanceUSD = toUsd(data.balance);
         await supabase
           .from('api_providers')
           .update({ balance: balanceUSD })
@@ -284,7 +266,6 @@ serve(async (req) => {
       });
 
       const services = await response.json();
-      console.log(`Fetched ${Array.isArray(services) ? services.length : 0} services`);
 
       if (!Array.isArray(services)) {
         return new Response(JSON.stringify({ error: 'Invalid services response', data: services }), {
@@ -297,12 +278,10 @@ serve(async (req) => {
       let updatedCount = 0;
       const syncedProviderServiceIds: string[] = [];
 
-      // Process in batches of 50 for performance
       const BATCH_SIZE = 50;
       for (let i = 0; i < services.length; i += BATCH_SIZE) {
         const batch = services.slice(i, i + BATCH_SIZE) as ProviderServiceRecord[];
         
-        // Get existing services for this batch
         const batchIds = batch.map((service) => String(service.service));
         const { data: existingServices } = await supabase
           .from('services')
@@ -318,13 +297,16 @@ serve(async (req) => {
 
         for (const service of batch) {
           const platform = detectPlatform(service.category || '', service.name || '');
-          const providerPrice = toUsd(service.rate, provider.currency || 'USD');
-          const basePrice = providerPrice * 1.3; // 30% default margin
+          const providerPrice = toUsd(service.rate);
+          
+          // HARDCODED 100% MARGIN
+          const basePrice = providerPrice * 2.0; 
+
           const providerServiceId = String(service.service);
 
           if (basePrice > MAX_SANE_USD || isNaN(basePrice)) {
             console.error(
-              `PRICE SANITY FAIL: service ${service.service} "${service.name}", raw=${service.rate}, currency=${provider.currency || 'USD'}, panelUSD=${basePrice}. Skipping.`,
+              `PRICE SANITY FAIL: service ${service.service} "${service.name}", raw=${service.rate}, panelUSD=${basePrice}. Skipping.`
             );
             continue;
           }
@@ -354,7 +336,6 @@ serve(async (req) => {
           }
         }
 
-        // Batch insert
         if (toInsert.length > 0) {
           const { error: insertErr } = await supabase.from('services').insert(toInsert);
           if (!insertErr) {
@@ -365,7 +346,6 @@ serve(async (req) => {
           }
         }
 
-        // Batch update (upsert)
         for (const s of toUpdate) {
           const { id, ...updateData } = s;
           await supabase.from('services').update({
@@ -381,7 +361,7 @@ serve(async (req) => {
             dripfeed_supported: updateData.dripfeed_supported,
             is_active: true,
           }).eq('id', id);
-          syncedProviderServiceIds.push(updateData.provider_service_id);
+          syncedProviderServiceIds.push(updateData.provider_service_id as string);
           updatedCount++;
         }
       }
@@ -400,7 +380,6 @@ serve(async (req) => {
         }
       }
 
-      // Update last sync time
       await supabase
         .from('api_providers')
         .update({ last_sync_at: new Date().toISOString() })
@@ -432,10 +411,10 @@ serve(async (req) => {
 
 function detectPlatform(category: string, name: string): string {
   const text = (category + ' ' + name).toLowerCase();
-  if (text.includes('instagram')) return 'Instagram';
-  if (text.includes('youtube')) return 'YouTube';
+  if (text.includes('instagram') || text.includes(' ig ') || text.includes('igtv')) return 'Instagram';
+  if (text.includes('youtube') || text.includes(' yt ')) return 'YouTube';
   if (text.includes('tiktok') || text.includes('tik tok')) return 'TikTok';
-  if (text.includes('telegram')) return 'Telegram';
+  if (text.includes('telegram') || text.includes(' tg ')) return 'Telegram';
   if (text.includes('twitter') || text.includes(' x ') || text.match(/\bx\b/)) return 'X';
   if (text.includes('facebook') || text.includes('fb ')) return 'Facebook';
   if (text.includes('spotify')) return 'Spotify';
@@ -448,6 +427,10 @@ function detectPlatform(category: string, name: string): string {
   if (text.includes('pinterest')) return 'Pinterest';
   if (text.includes('reddit')) return 'Reddit';
   if (text.includes('clubhouse')) return 'Clubhouse';
-  if (text.includes('apple') || text.includes('itunes')) return 'Apple';
+  if (text.includes('apple') || text.includes('itunes') || text.includes('ios')) return 'Apple';
+  if (text.includes('website') || text.includes('traffic') || text.includes('visitors')) return 'Websites';
+  if (text.includes(' app ') || text.includes('app installs') || text.includes('play store')) return 'Apps';
+  if (text.includes('seo') || text.includes('backlink')) return 'SEO/Backlinks';
+  if (text.includes('blog')) return 'Blog';
   return 'Other';
 }
