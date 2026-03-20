@@ -50,7 +50,6 @@ interface Provider {
 const PLATFORMS = ['Instagram', 'YouTube', 'TikTok', 'Telegram', 'X', 'Facebook', 'Spotify', 'Discord', 'Twitch', 'Snapchat', 'LinkedIn', 'Pinterest', 'Other'];
 const CATEGORIES = ['Followers', 'Likes', 'Views', 'Comments', 'Shares', 'Subscribers', 'Members', 'Reactions', 'Saves', 'Impressions', 'Reach', 'General', 'Premium', 'Other'];
 const CORRUPTED_PRICE_THRESHOLD = 50000;
-const INR_TO_USD = 1 / 92;
 
 const SECONDARY_ADMIN_EMAIL = 'samgho54@gmail.com';
 
@@ -120,7 +119,6 @@ export function ServiceManagementTab({ isOwner = true, priceMarkup = 1.0 }: Serv
     setLoading(true);
     const FETCH_BATCH = 1000;
     const allServices: Service[] = [];
-    // Paginate through all services — Supabase default page cap is 1000 rows
     for (let page = 0; ; page++) {
       const { data, error } = await supabase
         .from('services')
@@ -337,9 +335,10 @@ export function ServiceManagementTab({ isOwner = true, priceMarkup = 1.0 }: Serv
         const batch = corruptedServices.slice(i, i + UPDATE_BATCH);
 
         for (const service of batch) {
-          const correctedBasePrice = Number(service.base_price) * INR_TO_USD;
+          // Divide by 92 to convert raw INR values → USD
+          const correctedBasePrice = Number(service.base_price) / 92;
           const correctedProviderPrice =
-            service.provider_price !== null ? Number(service.provider_price) * INR_TO_USD : null;
+            service.provider_price !== null ? Number(service.provider_price) / 92 : null;
 
           const { error: serviceError } = await supabase
             .from('services')
@@ -572,7 +571,6 @@ export function ServiceManagementTab({ isOwner = true, priceMarkup = 1.0 }: Serv
     }
 
     try {
-      // Process in batches of 200 to avoid DB query limits with large selections
       const BATCH_SIZE = 200;
 
       const batchUpdate = async (updateData: Record<string, string | number | boolean>) => {
@@ -645,15 +643,9 @@ export function ServiceManagementTab({ isOwner = true, priceMarkup = 1.0 }: Serv
   const safeCurrentPage = Math.min(currentPage, totalPages);
   const paginatedServices = filteredServices.slice((safeCurrentPage - 1) * PAGE_SIZE, safeCurrentPage * PAGE_SIZE);
 
-  // View mapping
   const openMappingDialog = (service: Service) => {
     setEditingService(service);
     setMappingDialogOpen(true);
-  };
-
-  // Calculate panel price (with example 30% margin)
-  const calculatePanelPrice = (providerPrice: number | null, basePrice: number) => {
-    return basePrice;
   };
 
   if (loading) {
