@@ -12,10 +12,6 @@ import { useToast } from "@/hooks/use-toast";
 import {
   RefreshCw,
   Search,
-  Download,
-  CheckSquare,
-  Square,
-  AlertCircle,
   ChevronDown,
   ChevronRight,
   Zap,
@@ -37,10 +33,6 @@ const PLATFORMS = ["Instagram", "YouTube", "TikTok", "Telegram", "X", "Facebook"
 const SECONDARY_ADMIN_EMAIL = 'samgho54@gmail.com';
 const SECONDARY_ADMIN_PROVIDER_MULTIPLIER = 2;
 
-/**
- * parseRawPrice — handles USD and INR formats, strips all currency symbols.
- * Removes ALL commas before parseFloat so prices are processed accurately.
- */
 function parseRawPrice(raw: string | number): number {
   if (typeof raw === "number") return isNaN(raw) ? 0 : raw;
   if (!raw) return 0;
@@ -56,14 +48,10 @@ function parseRawPrice(raw: string | number): number {
   return isNaN(parsed) ? 0 : parsed;
 }
 
-/**
- * toUSD — STRICT FIX: This function now trusts the provider's raw rate.
- * We no longer divide by 92 or guess based on the value size.
- */
 function toUSD(raw: string | number): number {
   const value = parseRawPrice(raw);
   if (value <= 0 || isNaN(value)) return 0;
-  return value; // Direct passthrough - trust the source.
+  return value;
 }
 
 function detectPlatform(category: string, name: string): string {
@@ -166,6 +154,20 @@ async function syncPanelServices(providerServices: SyncedProviderService[]) {
   }
 }
 
+/**
+ * Fetch the highest existing service_id from the DB so we can assign
+ * sequential IDs instead of random ones that collide.
+ */
+async function getNextServiceIdBase(): Promise<number> {
+  const { data } = await supabase
+    .from("services")
+    .select("service_id")
+    .order("service_id", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return data ? Number(data.service_id) + 1 : 10001;
+}
+
 export const BulkServiceImport = () => {
   const { user } = useAuth();
   const isSecondaryAdmin = user?.email === SECONDARY_ADMIN_EMAIL;
@@ -181,9 +183,9 @@ export const BulkServiceImport = () => {
   const [importProgress, setImportProgress] = useState({ done: 0, total: 0 });
   const [searchQuery, setSearchQuery] = useState("");
   const [platformFilter, setPlatformFilter] = useState("all");
-  const [marginPercent, setMarginPercent] = useState("100"); // Defaulting to your required 100% margin
+  const [marginPercent, setMarginPercent] = useState("100");
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
-  const [skippedHighPriceCount, setSkippedHighPriceCount] = useState(0);
+  const [skippedCount, setSkippedCount] = useState(0);
 
   const fetchServices = async () => {
     if (!apiUrl || !apiKey) {
@@ -193,7 +195,7 @@ export const BulkServiceImport = () => {
     setLoading(true);
     setServices([]);
     setSelected(new Set());
-    setSkippedHighPriceCount(0);
+    setSkippedCount(0);
     try {
       const response = await supabase.functions.invoke("sync-provider", {
         body: {
@@ -213,8 +215,7 @@ export const BulkServiceImport = () => {
       setServices(data.services);
       toast({ title: `Fetched ${data.services.length} services from provider` });
     } catch (err: any) {
-      const message = err.message || "Unable to fetch provider services";
-      toast({ title: "Failed to fetch services", description: message, variant: "destructive" });
+      toast({ title: "Failed to fetch services", description: err.message || "Unable to fetch provider services", variant: "destructive" });
     }
     setLoading(false);
   };
@@ -288,12 +289,13 @@ export const BulkServiceImport = () => {
     }
     setImporting(true);
     setImportProgress({ done: 0, total: selected.size });
-    setSkippedHighPriceCount(0);
+    setSkippedCount(0);
 
     const margin = parseFloat(marginPercent) / 100;
     const toImport = services.filter((s) => selected.has(s.service));
 
     try {
+      // ── 1. Upsert provider ────────────────────────────────────────────────
       let providerId: string | null = null;
 
       if (apiUrl && apiKey) {
@@ -323,101 +325,149 @@ export const BulkServiceImport = () => {
         }
       }
 
+      // ── 2. Fetch existing services for this provider in one shot ──────────
+      const allProviderServiceIds = toImport.map((s) => String(s.service));
+
+      const { data: existingServices } = providerId
+        ? await supabase
+            .from("services")
+            .select("id, provider_service_id")
+            .eq("provider_id", providerId)
+            .in("provider_service_id", allProviderServiceIds)
+        : { data: [] };
+
+      const existingMap = new Map(
+        (existingServices || []).map((s) => [s.provider_service_id, s.id])
+      );
+
+      // ── 3. Get a safe starting service_id base for all new inserts ────────
+      // Using sequential IDs avoids the random-collision problem that caused
+      // imports to stop at ~490 services.
+      let nextServiceId = await getNextServiceIdBase();
+
+      // ── 4. Split into updates vs inserts ──────────────────────────────────
       let addedCount = 0;
       let updatedCount = 0;
+      let skipped = 0;
       const syncedProviderServiceIds: string[] = [];
-      let errors = 0;
 
-      const BATCH_SIZE = 50;
-      for (let i = 0; i < toImport.length; i += BATCH_SIZE) {
-        const batch = toImport.slice(i, i + BATCH_SIZE);
+      const toUpdate: { id: string; data: any }[] = [];
+      const toInsertAll: any[] = [];
 
-        const batchIds = batch.map((s) => String(s.service));
-        const { data: existingServices } = providerId
-          ? await supabase
-              .from("services")
-              .select("id, provider_service_id")
-              .eq("provider_id", providerId)
-              .in("provider_service_id", batchIds)
-          : { data: [] };
+      for (const service of toImport) {
+        const platform = detectPlatform(service.category, service.name);
+        const providerPrice = toUSD(service.rate);
+        const effectiveProviderPrice = isSecondaryAdmin
+          ? providerPrice * SECONDARY_ADMIN_PROVIDER_MULTIPLIER
+          : providerPrice;
+        const basePrice = effectiveProviderPrice * (1 + margin);
+        const providerServiceId = String(service.service);
 
-        const existingMap = new Map((existingServices || []).map((service) => [service.provider_service_id, service.id]));
-
-        const toInsertBatch: any[] = [];
-        const insertedProviderServiceIds: string[] = [];
-
-        for (const service of batch) {
-          const platform = detectPlatform(service.category, service.name);
-          const providerPrice = toUSD(service.rate);
-          const effectiveProviderPrice = isSecondaryAdmin ? providerPrice * SECONDARY_ADMIN_PROVIDER_MULTIPLIER : providerPrice;
-          const basePrice = effectiveProviderPrice * (1 + margin);
-          const providerServiceId = String(service.service);
-
-          if (basePrice > 50000) {
-            errors += 1;
-            continue;
-          }
-
-          const serviceData = {
-            name: service.name,
-            description: service.description || service.name,
-            platform,
-            category: service.category || "General",
-            provider_id: providerId,
-            provider_service_id: providerServiceId,
-            provider_price: providerPrice,
-            base_price: basePrice,
-            min_quantity: parseInt(String(service.min)) || 100,
-            max_quantity: parseInt(String(service.max)) || 50000,
-            refill_supported: service.refill === true || service.refill === "true",
-            dripfeed_supported: service.dripfeed === true || service.dripfeed === "true",
-            is_active: true,
-          };
-
-          if (existingMap.has(providerServiceId)) {
-            await supabase
-              .from("services")
-              .update({
-                provider_price: serviceData.provider_price,
-                base_price: serviceData.base_price,
-                min_quantity: serviceData.min_quantity,
-                max_quantity: serviceData.max_quantity,
-                refill_supported: serviceData.refill_supported,
-                dripfeed_supported: serviceData.dripfeed_supported,
-                is_active: true,
-              })
-              .eq("id", existingMap.get(providerServiceId));
-            syncedProviderServiceIds.push(providerServiceId);
-            updatedCount++;
-          } else {
-            const internalServiceId = Math.floor(1000 + Math.random() * 9000);
-            toInsertBatch.push({ ...serviceData, service_id: internalServiceId });
-            insertedProviderServiceIds.push(providerServiceId);
-          }
+        if (basePrice > 50000) {
+          skipped += 1;
+          continue;
         }
 
-        if (toInsertBatch.length > 0) {
-          const { error: insertErr } = await supabase.from("services").insert(toInsertBatch);
-          if (!insertErr) {
-            addedCount += toInsertBatch.length;
-            syncedProviderServiceIds.push(...insertedProviderServiceIds);
-          }
-        }
+        const serviceData = {
+          name: service.name,
+          description: service.description || service.name,
+          platform,
+          category: service.category || "General",
+          provider_id: providerId,
+          provider_service_id: providerServiceId,
+          provider_price: providerPrice,
+          base_price: basePrice,
+          min_quantity: parseInt(String(service.min)) || 100,
+          max_quantity: parseInt(String(service.max)) || 50000,
+          refill_supported: service.refill === true || service.refill === "true",
+          dripfeed_supported: service.dripfeed === true || service.dripfeed === "true",
+          is_active: true,
+        };
 
-        setImportProgress({ done: Math.min(i + BATCH_SIZE, toImport.length), total: toImport.length });
+        if (existingMap.has(providerServiceId)) {
+          toUpdate.push({
+            id: existingMap.get(providerServiceId)!,
+            data: {
+              provider_price: serviceData.provider_price,
+              base_price: serviceData.base_price,
+              min_quantity: serviceData.min_quantity,
+              max_quantity: serviceData.max_quantity,
+              refill_supported: serviceData.refill_supported,
+              dripfeed_supported: serviceData.dripfeed_supported,
+              is_active: true,
+            },
+          });
+          syncedProviderServiceIds.push(providerServiceId);
+        } else {
+          // Assign a guaranteed-unique sequential ID
+          toInsertAll.push({ ...serviceData, service_id: nextServiceId });
+          syncedProviderServiceIds.push(providerServiceId);
+          nextServiceId += 1;
+        }
       }
 
+      setSkippedCount(skipped);
+
+      // ── 5. Execute updates in batches ─────────────────────────────────────
+      const UPDATE_BATCH = 50;
+      for (let i = 0; i < toUpdate.length; i += UPDATE_BATCH) {
+        const batch = toUpdate.slice(i, i + UPDATE_BATCH);
+        await Promise.all(
+          batch.map(({ id, data }) =>
+            supabase.from("services").update(data).eq("id", id).then(({ error }) => {
+              if (error) throw error;
+            })
+          )
+        );
+        updatedCount += batch.length;
+        setImportProgress({ done: updatedCount + addedCount, total: toImport.length });
+      }
+
+      // ── 6. Execute inserts in batches ─────────────────────────────────────
+      // Smaller batch size (25) reduces the chance of a single oversized
+      // Postgres payload causing a silent truncation.
+      const INSERT_BATCH = 25;
+      for (let i = 0; i < toInsertAll.length; i += INSERT_BATCH) {
+        const batch = toInsertAll.slice(i, i + INSERT_BATCH);
+        const { error: insertErr } = await supabase.from("services").insert(batch);
+        if (insertErr) {
+          // Log and continue — don't abort the whole import for one bad batch
+          console.error(`Insert batch ${i}–${i + INSERT_BATCH} failed:`, insertErr.message);
+          toast({
+            title: `Batch ${Math.floor(i / INSERT_BATCH) + 1} had an error`,
+            description: insertErr.message,
+            variant: "destructive",
+          });
+        } else {
+          addedCount += batch.length;
+        }
+        setImportProgress({ done: updatedCount + addedCount, total: toImport.length });
+        // Small breathing room between batches to avoid gateway timeouts
+        await new Promise((r) => setTimeout(r, 80));
+      }
+
+      // ── 7. Sync to panel_services ─────────────────────────────────────────
       if (providerId && syncedProviderServiceIds.length > 0) {
-        const { data: syncedServices, error: syncedServicesError } = await supabase
-          .from('services')
-          .select('id, service_id, name, description, platform, category, base_price, min_quantity, max_quantity, refill_supported, dripfeed_supported, is_active')
-          .eq('provider_id', providerId)
-          .in('provider_service_id', syncedProviderServiceIds);
+        // Fetch in pages to handle >1000 synced IDs
+        const PANEL_FETCH_BATCH = 500;
+        const allSyncedServices: SyncedProviderService[] = [];
 
-        if (syncedServicesError) throw syncedServicesError;
-        await syncPanelServices(syncedServices || []);
+        for (let i = 0; i < syncedProviderServiceIds.length; i += PANEL_FETCH_BATCH) {
+          const idSlice = syncedProviderServiceIds.slice(i, i + PANEL_FETCH_BATCH);
+          const { data, error } = await supabase
+            .from("services")
+            .select("id, service_id, name, description, platform, category, base_price, min_quantity, max_quantity, refill_supported, dripfeed_supported, is_active")
+            .eq("provider_id", providerId)
+            .in("provider_service_id", idSlice);
+
+          if (error) throw error;
+          if (data) allSyncedServices.push(...data);
+        }
+
+        await syncPanelServices(allSyncedServices);
       }
 
+      // ── 8. Stamp provider last_sync_at ────────────────────────────────────
       if (providerId) {
         await supabase
           .from("api_providers")
@@ -427,7 +477,7 @@ export const BulkServiceImport = () => {
 
       toast({
         title: "Import Complete ✓",
-        description: `Added: ${addedCount} new, Updated: ${updatedCount} existing.`,
+        description: `Added: ${addedCount} new · Updated: ${updatedCount} existing${skipped > 0 ? ` · Skipped: ${skipped} (price > $50k)` : ""}`,
       });
       setSelected(new Set());
     } catch (err: any) {
@@ -470,9 +520,9 @@ export const BulkServiceImport = () => {
                 className="bg-secondary/30 border-border/30"
               />
             </div>
-              <div className="space-y-2">
-                <Label>API Key</Label>
-                <Input
+            <div className="space-y-2">
+              <Label>API Key</Label>
+              <Input
                 type="password"
                 placeholder="API key"
                 value={apiKey}
@@ -521,7 +571,9 @@ export const BulkServiceImport = () => {
                   />
                 </div>
                 <Button onClick={importSelected} disabled={importing || selected.size === 0}>
-                  {importing ? "Importing..." : `Import ${selected.size} Services`}
+                  {importing
+                    ? `Importing… ${importProgress.done}/${importProgress.total}`
+                    : `Import ${selected.size} Services`}
                 </Button>
               </div>
             </div>
@@ -556,7 +608,7 @@ export const BulkServiceImport = () => {
                   <tr>
                     <th className="text-left px-3 py-2">Service</th>
                     <th className="text-right px-3 py-2">Provider Rate</th>
-                    <th className="text-right px-3 py-2">Panel Cost (100% Margin)</th>
+                    <th className="text-right px-3 py-2">Panel Cost ({marginPercent}% Margin)</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -574,6 +626,13 @@ export const BulkServiceImport = () => {
                 </tbody>
               </table>
             </div>
+
+            {importing && importProgress.total > 0 && (
+              <div className="mt-3 text-sm text-muted-foreground">
+                Progress: {importProgress.done} / {importProgress.total} services processed
+                {skippedCount > 0 && ` · ${skippedCount} skipped (price > $50k)`}
+              </div>
+            )}
           </CardHeader>
 
           <CardContent>
@@ -582,10 +641,18 @@ export const BulkServiceImport = () => {
                 const isExpanded = expandedCategories.has(category);
                 return (
                   <div key={category} className="border border-border/20 rounded-lg">
-                    <div className="flex items-center gap-3 p-3 bg-secondary/20 cursor-pointer" onClick={() => toggleExpand(category)}>
+                    <div
+                      className="flex items-center gap-3 p-3 bg-secondary/20 cursor-pointer"
+                      onClick={() => toggleExpand(category)}
+                    >
                       {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                      <Checkbox checked={catServices.every((s) => selected.has(s.service))} onCheckedChange={() => toggleCategory(category)} onClick={(e) => e.stopPropagation()} />
+                      <Checkbox
+                        checked={catServices.every((s) => selected.has(s.service))}
+                        onCheckedChange={() => toggleCategory(category)}
+                        onClick={(e) => e.stopPropagation()}
+                      />
                       <span className="font-medium text-sm flex-1">{category}</span>
+                      <span className="text-xs text-muted-foreground">{catServices.length} services</span>
                     </div>
 
                     {isExpanded && (
@@ -594,7 +661,11 @@ export const BulkServiceImport = () => {
                           const pRate = toUSD(service.rate);
                           const panelRate = pRate * (1 + parseFloat(marginPercent) / 100);
                           return (
-                            <div key={service.service} className="flex items-center gap-3 p-3 hover:bg-secondary/10" onClick={() => toggleService(service.service)}>
+                            <div
+                              key={service.service}
+                              className="flex items-center gap-3 p-3 hover:bg-secondary/10 cursor-pointer"
+                              onClick={() => toggleService(service.service)}
+                            >
                               <Checkbox checked={selected.has(service.service)} />
                               <div className="flex-1 min-w-0">
                                 <p className="text-sm font-medium truncate">{service.name}</p>
