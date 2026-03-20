@@ -33,15 +33,13 @@ interface ProviderService {
   description?: string;
 }
 
-const PLATFORMS = ["Instagram", "YouTube", "TikTok", "Telegram", "X", "Facebook", "Spotify", "Discord", "Twitch", "Snapchat", "WhatsApp", "Threads", "LinkedIn", "Pinterest", "Reddit", "Apple", "Other"];
+const PLATFORMS = ["Instagram", "YouTube", "TikTok", "Telegram", "X", "Facebook", "Spotify", "Discord", "Twitch", "Snapchat", "WhatsApp", "Threads", "LinkedIn", "Pinterest", "Reddit", "Apple", "Websites", "Apps", "SEO/Backlinks", "Blog", "Other"];
 const SECONDARY_ADMIN_EMAIL = 'samgho54@gmail.com';
 const SECONDARY_ADMIN_PROVIDER_MULTIPLIER = 2;
-const INR_TO_USD = 1 / 92;
 
 /**
- * parseRawPrice — handles INR lakh format (1,00,000.50), INR thousand format
- * (15,650.19), plain USD (0.50), strips all currency symbols.
- * KEY FIX: removes ALL commas before parseFloat so "15,650.19" → 15650.19
+ * parseRawPrice — handles USD and INR formats, strips all currency symbols.
+ * Removes ALL commas before parseFloat so prices are processed accurately.
  */
 function parseRawPrice(raw: string | number): number {
   if (typeof raw === "number") return isNaN(raw) ? 0 : raw;
@@ -59,32 +57,22 @@ function parseRawPrice(raw: string | number): number {
 }
 
 /**
- * toUSD — converts provider price to USD.
- * - If currency is INR → divide by 92
- * - If value > 100 with any currency → heuristic: treat as INR, divide by 92
- * - Otherwise → treat as USD
+ * toUSD — STRICT FIX: This function now trusts the provider's raw rate.
+ * We no longer divide by 92 or guess based on the value size.
  */
-function toUSD(raw: string | number, currency: string): number {
+function toUSD(raw: string | number): number {
   const value = parseRawPrice(raw);
   if (value <= 0 || isNaN(value)) return 0;
-  const cur = (currency || "USD").toUpperCase().trim();
-  if (cur === "INR" || cur === "₹" || cur === "RS") {
-    return value * INR_TO_USD;
-  }
-  if (value > 100) {
-    console.warn(`[BulkImport] price ${value} > 100 for currency "${cur}" — treating as INR`);
-    return value * INR_TO_USD;
-  }
-  return value;
+  return value; // Direct passthrough - trust the source.
 }
 
 function detectPlatform(category: string, name: string): string {
   const text = (category + " " + name).toLowerCase();
-  if (text.includes("instagram")) return "Instagram";
-  if (text.includes("youtube")) return "YouTube";
+  if (text.includes("instagram") || text.includes(" ig ") || text.includes("igtv")) return "Instagram";
+  if (text.includes("youtube") || text.includes(" yt ")) return "YouTube";
   if (text.includes("tiktok") || text.includes("tik tok")) return "TikTok";
-  if (text.includes("telegram")) return "Telegram";
-  if (text.includes("twitter") || text.includes(" x ")) return "X";
+  if (text.includes("telegram") || text.includes(" tg ")) return "Telegram";
+  if (text.includes("twitter") || text.includes(" x ") || text.match(/\bx\b/)) return "X";
   if (text.includes("facebook") || text.includes("fb ")) return "Facebook";
   if (text.includes("spotify")) return "Spotify";
   if (text.includes("discord")) return "Discord";
@@ -95,7 +83,11 @@ function detectPlatform(category: string, name: string): string {
   if (text.includes("linkedin")) return "LinkedIn";
   if (text.includes("pinterest")) return "Pinterest";
   if (text.includes("reddit")) return "Reddit";
-  if (text.includes("apple") || text.includes("itunes")) return "Apple";
+  if (text.includes("apple") || text.includes("itunes") || text.includes("ios")) return "Apple";
+  if (text.includes('website') || text.includes('traffic') || text.includes('visitors')) return 'Websites';
+  if (text.includes(' app ') || text.includes('app installs') || text.includes('play store')) return 'Apps';
+  if (text.includes('seo') || text.includes('backlink')) return 'SEO/Backlinks';
+  if (text.includes('blog')) return 'Blog';
   return "Other";
 }
 
@@ -150,21 +142,7 @@ async function syncPanelServices(providerServices: SyncedProviderService[]) {
 
   const panelsByProvider = new Map((existingPanels || []).map((panel) => [panel.provider_service_uuid, panel]));
   const usedIds = new Set((collidingIds || []).map((panel) => Number(panel.service_id)));
-  const inserts: Array<{
-    service_id: number;
-    name: string;
-    description: string;
-    platform: string;
-    category: string;
-    min_quantity: number;
-    max_quantity: number;
-    price: number;
-    refill_supported: boolean;
-    dripfeed_supported: boolean;
-    auto_refill_supported: boolean;
-    is_visible: boolean;
-    provider_service_uuid: string;
-  }> = [];
+  const inserts: any[] = [];
 
   for (const service of providerServices) {
     const existingPanel = panelsByProvider.get(service.id);
@@ -195,7 +173,7 @@ export const BulkServiceImport = () => {
   const [apiUrl, setApiUrl] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [providerName, setProviderName] = useState("");
-  const [providerCurrency, setProviderCurrency] = useState("INR");
+  const [providerCurrency, setProviderCurrency] = useState("USD");
   const [services, setServices] = useState<ProviderService[]>([]);
   const [selected, setSelected] = useState<Set<string | number>>(new Set());
   const [loading, setLoading] = useState(false);
@@ -203,7 +181,7 @@ export const BulkServiceImport = () => {
   const [importProgress, setImportProgress] = useState({ done: 0, total: 0 });
   const [searchQuery, setSearchQuery] = useState("");
   const [platformFilter, setPlatformFilter] = useState("all");
-  const [marginPercent, setMarginPercent] = useState("30");
+  const [marginPercent, setMarginPercent] = useState("100"); // Defaulting to your required 100% margin
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [skippedHighPriceCount, setSkippedHighPriceCount] = useState(0);
 
@@ -234,8 +212,8 @@ export const BulkServiceImport = () => {
 
       setServices(data.services);
       toast({ title: `Fetched ${data.services.length} services from provider` });
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Unable to fetch provider services";
+    } catch (err: any) {
+      const message = err.message || "Unable to fetch provider services";
       toast({ title: "Failed to fetch services", description: message, variant: "destructive" });
     }
     setLoading(false);
@@ -262,12 +240,12 @@ export const BulkServiceImport = () => {
   const previewHasHighPrice = useMemo(() => {
     const margin = parseFloat(marginPercent || "0") / 100;
     return services.some((service) => {
-      const providerPriceUSD = toUSD(service.rate, providerCurrency);
+      const providerPriceUSD = toUSD(service.rate);
       const effectiveProviderPrice = isSecondaryAdmin ? providerPriceUSD * SECONDARY_ADMIN_PROVIDER_MULTIPLIER : providerPriceUSD;
       const panelPriceUSD = effectiveProviderPrice * (1 + margin);
       return panelPriceUSD > 50000;
     });
-  }, [services, marginPercent, providerCurrency, isSecondaryAdmin]);
+  }, [services, marginPercent, isSecondaryAdmin]);
 
   const toggleSelectAll = () => {
     if (selected.size === filteredServices.length) {
@@ -316,7 +294,6 @@ export const BulkServiceImport = () => {
     const toImport = services.filter((s) => selected.has(s.service));
 
     try {
-      // Ensure provider exists
       let providerId: string | null = null;
 
       if (apiUrl && apiKey) {
@@ -351,12 +328,10 @@ export const BulkServiceImport = () => {
       const syncedProviderServiceIds: string[] = [];
       let errors = 0;
 
-      // Process in batches of 50 for speed
       const BATCH_SIZE = 50;
       for (let i = 0; i < toImport.length; i += BATCH_SIZE) {
         const batch = toImport.slice(i, i + BATCH_SIZE);
 
-        // Check which already exist
         const batchIds = batch.map((s) => String(s.service));
         const { data: existingServices } = providerId
           ? await supabase
@@ -368,36 +343,17 @@ export const BulkServiceImport = () => {
 
         const existingMap = new Map((existingServices || []).map((service) => [service.provider_service_id, service.id]));
 
-        const toInsertBatch: Array<{
-          service_id: number;
-          name: string;
-          description: string;
-          platform: string;
-          category: string;
-          provider_id: string | null;
-          provider_service_id: string;
-          provider_price: number;
-          base_price: number;
-          min_quantity: number;
-          max_quantity: number;
-          refill_supported: boolean;
-          dripfeed_supported: boolean;
-          is_active: boolean;
-        }> = [];
+        const toInsertBatch: any[] = [];
         const insertedProviderServiceIds: string[] = [];
 
         for (const service of batch) {
           const platform = detectPlatform(service.category, service.name);
-          const providerPrice = toUSD(service.rate, providerCurrency);
-          // For secondary admin: base price is calculated on the 2x marked-up provider price
+          const providerPrice = toUSD(service.rate);
           const effectiveProviderPrice = isSecondaryAdmin ? providerPrice * SECONDARY_ADMIN_PROVIDER_MULTIPLIER : providerPrice;
           const basePrice = effectiveProviderPrice * (1 + margin);
           const providerServiceId = String(service.service);
 
           if (basePrice > 50000) {
-            console.error(
-              `PRICE SANITY FAIL: service ${service.service}, raw rate ${service.rate}, panelUSD=${basePrice}. Skipping.`,
-            );
             errors += 1;
             continue;
           }
@@ -415,11 +371,10 @@ export const BulkServiceImport = () => {
             max_quantity: parseInt(String(service.max)) || 50000,
             refill_supported: service.refill === true || service.refill === "true",
             dripfeed_supported: service.dripfeed === true || service.dripfeed === "true",
-            is_active: true, // Auto-enabled on import
+            is_active: true,
           };
 
           if (existingMap.has(providerServiceId)) {
-            // Update existing
             await supabase
               .from("services")
               .update({
@@ -441,19 +396,11 @@ export const BulkServiceImport = () => {
           }
         }
 
-        // Batch insert new services
         if (toInsertBatch.length > 0) {
           const { error: insertErr } = await supabase.from("services").insert(toInsertBatch);
           if (!insertErr) {
             addedCount += toInsertBatch.length;
             syncedProviderServiceIds.push(...insertedProviderServiceIds);
-          } else {
-            console.error("Batch insert error:", insertErr);
-            // Fallback: insert one by one
-            for (const s of toInsertBatch) {
-              const { error: singleErr } = await supabase.from("services").insert(s);
-              if (!singleErr) addedCount++;
-            }
           }
         }
 
@@ -471,7 +418,6 @@ export const BulkServiceImport = () => {
         await syncPanelServices(syncedServices || []);
       }
 
-      // Update provider last_sync_at
       if (providerId) {
         await supabase
           .from("api_providers")
@@ -481,23 +427,19 @@ export const BulkServiceImport = () => {
 
       toast({
         title: "Import Complete ✓",
-        description: `Added: ${addedCount} new, Updated: ${updatedCount} existing. Skipped: ${errors}. All imported services are live immediately.`,
+        description: `Added: ${addedCount} new, Updated: ${updatedCount} existing.`,
       });
-      setSkippedHighPriceCount(errors);
       setSelected(new Set());
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Import failed";
-      toast({ title: "Import Failed", description: message, variant: "destructive" });
+    } catch (err: any) {
+      toast({ title: "Import Failed", description: err.message, variant: "destructive" });
     }
     setImporting(false);
-    setImportProgress({ done: 0, total: 0 });
   };
 
   const allFilteredSelected = filteredServices.length > 0 && filteredServices.every((s) => selected.has(s.service));
 
   return (
     <div className="space-y-6">
-      {/* Connection Card */}
       <Card className="border-border/30 bg-card/60">
         <CardHeader>
           <CardTitle className="text-lg font-display flex items-center gap-2">
@@ -505,16 +447,15 @@ export const BulkServiceImport = () => {
             Bulk Service Import
           </CardTitle>
           <CardDescription>
-            Enter your provider API credentials, fetch their service list, then select and import services.
-            All imported services are automatically live for users.
+            High-leverage service ingestion. Direct USD rates with 1:1 price trust.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="space-y-2">
-              <Label>Provider Name (optional)</Label>
+              <Label>Provider Name</Label>
               <Input
-                placeholder="e.g., SMM Provider 1"
+                placeholder="e.g., SMM Provider"
                 value={providerName}
                 onChange={(e) => setProviderName(e.target.value)}
                 className="bg-secondary/30 border-border/30"
@@ -533,79 +474,63 @@ export const BulkServiceImport = () => {
                 <Label>API Key</Label>
                 <Input
                 type="password"
-                placeholder="Your API key"
+                placeholder="API key"
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
                 className="bg-secondary/30 border-border/30"
               />
             </div>
             <div className="space-y-2">
-              <Label>Provider Currency</Label>
+              <Label>Currency Context</Label>
               <Select value={providerCurrency} onValueChange={setProviderCurrency}>
                 <SelectTrigger className="bg-secondary/30 border-border/30">
-                  <SelectValue placeholder="Select currency" />
+                  <SelectValue placeholder="USD" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="INR">INR (₹)</SelectItem>
                   <SelectItem value="USD">USD ($)</SelectItem>
+                  <SelectItem value="INR">INR (₹)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
           <Button onClick={fetchServices} disabled={loading} className="w-full md:w-auto">
-            {loading ? (
-              <><RefreshCw className="h-4 w-4 mr-2 animate-spin" /> Fetching Services...</>
-            ) : (
-              <><RefreshCw className="h-4 w-4 mr-2" /> Fetch Provider Services</>
-            )}
+            {loading ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+            Fetch Services
           </Button>
         </CardContent>
       </Card>
 
-      {/* Services Selection */}
       {services.length > 0 && (
         <Card className="border-border/30 bg-card/60">
           <CardHeader>
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
                 <CardTitle className="text-lg font-display">
-                  Select Services to Import
-                  <Badge variant="outline" className="ml-2 font-mono">{services.length} total</Badge>
+                  Market Execution
+                  <Badge variant="outline" className="ml-2 font-mono">{services.length} services</Badge>
                 </CardTitle>
-                <CardDescription>{selected.size} selected • Imported services are immediately visible to users</CardDescription>
               </div>
-              <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-2">
                 <div className="space-y-1">
                   <Label className="text-xs">Margin %</Label>
                   <Input
                     type="number"
-                    min="0"
-                    max="500"
                     value={marginPercent}
                     onChange={(e) => setMarginPercent(e.target.value)}
                     className="w-20 h-8 bg-secondary/30 border-border/30 text-sm"
                   />
                 </div>
-                <Button
-                  onClick={importSelected}
-                  disabled={importing || selected.size === 0}
-                  className="self-end"
-                >
-                  {importing ? (
-                    <><RefreshCw className="h-4 w-4 mr-2 animate-spin" /> {importProgress.done}/{importProgress.total}...</>
-                  ) : (
-                    <><Download className="h-4 w-4 mr-2" /> Import {selected.size} Services</>
-                  )}
+                <Button onClick={importSelected} disabled={importing || selected.size === 0}>
+                  {importing ? "Importing..." : `Import ${selected.size} Services`}
                 </Button>
               </div>
             </div>
 
-            {/* Filters */}
             <div className="flex flex-wrap gap-3 pt-2">
               <div className="relative flex-1 min-w-[200px]">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search services..."
+                  placeholder="Filter database..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-9 bg-secondary/30 border-border/30"
@@ -616,169 +541,78 @@ export const BulkServiceImport = () => {
                   <SelectValue placeholder="Platform" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Platforms</SelectItem>
-                  {PLATFORMS.map((p) => (
-                    <SelectItem key={p} value={p}>{p}</SelectItem>
-                  ))}
+                  <SelectItem value="all">All</SelectItem>
+                  {PLATFORMS.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}
                 </SelectContent>
               </Select>
-              <Button variant="outline" size="sm" onClick={toggleSelectAll} className="self-center gap-2">
-                {allFilteredSelected ? (
-                  <><CheckSquare className="h-4 w-4" /> Deselect All</>
-                ) : (
-                  <><Square className="h-4 w-4" /> Select All</>
-                )}
+              <Button variant="outline" size="sm" onClick={toggleSelectAll}>
+                {allFilteredSelected ? "Deselect All" : "Select All"}
               </Button>
             </div>
 
-            {/* Price Preview Table — first 5 services */}
-            {services.length > 0 && (
-              <div className="mt-2 rounded-lg border border-border/30 overflow-hidden">
-                <div className="px-3 py-2 bg-secondary/20 text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                  Price Preview (first 5 services · verify before importing)
-                </div>
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="border-b border-border/20">
-                      <th className="text-left px-3 py-2 text-muted-foreground">Service Name</th>
-                      <th className="text-right px-3 py-2 text-muted-foreground">Raw Rate</th>
-                      <th className="text-right px-3 py-2 text-muted-foreground">Provider USD/1K</th>
-                      <th className="text-right px-3 py-2 text-muted-foreground">Panel USD/1K (+{marginPercent}%)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {services.slice(0, 5).map((s) => {
-                      const realProviderUSD = toUSD(s.rate, providerCurrency);
-                      const displayProviderUSD = isSecondaryAdmin ? realProviderUSD * SECONDARY_ADMIN_PROVIDER_MULTIPLIER : realProviderUSD;
-                      const panelUSD = displayProviderUSD * (1 + parseFloat(marginPercent || "0") / 100);
-                      const isHigh = panelUSD > 50000;
-                      return (
-                        <tr key={s.service} className={`border-b border-border/10 ${isHigh ? "bg-destructive/5" : ""}`}>
-                          <td className="px-3 py-2 truncate max-w-[200px] text-foreground/80">{s.name}</td>
-                          <td className="px-3 py-2 text-right font-mono text-muted-foreground">{s.rate}</td>
-                          <td className="px-3 py-2 text-right font-mono">${displayProviderUSD.toFixed(4)}</td>
-                          <td className={`px-3 py-2 text-right font-mono font-medium ${isHigh ? "text-destructive" : "text-primary"}`}>
-                            {isHigh ? "⚠️ " : ""}${panelUSD.toFixed(4)}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            {previewHasHighPrice && (
-              <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-                ⚠️ Warning: Some services have unusually high prices. If your provider charges in Indian Rupees (₹), make sure Provider Currency is set to INR. Current rate: 1 USD = ₹92.
-              </div>
-            )}
-            {skippedHighPriceCount > 0 && (
-              <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-                Skipped {skippedHighPriceCount} services during the last import because their computed panel price exceeded $50,000.
-              </div>
-            )}
+            <div className="mt-2 rounded-lg border border-border/30 overflow-hidden">
+              <table className="w-full text-xs">
+                <thead className="bg-secondary/20">
+                  <tr>
+                    <th className="text-left px-3 py-2">Service</th>
+                    <th className="text-right px-3 py-2">Provider Rate</th>
+                    <th className="text-right px-3 py-2">Panel Cost (100% Margin)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {services.slice(0, 5).map((s) => {
+                    const pUSD = toUSD(s.rate);
+                    const panelUSD = pUSD * (1 + parseFloat(marginPercent || "0") / 100);
+                    return (
+                      <tr key={s.service} className="border-b border-border/10">
+                        <td className="px-3 py-2 truncate max-w-[200px]">{s.name}</td>
+                        <td className="px-3 py-2 text-right font-mono">${pUSD.toFixed(4)}</td>
+                        <td className="px-3 py-2 text-right font-mono text-primary">${panelUSD.toFixed(4)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </CardHeader>
 
           <CardContent>
-            {filteredServices.length === 0 ? (
-              <div className="text-center py-8">
-                <AlertCircle className="h-8 w-8 mx-auto text-muted-foreground/50 mb-2" />
-                <p className="text-muted-foreground text-sm">No services match your filters</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {Object.entries(groupedByCategory).map(([category, catServices]) => {
-                  const catSelected = catServices.filter((s) => selected.has(s.service)).length;
-                  const allCatSelected = catSelected === catServices.length;
-                  const isExpanded = expandedCategories.has(category);
-
-                  return (
-                    <div key={category} className="border border-border/20 rounded-lg overflow-hidden">
-                      {/* Category Row */}
-                      <div
-                        className="flex items-center gap-3 p-3 bg-secondary/20 cursor-pointer hover:bg-secondary/30 transition-colors"
-                        onClick={() => toggleExpand(category)}
-                      >
-                        {isExpanded ? (
-                          <ChevronDown className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                        ) : (
-                          <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                        )}
-                        <Checkbox
-                          checked={allCatSelected}
-                          onCheckedChange={() => { toggleCategory(category); }}
-                          onClick={(e) => e.stopPropagation()}
-                          className="flex-shrink-0"
-                        />
-                        <span className="font-medium text-sm flex-1">{category}</span>
-                        <Badge variant="outline" className="text-xs font-mono">
-                          {catSelected}/{catServices.length}
-                        </Badge>
-                      </div>
-
-                      {/* Services in category */}
-                      {isExpanded && (
-                        <div className="divide-y divide-border/10">
-                          {catServices.map((service) => {
-                            const platform = detectPlatform(service.category, service.name);
-                            const realProviderPrice = toUSD(service.rate, providerCurrency);
-                            const providerPrice = isSecondaryAdmin ? realProviderPrice * SECONDARY_ADMIN_PROVIDER_MULTIPLIER : realProviderPrice;
-                            const ourPrice = providerPrice * (1 + parseFloat(marginPercent) / 100);
-                            const isHighPrice = ourPrice > 50000;
-
-                            return (
-                              <div
-                                key={service.service}
-                                className={`flex items-center gap-3 p-3 hover:bg-secondary/10 transition-colors cursor-pointer ${
-                                  selected.has(service.service) ? "bg-primary/5" : ""
-                                } ${
-                                  isHighPrice ? "border-l-4 border-destructive bg-destructive/5" : ""
-                                }`}
-                                onClick={() => toggleService(service.service)}
-                              >
-                                <Checkbox
-                                  checked={selected.has(service.service)}
-                                  onCheckedChange={() => toggleService(service.service)}
-                                  onClick={(e) => e.stopPropagation()}
-                                />
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-sm font-medium truncate">{service.name}</p>
-                                  <div className="flex items-center gap-2 mt-0.5">
-                                    <span className="text-xs text-muted-foreground font-mono">
-                                      ID: {service.service}
-                                    </span>
-                                    <Badge variant="secondary" className="text-xs h-4 px-1">
-                                      {platform}
-                                    </Badge>
-                                    {service.refill && (
-                                      <Badge variant="outline" className="text-xs h-4 px-1 text-success border-success/30">
-                                        Refill
-                                      </Badge>
-                                    )}
-                                  </div>
-                                </div>
-                                <div className="text-right shrink-0 space-y-0.5">
-                                  <p className={`text-xs ${isHighPrice ? "text-destructive" : "text-muted-foreground"}`}>
-                                    Provider: ${providerPrice.toFixed(4)}/1K
-                                  </p>
-                                  <p className={`text-xs font-medium ${isHighPrice ? "text-destructive" : "text-primary"}`}>
-                                    Panel: ${ourPrice.toFixed(4)}/1K
-                                  </p>
-                                </div>
-                                <div className="text-right shrink-0 text-xs text-muted-foreground">
-                                  {parseInt(String(service.min)).toLocaleString()}–{parseInt(String(service.max)).toLocaleString()}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
+            <div className="space-y-3">
+              {Object.entries(groupedByCategory).map(([category, catServices]) => {
+                const isExpanded = expandedCategories.has(category);
+                return (
+                  <div key={category} className="border border-border/20 rounded-lg">
+                    <div className="flex items-center gap-3 p-3 bg-secondary/20 cursor-pointer" onClick={() => toggleExpand(category)}>
+                      {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                      <Checkbox checked={catServices.every((s) => selected.has(s.service))} onCheckedChange={() => toggleCategory(category)} onClick={(e) => e.stopPropagation()} />
+                      <span className="font-medium text-sm flex-1">{category}</span>
                     </div>
-                  );
-                })}
-              </div>
-            )}
+
+                    {isExpanded && (
+                      <div className="divide-y divide-border/10">
+                        {catServices.map((service) => {
+                          const pRate = toUSD(service.rate);
+                          const panelRate = pRate * (1 + parseFloat(marginPercent) / 100);
+                          return (
+                            <div key={service.service} className="flex items-center gap-3 p-3 hover:bg-secondary/10" onClick={() => toggleService(service.service)}>
+                              <Checkbox checked={selected.has(service.service)} />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium truncate">{service.name}</p>
+                                <p className="text-xs text-muted-foreground font-mono">ID: {service.service}</p>
+                              </div>
+                              <div className="text-right shrink-0">
+                                <p className="text-xs">Provider: ${pRate.toFixed(4)}</p>
+                                <p className="text-xs font-medium text-primary">Panel: ${panelRate.toFixed(4)}</p>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </CardContent>
         </Card>
       )}
