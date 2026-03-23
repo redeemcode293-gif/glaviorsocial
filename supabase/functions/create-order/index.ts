@@ -73,13 +73,13 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "Wallet not found" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // 6. THE 0.1% LOCK: EXACT USD PRICE ENFORCEMENT
-    // We strictly calculate in USD. Frontend does the * 92 illusion.
-    const basePrice = Number(service.base_price ?? 0);
-    const appliedMultiplier = 1.4; // THE KILLSHOT: Forces 1.4x Retail Markup permanently.
+    // 6. DYNAMIC ADMIN CONTROL ENFORCEMENT
+    // We trust the database 'base_price' because the admin panel calculates the dynamic margin and saves it here.
+    const retailPrice = Number(service.base_price ?? 0);
+    const appliedMultiplier = 1.0; // Reset to 1.0 so we do not double-charge the markup.
     
-    // Calculates total cost in strict USD (4 decimal precision prevents rounding leaks)
-    const totalPrice = Number((((basePrice * appliedMultiplier) * quantity) / 1000).toFixed(4));
+    // Calculates total cost strictly using the admin-defined retail price (4 decimal precision)
+    const totalPrice = Number(((retailPrice * quantity) / 1000).toFixed(4));
 
     if (Number(wallet.balance) < totalPrice) {
       return new Response(JSON.stringify({ error: "Insufficient balance" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
