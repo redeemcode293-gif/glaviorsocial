@@ -14,8 +14,6 @@ interface CreateOrderRequest {
   dripfeedRuns?: number | null;
   dripfeedInterval?: number | null;
   autoRefill?: boolean;
-  // NOTE: appliedMultiplier from client is intentionally ignored for security.
-  // Multiplier is always resolved server-side from the user's profile + regional_pricing table.
   userCountryCode?: string | null;
 }
 
@@ -54,7 +52,6 @@ serve(async (req) => {
       });
     }
 
-    // Validate quantity is a positive integer
     const quantity = Math.floor(Number(body.quantity));
     if (!Number.isFinite(quantity) || quantity <= 0) {
       return new Response(JSON.stringify({ error: "Invalid quantity" }), {
@@ -110,10 +107,9 @@ serve(async (req) => {
     const basePrice = Number(servicePriceRow?.price ?? service.base_price ?? 0);
 
     // ============================================================
-    // SECURITY: Resolve multiplier SERVER-SIDE from user's profile
-    // Never trust client-supplied multiplier values.
+    // THE 0.1% PROFIT LOCK: BASE MARGIN IS NOW 2.0x 
     // ============================================================
-    let appliedMultiplier = 1.0;
+    let appliedMultiplier = 2.0; 
     let resolvedCountryCode: string | null = null;
 
     const { data: profile } = await supabase
@@ -123,7 +119,7 @@ serve(async (req) => {
       .maybeSingle();
 
     if (profile?.pricing_override === "provider") {
-      // Owner/admin cost-price override — pay at base, no markup
+      // Admin sees wholesale (1.0x)
       appliedMultiplier = 1.0;
       resolvedCountryCode = profile.country_code ?? null;
     } else if (profile?.country_code) {
@@ -133,10 +129,10 @@ serve(async (req) => {
         .select("multiplier")
         .contains("countries", [profile.country_code])
         .maybeSingle();
-      appliedMultiplier = Number(pricing?.multiplier ?? 1.0);
+      // Use regional if exists, otherwise fallback to 2.0x
+      appliedMultiplier = Number(pricing?.multiplier ?? 2.0);
     } else {
-      // No country on profile — use default fallback
-      appliedMultiplier = 1.0;
+      appliedMultiplier = 2.0;
     }
 
     const totalPrice = Number((((basePrice * appliedMultiplier) * quantity) / 1000).toFixed(2));
