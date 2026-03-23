@@ -133,10 +133,10 @@ serve(async (req) => {
         .select("multiplier")
         .contains("countries", [profile.country_code])
         .maybeSingle();
-      appliedMultiplier = Number(pricing?.multiplier ?? 1.40);
+      appliedMultiplier = Number(pricing?.multiplier ?? 1.0);
     } else {
       // No country on profile — use default fallback
-      appliedMultiplier = 1.40;
+      appliedMultiplier = 1.0;
     }
 
     const totalPrice = Number((((basePrice * appliedMultiplier) * quantity) / 1000).toFixed(2));

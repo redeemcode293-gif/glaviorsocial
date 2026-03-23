@@ -116,8 +116,8 @@ const DEFAULT_REGIONS = [
   { region_code: "AU", region_name: "Australia/New Zealand", multiplier: 1.85, countries: ["AU", "NZ"] },
   { region_code: "EU_PREMIUM", region_name: "Western Europe Premium", multiplier: 1.75, countries: ["DE", "FR", "NL", "CH", "AT", "BE"] },
   { region_code: "EU_MID", region_name: "Western Europe Mid", multiplier: 1.65, countries: ["IT", "ES", "PT", "SE", "NO", "DK", "FI", "IE", "GR"] },
-  { region_code: "TURKEY", region_name: "Turkey", multiplier: 1.45, countries: ["TR"] },
-  { region_code: "MALAYSIA", region_name: "Malaysia/Singapore", multiplier: 1.40, countries: ["MY", "SG"] },
+  { region_code: "TURKEY", region_name: "Turkey", multiplier: 1.0, countries: ["TR"] },
+  { region_code: "MALAYSIA", region_name: "Malaysia/Singapore", multiplier: 1.0, countries: ["MY", "SG"] },
   { region_code: "INDONESIA", region_name: "Indonesia", multiplier: 1.35, countries: ["ID"] },
   { region_code: "PHILIPPINES", region_name: "Southeast Asia Mid", multiplier: 1.30, countries: ["PH", "TH", "VN"] },
   { region_code: "BRAZIL", region_name: "Brazil", multiplier: 1.30, countries: ["BR"] },
@@ -130,7 +130,7 @@ const DEFAULT_REGIONS = [
 ];
 
 // Default fallback multiplier for unlisted countries
-const DEFAULT_FALLBACK_MULTIPLIER = 1.40;
+const DEFAULT_FALLBACK_MULTIPLIER = 1.0;
 
 export function RegionalPricingTab() {
   const [regions, setRegions] = useState<Region[]>([]);

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 
-const DEFAULT_FALLBACK_MULTIPLIER = 1.40;
+const DEFAULT_FALLBACK_MULTIPLIER = 1.0;
 
 interface UseRegionalPricingResult {
   multiplier: number;
