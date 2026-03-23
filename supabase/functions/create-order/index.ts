@@ -74,7 +74,7 @@ serve(async (req) => {
       });
     }
 
-    if (quantity < service.min_quantity || quantity > service.max_quantity) {
+    if (quantity < service.min_quantity || service.max_quantity < quantity) {
       return new Response(JSON.stringify({ error: `Quantity must be between ${service.min_quantity} and ${service.max_quantity}` }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -107,9 +107,10 @@ serve(async (req) => {
     const basePrice = Number(servicePriceRow?.price ?? service.base_price ?? 0);
 
     // ============================================================
-    // THE 0.1% PROFIT LOCK: BASE MARGIN IS NOW 2.0x 
+    // THE 0.1% PROFIT LOCK: Trust the database retail price absolutely.
+    // Base multiplier is 1.0x since DB already holds the 1.4x markup.
     // ============================================================
-    let appliedMultiplier = 2.0; 
+    let appliedMultiplier = 1.0; 
     let resolvedCountryCode: string | null = null;
 
     const { data: profile } = await supabase
@@ -119,7 +120,6 @@ serve(async (req) => {
       .maybeSingle();
 
     if (profile?.pricing_override === "provider") {
-      // Admin sees wholesale (1.0x)
       appliedMultiplier = 1.0;
       resolvedCountryCode = profile.country_code ?? null;
     } else if (profile?.country_code) {
@@ -129,10 +129,9 @@ serve(async (req) => {
         .select("multiplier")
         .contains("countries", [profile.country_code])
         .maybeSingle();
-      // Use regional if exists, otherwise fallback to 2.0x
-      appliedMultiplier = Number(pricing?.multiplier ?? 2.0);
+      appliedMultiplier = Number(pricing?.multiplier ?? 1.0);
     } else {
-      appliedMultiplier = 2.0;
+      appliedMultiplier = 1.0;
     }
 
     const totalPrice = Number((((basePrice * appliedMultiplier) * quantity) / 1000).toFixed(2));
