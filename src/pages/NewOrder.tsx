@@ -68,9 +68,10 @@ const NewOrder = () => {
   const { user, profile, wallet, refreshProfile } = useAuth();
   const navigate = useNavigate();
   const { t, formatPrice } = useLocalization();
-  // We still need the hook for loading state and country code, but we extract the multiplier and ignore it.
-const { loading: loadingPricing, countryCode } = useRegionalPricing();
-const priceMultiplier = 1; // THE KILLSHOT: Forces the UI and Payload to use exact database prices.
+  
+  // THE 0.1% PROFIT LOCK: Forces the UI to show a 100% markup over wholesale.
+  const { loading: loadingPricing, countryCode } = useRegionalPricing();
+  const priceMultiplier = 2.0; 
 
   useEffect(() => {
     void fetchServices();
