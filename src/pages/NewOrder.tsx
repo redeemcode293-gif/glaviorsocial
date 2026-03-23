@@ -68,7 +68,9 @@ const NewOrder = () => {
   const { user, profile, wallet, refreshProfile } = useAuth();
   const navigate = useNavigate();
   const { t, formatPrice } = useLocalization();
-  const { multiplier: priceMultiplier, loading: loadingPricing, countryCode } = useRegionalPricing();
+  // We still need the hook for loading state and country code, but we extract the multiplier and ignore it.
+const { loading: loadingPricing, countryCode } = useRegionalPricing();
+const priceMultiplier = 1; // THE KILLSHOT: Forces the UI and Payload to use exact database prices.
 
   useEffect(() => {
     void fetchServices();
