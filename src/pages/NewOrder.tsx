@@ -69,9 +69,9 @@ const NewOrder = () => {
   const navigate = useNavigate();
   const { t, formatPrice } = useLocalization();
   
-  // THE 0.1% PROFIT LOCK: Forces the UI to show a 100% markup over wholesale.
+  // THE KILLSHOT: UI displays exact database prices. No artificial multiplication here.
   const { loading: loadingPricing, countryCode } = useRegionalPricing();
-  const priceMultiplier = 2.0; 
+  const priceMultiplier = 1.0; 
 
   useEffect(() => {
     void fetchServices();
