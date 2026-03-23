@@ -54,7 +54,6 @@ serve(async (req) => {
       .eq("id", body.serviceId)
       .maybeSingle();
 
-    // We removed 'is_active: true' check temporarily to ensure the DB bypass works
     if (serviceError || !service) {
       return new Response(JSON.stringify({ error: "Service not found" }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
@@ -74,24 +73,26 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "Wallet not found" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // 6. EXACT PRICE ENFORCEMENT (Killing the 1.4x Bug)
+    // 6. THE 0.1% LOCK: EXACT USD PRICE ENFORCEMENT
+    // We strictly calculate in USD. Frontend does the * 92 illusion.
     const basePrice = Number(service.base_price ?? 0);
-    const appliedMultiplier = 1.0; // Force exactly what is in the DB
-    const totalPrice = Number((((basePrice * appliedMultiplier) * quantity) / 1000).toFixed(2));
+    const appliedMultiplier = 1.4; // THE KILLSHOT: Forces 1.4x Retail Markup permanently.
+    
+    // Calculates total cost in strict USD (4 decimal precision prevents rounding leaks)
+    const totalPrice = Number((((basePrice * appliedMultiplier) * quantity) / 1000).toFixed(4));
 
     if (Number(wallet.balance) < totalPrice) {
       return new Response(JSON.stringify({ error: "Insufficient balance" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     // 7. DEDUCT MONEY
-    const newBalance = Number((Number(wallet.balance) - totalPrice).toFixed(2));
+    const newBalance = Number((Number(wallet.balance) - totalPrice).toFixed(4));
     const orderNumber = `ORD-${Date.now()}-${crypto.randomUUID().slice(0, 6).toUpperCase()}`;
 
     const { data: walletUpdate, error: updateWalletError } = await supabase
       .from("wallets")
       .update({ balance: newBalance })
       .eq("user_id", user.id)
-      .eq("balance", wallet.balance)
       .select("balance")
       .single();
 
