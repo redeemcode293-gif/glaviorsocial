@@ -231,8 +231,11 @@ serve(async (req) => {
           const platform = detectPlatform(service.category || '', service.name || '');
           const providerPrice = toUsd(service.rate);
           
-          // THE FIX: Store wholesale cost in DB. UI and create-order apply the 2.0x markup dynamically.
-          const basePrice = providerPrice; 
+          // ============================================================
+          // THE FIX: Inject 1.4x markup BEFORE saving to the database.
+          // Database now holds the RETAIL price.
+          // ============================================================
+          const basePrice = providerPrice * 1.4; 
           const providerServiceId = String(service.service);
 
           if (providerPrice > MAX_SANE_USD || isNaN(providerPrice)) continue;
