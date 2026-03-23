@@ -31,29 +31,28 @@ serve(async (req) => {
 
     const service = order.services;
     if (!service?.provider_id || !service?.provider_service_id) {
-      console.log(`Order ${orderId}: No provider linked. Left as Pending.`);
+      await supabase.from("orders").update({ status: "manual_review", provider_error: "No provider linked" }).eq("id", orderId);
       return new Response(JSON.stringify({ success: true, message: "Manual routing required" }), { headers: corsHeaders });
     }
 
-    // 2. Fetch Active Providers
-    const { data: providers } = await supabase
+    // 2. Fetch Exact Provider (No random fallbacks)
+    const { data: provider } = await supabase
       .from("api_providers")
       .select("*")
-      .eq("status", "active");
+      .eq("id", service.provider_id)
+      .single();
 
-    if (!providers?.length) {
-      console.log(`Order ${orderId}: No active providers. Left as Pending.`);
-      return new Response(JSON.stringify({ success: true, message: "No providers, left pending" }), { headers: corsHeaders });
+    if (!provider || provider.status !== "active") {
+      await supabase.from("orders").update({ status: "manual_review", provider_error: "Provider inactive or missing" }).eq("id", orderId);
+      return new Response(JSON.stringify({ success: true, message: "Provider inactive, flagged for manual review" }), { headers: corsHeaders });
     }
-
-    const provider = providers.find((p) => p.id === service.provider_id) || providers[0];
 
     // 3. The Decryption Bypass (Bulletproof API Key Extraction)
     let actualApiKey = provider.api_key;
     try {
       actualApiKey = await decryptApiKey(provider.api_key);
     } catch (e) {
-      console.log("Key is plaintext, skipping decryption.");
+      // Key is plaintext, skip decryption silently
     }
 
     // 4. Fire to Provider
@@ -81,11 +80,12 @@ serve(async (req) => {
 
     // 5. Handle Provider Response
     if (result.order) {
-      // API SUCCESS: Link the provider ID and set to processing
+      // API SUCCESS: Link the provider ID, clear errors, and set to processing
       await supabase.from("orders").update({
         status: "processing",
         provider_order_id: String(result.order),
         start_count: result.start_count ? Number(result.start_count) : order.start_count,
+        provider_error: null
       }).eq("id", orderId);
 
       return new Response(JSON.stringify({ success: true, providerOrderId: String(result.order) }), { headers: corsHeaders });
@@ -93,10 +93,15 @@ serve(async (req) => {
 
     // 6. THE BILLIONAIRE OVERRIDE: 
     // If provider fails (insufficient funds, bad link), DO NOT fail the order. 
-    // Keep the money, leave it 'Pending', log the error silently.
+    // Keep the money, flag it for manual review, log the exact error silently.
     console.error(`Provider Rejected Order ${orderId}:`, result);
     
-    return new Response(JSON.stringify({ success: true, message: "Provider rejected, order left pending for manual execution" }), { headers: corsHeaders });
+    await supabase.from("orders").update({
+      status: "manual_review", 
+      provider_error: result.error || JSON.stringify(result)
+    }).eq("id", orderId);
+    
+    return new Response(JSON.stringify({ success: true, message: "Provider rejected, flagged for manual execution" }), { headers: corsHeaders });
 
   } catch (error: any) {
     console.error("process-order fatal error", error);
