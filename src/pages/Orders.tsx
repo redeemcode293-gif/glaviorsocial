@@ -19,6 +19,7 @@ import {
   Filter,
   ShoppingCart,
   Zap,
+  Box,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -36,7 +37,13 @@ const statusConfig: Record<string, { label: string; variant: "default" | "second
   failed: { label: "Failed", variant: "destructive", icon: XCircle },
 };
 
-type OrderRow = Tables<"orders">;
+// THE UPGRADE: Typing the Relational Join
+type OrderRow = Tables<"orders"> & {
+  services?: {
+    name: string;
+    provider_service_id: string;
+  } | null;
+};
 
 const Orders = () => {
   const [orders, setOrders] = useState<OrderRow[]>([]);
@@ -71,11 +78,13 @@ const Orders = () => {
         },
         (payload) => {
           if (payload.eventType === "INSERT") {
-            setOrders((prev) => [payload.new as OrderRow, ...prev]);
+            // Need to refetch to get the joined service data for new orders
+            void fetchOrders();
           }
 
           if (payload.eventType === "UPDATE") {
-            setOrders((prev) => prev.map((order) => (order.id === payload.new.id ? { ...order, ...payload.new } : order)));
+            // Preservation Lock: Keep the joined services data when status updates
+            setOrders((prev) => prev.map((order) => (order.id === payload.new.id ? { ...order, ...payload.new, services: order.services } : order)));
           }
 
           if (payload.eventType === "DELETE") {
@@ -94,16 +103,23 @@ const Orders = () => {
     if (!user) return;
 
     setLoading(true);
+    // THE UPGRADE: Relational Join to pull Service Name and ID
     const { data, error } = await supabase
       .from("orders")
-      .select("*")
+      .select(`
+        *,
+        services (
+          name,
+          provider_service_id
+        )
+      `)
       .eq("user_id", user.id)
       .order("created_at", { ascending: false });
 
     if (error) {
       toast({ title: t("Error"), description: t("Failed to fetch orders"), variant: "destructive" });
     } else {
-      setOrders(data || []);
+      setOrders((data as OrderRow[]) || []);
     }
 
     setLoading(false);
@@ -114,7 +130,8 @@ const Orders = () => {
       orders.filter((order) => {
         const matchesSearch =
           order.order_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          order.link?.toLowerCase().includes(searchQuery.toLowerCase());
+          order.link?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          order.services?.name?.toLowerCase().includes(searchQuery.toLowerCase());
         const matchesStatus = statusFilter === "all" || order.status === statusFilter;
         return matchesSearch && matchesStatus;
       }),
@@ -215,7 +232,7 @@ const Orders = () => {
             <div className="flex flex-col sm:flex-row gap-4">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input placeholder={t("Search by order ID or link...")} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10 bg-secondary/30 border-border/30" />
+                <Input placeholder={t("Search by order ID, link, or service name...")} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10 bg-secondary/30 border-border/30" />
               </div>
               <div className="flex gap-2">
                 <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -263,7 +280,7 @@ const Orders = () => {
                   <thead>
                     <tr className="border-b border-border/30 bg-secondary/20">
                       <th className="text-left p-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">{t("Order")}</th>
-                      <th className="text-left p-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">{t("Link")}</th>
+                      <th className="text-left p-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">{t("Service & Link")}</th>
                       <th className="text-left p-4 text-xs font-medium text-muted-foreground uppercase tracking-wider hidden md:table-cell">{t("Progress")}</th>
                       <th className="text-left p-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">{t("Status")}</th>
                       <th className="text-left p-4 text-xs font-medium text-muted-foreground uppercase tracking-wider hidden sm:table-cell">{t("Charge")}</th>
@@ -286,6 +303,18 @@ const Orders = () => {
                             <p className="text-xs text-muted-foreground mt-1">{new Date(order.created_at).toLocaleString()}</p>
                           </td>
                           <td className="p-4">
+                            {/* THE UPGRADE: Displaying Service Details */}
+                            {order.services && (
+                              <div className="flex items-center gap-1.5 text-xs text-foreground mb-1">
+                                <Box className="h-3 w-3 text-muted-foreground" />
+                                <span className="font-medium truncate max-w-[200px] sm:max-w-[300px]" title={order.services.name}>
+                                  {order.services.name}
+                                </span>
+                                <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 border-primary/20 text-primary/80">
+                                  ID: {order.services.provider_service_id}
+                                </Badge>
+                              </div>
+                            )}
                             <a href={order.link} target="_blank" rel="noopener noreferrer" className="text-sm text-muted-foreground hover:text-primary flex items-center gap-1 truncate max-w-[220px]">
                               <ExternalLink className="h-3 w-3 flex-shrink-0" />
                               <span className="truncate">{order.link}</span>
