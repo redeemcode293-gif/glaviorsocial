@@ -180,11 +180,20 @@ serve(async (req) => {
 
     if (!roleData) return new Response(JSON.stringify({ error: 'Admin access required' }), { status: 403, headers: corsHeaders });
 
-    const body = await req.json();
-    // THE FIX: Unconditional execution. We extract providerId regardless of payload format.
+    // ============================================================
+    // THE FIX: Aggressive JSON parsing bypasses Deno strict type errors
+    // ============================================================
+    const rawText = await req.text();
+    let body: any = {};
+    try {
+      body = JSON.parse(rawText);
+    } catch (e) {
+      console.error("Failed to parse body JSON, using empty object");
+    }
+
     const providerId = body.providerId || body.id;
 
-    if (!providerId) return new Response(JSON.stringify({ error: 'Provider ID missing' }), { status: 400, headers: corsHeaders });
+    if (!providerId) return new Response(JSON.stringify({ error: 'Provider ID missing in payload', received: rawText }), { status: 400, headers: corsHeaders });
 
     const { data: provider, error: providerError } = await supabase
       .from('api_providers')
