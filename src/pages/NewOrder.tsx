@@ -69,8 +69,8 @@ const NewOrder = () => {
   const navigate = useNavigate();
   const { t, formatPrice } = useLocalization();
   
-  // GLOBAL 2.0x LOCK: UI displays double the wholesale cost dynamically.
   const { loading: loadingPricing, countryCode } = useRegionalPricing();
+  // 2.0x MULTIPLIER RESTORED
   const priceMultiplier = 2.0; 
 
   useEffect(() => {
