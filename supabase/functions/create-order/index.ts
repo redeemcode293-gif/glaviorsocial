@@ -107,7 +107,7 @@ serve(async (req) => {
     const basePrice = Number(servicePriceRow?.price ?? service.base_price ?? 0);
 
     // ============================================================
-    // GLOBAL 2.0x LOCK: Backend deduces exactly double wholesale.
+    // THE 2.0x PROFIT LOCK:
     // ============================================================
     let appliedMultiplier = 2.0; 
     let resolvedCountryCode: string | null = null;
