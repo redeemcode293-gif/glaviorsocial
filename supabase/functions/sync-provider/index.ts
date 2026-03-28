@@ -76,7 +76,7 @@ function buildPanelServicePayload(service: StoredServiceRecord) {
     category: normalizeServiceText(service.category, 'General'),
     min_quantity: Number(service.min_quantity) || 100,
     max_quantity: Number(service.max_quantity) || 50000,
-    price: Number(service.base_price) || 0,
+    price: Number(service.base_price) || 0, // Uses pure wholesale base_price
     refill_supported: Boolean(service.refill_supported),
     dripfeed_supported: Boolean(service.dripfeed_supported),
     auto_refill_supported: false,
@@ -231,7 +231,7 @@ serve(async (req) => {
           const platform = detectPlatform(service.category || '', service.name || '');
           const providerPrice = toUsd(service.rate);
           
-          // STORE PURE WHOLESALE (1.0x). The UI handles the 2.0x profit.
+          // STORE PURE WHOLESALE. The 2.0x multiplier handles profit.
           const basePrice = providerPrice; 
           const providerServiceId = String(service.service);
 
@@ -274,7 +274,6 @@ serve(async (req) => {
           updatedCount++;
         }
 
-        // BRIDGING TO PANEL: Updates panel_services table so UI sees the changes immediately
         if (currentBatchProviderIds.length > 0) {
           const { data: syncedServices } = await supabase
             .from('services')
