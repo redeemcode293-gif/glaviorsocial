@@ -69,9 +69,9 @@ const NewOrder = () => {
   const navigate = useNavigate();
   const { t, formatPrice } = useLocalization();
   
-  // THE KILLSHOT: UI displays exact database prices. No artificial multiplication here.
+  // GLOBAL 2.0x LOCK: UI displays double the wholesale cost dynamically.
   const { loading: loadingPricing, countryCode } = useRegionalPricing();
-  const priceMultiplier = 1.0; 
+  const priceMultiplier = 2.0; 
 
   useEffect(() => {
     void fetchServices();
