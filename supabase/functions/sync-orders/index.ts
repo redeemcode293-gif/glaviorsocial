@@ -105,6 +105,7 @@ async function syncPanelServicesForProviderServices(supabase: ReturnType<typeof 
     const payload = buildPanelServicePayload(service);
 
     if (existingPanel) {
+      // OVERRIDE: Update the panel to dynamically mirror the new 1.4x retail price.
       await supabase.from('panel_services').update(payload).eq('id', existingPanel.id);
       continue;
     }
@@ -209,7 +210,6 @@ serve(async (req) => {
 
       let addedCount = 0;
       let updatedCount = 0;
-      const syncedProviderServiceIds: string[] = [];
 
       const BATCH_SIZE = 50;
       for (let i = 0; i < services.length; i += BATCH_SIZE) {
@@ -226,19 +226,19 @@ serve(async (req) => {
 
         const toInsert: Array<Record<string, unknown>> = [];
         const toUpdate: Array<Record<string, unknown>> = [];
+        const currentBatchProviderIds: string[] = [];
 
         for (const service of batch) {
           const platform = detectPlatform(service.category || '', service.name || '');
           const providerPrice = toUsd(service.rate);
           
-          // ============================================================
-          // THE FIX: Inject 1.4x markup BEFORE saving to the database.
-          // Database now holds the RETAIL price.
-          // ============================================================
+          // Inject 1.4x markup BEFORE saving
           const basePrice = providerPrice * 1.4; 
           const providerServiceId = String(service.service);
 
           if (providerPrice > MAX_SANE_USD || isNaN(providerPrice)) continue;
+
+          currentBatchProviderIds.push(providerServiceId);
 
           const serviceData = {
             name: service.name,
@@ -262,9 +262,9 @@ serve(async (req) => {
           } else {
             toInsert.push({ ...serviceData, service_id: Math.floor(1000 + Math.random() * 9000) });
           }
-          syncedProviderServiceIds.push(providerServiceId);
         }
 
+        // 1. Update the Hidden Database
         if (toInsert.length > 0) {
           await supabase.from('services').insert(toInsert);
           addedCount += toInsert.length;
@@ -274,6 +274,19 @@ serve(async (req) => {
           const { id, ...updateData } = s;
           await supabase.from('services').update(updateData).eq('id', id);
           updatedCount++;
+        }
+
+        // 2. THE BRIDGE: Push updates to the UI Panel immediately
+        if (currentBatchProviderIds.length > 0) {
+          const { data: syncedServices } = await supabase
+            .from('services')
+            .select('id, service_id, name, description, platform, category, base_price, min_quantity, max_quantity, refill_supported, dripfeed_supported, is_active')
+            .eq('provider_id', providerId)
+            .in('provider_service_id', currentBatchProviderIds);
+
+          if (syncedServices && syncedServices.length > 0) {
+            await syncPanelServicesForProviderServices(supabase, syncedServices);
+          }
         }
       }
 
