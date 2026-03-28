@@ -76,7 +76,7 @@ function buildPanelServicePayload(service: StoredServiceRecord) {
     category: normalizeServiceText(service.category, 'General'),
     min_quantity: Number(service.min_quantity) || 100,
     max_quantity: Number(service.max_quantity) || 50000,
-    price: Number(service.base_price) || 0, // Uses pure wholesale base_price
+    price: Number(service.base_price) || 0,
     refill_supported: Boolean(service.refill_supported),
     dripfeed_supported: Boolean(service.dripfeed_supported),
     auto_refill_supported: false,
@@ -181,7 +181,10 @@ serve(async (req) => {
     if (!roleData) return new Response(JSON.stringify({ error: 'Admin access required' }), { status: 403, headers: corsHeaders });
 
     const body = await req.json();
-    const { providerId, action } = body;
+    // THE FIX: Unconditional execution. We extract providerId regardless of payload format.
+    const providerId = body.providerId || body.id;
+
+    if (!providerId) return new Response(JSON.stringify({ error: 'Provider ID missing' }), { status: 400, headers: corsHeaders });
 
     const { data: provider, error: providerError } = await supabase
       .from('api_providers')
@@ -193,104 +196,101 @@ serve(async (req) => {
 
     const providerApiKey = await decryptApiKey(provider.api_key);
 
-    if (action === 'services') {
-      const response = await fetch(provider.api_url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ key: providerApiKey, action: 'services' }),
-        signal: AbortSignal.timeout(60000),
-      });
+    const response = await fetch(provider.api_url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ key: providerApiKey, action: 'services' }),
+      signal: AbortSignal.timeout(60000),
+    });
 
-      const services = await response.json();
+    const services = await response.json();
 
-      if (!Array.isArray(services)) {
-        return new Response(JSON.stringify({ error: 'Invalid response' }), { status: 400, headers: corsHeaders });
-      }
-
-      let addedCount = 0;
-      let updatedCount = 0;
-
-      const BATCH_SIZE = 50;
-      for (let i = 0; i < services.length; i += BATCH_SIZE) {
-        const batch = services.slice(i, i + BATCH_SIZE) as ProviderServiceRecord[];
-        const batchIds = batch.map((service) => String(service.service));
-        
-        const { data: existingServices } = await supabase
-          .from('services')
-          .select('id, provider_service_id, base_price')
-          .eq('provider_id', providerId)
-          .in('provider_service_id', batchIds);
-
-        const existingMap = new Map((existingServices || []).map((service) => [service.provider_service_id, service]));
-
-        const toInsert: Array<Record<string, unknown>> = [];
-        const toUpdate: Array<Record<string, unknown>> = [];
-        const currentBatchProviderIds: string[] = [];
-
-        for (const service of batch) {
-          const platform = detectPlatform(service.category || '', service.name || '');
-          const providerPrice = toUsd(service.rate);
-          
-          // STORE PURE WHOLESALE. The 2.0x multiplier handles profit.
-          const basePrice = providerPrice; 
-          const providerServiceId = String(service.service);
-
-          if (providerPrice > MAX_SANE_USD || isNaN(providerPrice)) continue;
-
-          currentBatchProviderIds.push(providerServiceId);
-
-          const serviceData = {
-            name: service.name,
-            description: service.description || service.name || 'No description available',
-            platform,
-            category: service.category || 'General',
-            provider_id: providerId,
-            provider_service_id: providerServiceId,
-            provider_price: providerPrice,
-            base_price: basePrice,
-            min_quantity: parseInt(String(service.min)) || 100,
-            max_quantity: parseInt(String(service.max)) || 50000,
-            refill_supported: service.refill === true || service.refill === 'true',
-            dripfeed_supported: service.dripfeed === true || service.dripfeed === 'true',
-            is_active: true,
-          };
-
-          const existing = existingMap.get(providerServiceId);
-          if (existing) {
-            toUpdate.push({ ...serviceData, id: existing.id });
-          } else {
-            toInsert.push({ ...serviceData, service_id: Math.floor(1000 + Math.random() * 9000) });
-          }
-        }
-
-        if (toInsert.length > 0) {
-          await supabase.from('services').insert(toInsert);
-          addedCount += toInsert.length;
-        }
-
-        for (const s of toUpdate) {
-          const { id, ...updateData } = s;
-          await supabase.from('services').update(updateData).eq('id', id);
-          updatedCount++;
-        }
-
-        if (currentBatchProviderIds.length > 0) {
-          const { data: syncedServices } = await supabase
-            .from('services')
-            .select('id, service_id, name, description, platform, category, base_price, min_quantity, max_quantity, refill_supported, dripfeed_supported, is_active')
-            .eq('provider_id', providerId)
-            .in('provider_service_id', currentBatchProviderIds);
-
-          if (syncedServices && syncedServices.length > 0) {
-            await syncPanelServicesForProviderServices(supabase, syncedServices);
-          }
-        }
-      }
-
-      return new Response(JSON.stringify({ success: true, added: addedCount, updated: updatedCount }), { headers: corsHeaders });
+    if (!Array.isArray(services)) {
+      return new Response(JSON.stringify({ error: 'Invalid response from provider API' }), { status: 400, headers: corsHeaders });
     }
 
-    return new Response(JSON.stringify({ error: 'Invalid action' }), { status: 400, headers: corsHeaders });
+    let addedCount = 0;
+    let updatedCount = 0;
+
+    const BATCH_SIZE = 50;
+    for (let i = 0; i < services.length; i += BATCH_SIZE) {
+      const batch = services.slice(i, i + BATCH_SIZE) as ProviderServiceRecord[];
+      const batchIds = batch.map((service) => String(service.service));
+      
+      const { data: existingServices } = await supabase
+        .from('services')
+        .select('id, provider_service_id, base_price')
+        .eq('provider_id', providerId)
+        .in('provider_service_id', batchIds);
+
+      const existingMap = new Map((existingServices || []).map((service) => [service.provider_service_id, service]));
+
+      const toInsert: Array<Record<string, unknown>> = [];
+      const toUpdate: Array<Record<string, unknown>> = [];
+      const currentBatchProviderIds: string[] = [];
+
+      for (const service of batch) {
+        const platform = detectPlatform(service.category || '', service.name || '');
+        const providerPrice = toUsd(service.rate);
+        
+        // STORE PURE WHOLESALE. The 2.0x UI handles the profit dynamically.
+        const basePrice = providerPrice; 
+        const providerServiceId = String(service.service);
+
+        if (providerPrice > MAX_SANE_USD || isNaN(providerPrice)) continue;
+
+        currentBatchProviderIds.push(providerServiceId);
+
+        const serviceData = {
+          name: service.name,
+          description: service.description || service.name || 'No description available',
+          platform,
+          category: service.category || 'General',
+          provider_id: providerId,
+          provider_service_id: providerServiceId,
+          provider_price: providerPrice,
+          base_price: basePrice,
+          min_quantity: parseInt(String(service.min)) || 100,
+          max_quantity: parseInt(String(service.max)) || 50000,
+          refill_supported: service.refill === true || service.refill === 'true',
+          dripfeed_supported: service.dripfeed === true || service.dripfeed === 'true',
+          is_active: true,
+        };
+
+        const existing = existingMap.get(providerServiceId);
+        if (existing) {
+          toUpdate.push({ ...serviceData, id: existing.id });
+        } else {
+          toInsert.push({ ...serviceData, service_id: Math.floor(1000 + Math.random() * 9000) });
+        }
+      }
+
+      if (toInsert.length > 0) {
+        await supabase.from('services').insert(toInsert);
+        addedCount += toInsert.length;
+      }
+
+      for (const s of toUpdate) {
+        const { id, ...updateData } = s;
+        await supabase.from('services').update(updateData).eq('id', id);
+        updatedCount++;
+      }
+
+      if (currentBatchProviderIds.length > 0) {
+        const { data: syncedServices } = await supabase
+          .from('services')
+          .select('id, service_id, name, description, platform, category, base_price, min_quantity, max_quantity, refill_supported, dripfeed_supported, is_active')
+          .eq('provider_id', providerId)
+          .in('provider_service_id', currentBatchProviderIds);
+
+        if (syncedServices && syncedServices.length > 0) {
+          await syncPanelServicesForProviderServices(supabase, syncedServices);
+        }
+      }
+    }
+
+    return new Response(JSON.stringify({ success: true, added: addedCount, updated: updatedCount }), { headers: corsHeaders });
+
   } catch (error: any) {
     return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders });
   }
