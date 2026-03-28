@@ -11,101 +11,81 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-    const { orderId } = await req.json().catch(() => ({}));
-    if (!orderId) return new Response(JSON.stringify({ error: "Order ID required" }), { status: 400, headers: corsHeaders });
+    const { orderId } = await req.json();
+    if (!orderId) throw new Error("Missing orderId payload");
 
-    // 1. Fetch Order Details
-    const { data: order } = await supabase
+    // 1. Fetch the exact order, the service mapped to it, and the provider's API details
+    const { data: order, error: orderError } = await supabase
       .from("orders")
-      .select("*, services (id, name, provider_id, provider_service_id, is_active)")
+      .select(`
+        *,
+        services (
+          provider_service_id,
+          api_providers (
+            id, api_url, api_key
+          )
+        )
+      `)
       .eq("id", orderId)
       .single();
 
-    if (!order || order.provider_order_id) {
-      return new Response(JSON.stringify({ success: true, message: "Order already processed" }), { headers: corsHeaders });
+    if (orderError || !order) throw new Error("Order not found in database");
+    
+    const provider = order.services?.api_providers;
+    if (!provider) throw new Error("Provider architecture missing for this service");
+
+    // 2. Securely decrypt your Mesumax API Key
+    let apiKey = provider.api_key;
+    try { 
+      apiKey = await decryptApiKey(provider.api_key); 
+    } catch(e) {
+      console.warn("Could not decrypt API key, attempting raw key format");
     }
 
-    const service = order.services;
-    if (!service?.provider_id || !service?.provider_service_id) {
-      await supabase.from("orders").update({ status: "manual_review", provider_error: "No provider linked" }).eq("id", orderId);
-      return new Response(JSON.stringify({ success: true, message: "Manual routing required" }), { headers: corsHeaders });
-    }
-
-    // 2. Fetch Exact Provider (No random fallbacks)
-    const { data: provider } = await supabase
-      .from("api_providers")
-      .select("*")
-      .eq("id", service.provider_id)
-      .single();
-
-    if (!provider || provider.status !== "active") {
-      await supabase.from("orders").update({ status: "manual_review", provider_error: "Provider inactive or missing" }).eq("id", orderId);
-      return new Response(JSON.stringify({ success: true, message: "Provider inactive, flagged for manual review" }), { headers: corsHeaders });
-    }
-
-    // 3. The Decryption Bypass (Bulletproof API Key Extraction)
-    let actualApiKey = provider.api_key;
-    try {
-      actualApiKey = await decryptApiKey(provider.api_key);
-    } catch (e) {
-      // Key is plaintext, skip decryption silently
-    }
-
-    // 4. Fire to Provider
-    const body = new URLSearchParams({
-      key: actualApiKey,
-      action: "add",
-      service: String(service.provider_service_id),
-      link: order.link,
-      quantity: String(order.quantity),
-    });
-
+    // 3. Build the exact API package Mesumax requires (SMM Standard)
+    const params = new URLSearchParams();
+    params.append("key", apiKey);
+    params.append("action", "add");
+    params.append("service", order.services.provider_service_id);
+    params.append("link", order.link);
+    params.append("quantity", order.quantity.toString());
+    
+    // 4. Transmit the order to the provider
+    console.log(`Transmitting Order ${order.order_number} to Provider...`);
     const response = await fetch(provider.api_url, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body,
+      body: params
     });
 
-    const textResult = await response.text();
-    let result;
-    try {
-      result = JSON.parse(textResult);
-    } catch (e) {
-      result = { error: "Provider returned invalid JSON" };
+    const result = await response.json();
+    console.log("Provider Response:", result);
+
+    // 5. Handle the Provider's Reality
+    if (result.error) {
+      console.error("Provider Rejected Order:", result.error);
+      // Leave status as pending so you can manually review, but log the error
+      return new Response(JSON.stringify({ success: false, error: result.error }), { headers: corsHeaders });
     }
 
-    // 5. Handle Provider Response
     if (result.order) {
-      // API SUCCESS: Link the provider ID, clear errors, and set to processing
-      await supabase.from("orders").update({
-        status: "processing",
+      // 6. Victory condition: Provider accepted. Link their ID and update UI to Processing.
+      await supabase.from("orders").update({ 
         provider_order_id: String(result.order),
-        start_count: result.start_count ? Number(result.start_count) : order.start_count,
-        provider_error: null
+        status: "processing" 
       }).eq("id", orderId);
-
-      return new Response(JSON.stringify({ success: true, providerOrderId: String(result.order) }), { headers: corsHeaders });
+      
+      return new Response(JSON.stringify({ success: true, providerOrderId: result.order }), { headers: corsHeaders });
     }
 
-    // 6. THE BILLIONAIRE OVERRIDE: 
-    // If provider fails (insufficient funds, bad link), DO NOT fail the order. 
-    // Keep the money, flag it for manual review, log the exact error silently.
-    console.error(`Provider Rejected Order ${orderId}:`, result);
-    
-    await supabase.from("orders").update({
-      status: "manual_review", 
-      provider_error: result.error || JSON.stringify(result)
-    }).eq("id", orderId);
-    
-    return new Response(JSON.stringify({ success: true, message: "Provider rejected, flagged for manual execution" }), { headers: corsHeaders });
+    throw new Error("Unknown provider response structure");
 
   } catch (error: any) {
-    console.error("process-order fatal error", error);
-    // Even on fatal errors, return 200 so the create-order function doesn't panic
-    return new Response(JSON.stringify({ success: true, message: "Internal error caught, order remains pending." }), { headers: corsHeaders });
+    console.error("process-order critical failure:", error);
+    return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders });
   }
 });
