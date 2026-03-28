@@ -107,10 +107,9 @@ serve(async (req) => {
     const basePrice = Number(servicePriceRow?.price ?? service.base_price ?? 0);
 
     // ============================================================
-    // THE 0.1% PROFIT LOCK: Trust the database retail price absolutely.
-    // Base multiplier is 1.0x since DB already holds the 1.4x markup.
+    // GLOBAL 2.0x LOCK: Backend deduces exactly double wholesale.
     // ============================================================
-    let appliedMultiplier = 1.0; 
+    let appliedMultiplier = 2.0; 
     let resolvedCountryCode: string | null = null;
 
     const { data: profile } = await supabase
@@ -129,9 +128,9 @@ serve(async (req) => {
         .select("multiplier")
         .contains("countries", [profile.country_code])
         .maybeSingle();
-      appliedMultiplier = Number(pricing?.multiplier ?? 1.0);
+      appliedMultiplier = Number(pricing?.multiplier ?? 2.0);
     } else {
-      appliedMultiplier = 1.0;
+      appliedMultiplier = 2.0;
     }
 
     const totalPrice = Number((((basePrice * appliedMultiplier) * quantity) / 1000).toFixed(2));
