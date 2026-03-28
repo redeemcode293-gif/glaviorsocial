@@ -212,10 +212,27 @@ serve(async (req) => {
       signal: AbortSignal.timeout(60000),
     });
 
-    const services = await response.json();
+    // X-RAY: Read the raw text from Mesumax before trying to parse it
+    const rawProviderText = await response.text();
+    console.log("Raw Mesumax Response:", rawProviderText);
+
+    let services;
+    try {
+      services = JSON.parse(rawProviderText);
+    } catch (e) {
+      console.error("Mesumax returned non-JSON (likely Cloudflare or HTML error):", rawProviderText);
+      return new Response(JSON.stringify({ 
+        error: 'Provider API returned non-JSON', 
+        mesumax_reply: rawProviderText.substring(0, 500) 
+      }), { status: 400, headers: corsHeaders });
+    }
 
     if (!Array.isArray(services)) {
-      return new Response(JSON.stringify({ error: 'Invalid response from provider API' }), { status: 400, headers: corsHeaders });
+      console.error("Mesumax returned JSON, but not a service list:", services);
+      return new Response(JSON.stringify({ 
+        error: 'Invalid response from provider API', 
+        mesumax_reply: services 
+      }), { status: 400, headers: corsHeaders });
     }
 
     let addedCount = 0;
