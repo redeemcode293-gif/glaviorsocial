@@ -204,12 +204,25 @@ serve(async (req) => {
 
     let providerDispatch: unknown = null;
     try {
-      providerDispatch = await supabase.functions.invoke("process-order", {
-        body: { orderId: order.id },
-        headers: { Authorization: authHeader },
+      // ============================================================
+      // THE FIX: Unbreakable internal HTTP request to trigger auto-buy
+      // ============================================================
+      console.log("Triggering auto-buy engine for order:", order.id);
+      const functionUrl = `${supabaseUrl}/functions/v1/process-order`;
+      
+      const dispatchReq = await fetch(functionUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": authHeader // Passes the exact same auth token
+        },
+        body: JSON.stringify({ orderId: order.id })
       });
+      
+      providerDispatch = await dispatchReq.json();
+      console.log("Auto-buy trigger response:", providerDispatch);
     } catch (dispatchError) {
-      console.error("Failed to invoke process-order", dispatchError);
+      console.error("Failed to trigger process-order engine:", dispatchError);
     }
 
     return new Response(JSON.stringify({
