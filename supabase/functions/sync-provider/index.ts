@@ -163,159 +163,167 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 200, headers: corsHeaders });
+    const cronSecret = req.headers.get("x-cron-secret");
+    const expectedSecret = Deno.env.get("CRON_SECRET");
+    let isCron = false;
 
-    const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-    
-    if (authError || !user) return new Response(JSON.stringify({ error: 'Invalid token' }), { status: 200, headers: corsHeaders });
+    if (cronSecret && expectedSecret && cronSecret === expectedSecret) {
+      isCron = true;
+    } else {
+      const authHeader = req.headers.get('Authorization');
+      if (!authHeader) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 200, headers: corsHeaders });
 
-    const { data: roleData } = await supabase
-      .from('user_roles')
-      .select('role')
-      .eq('user_id', user.id)
-      .in('role', ['admin', 'owner'])
-      .maybeSingle();
+      const token = authHeader.replace('Bearer ', '');
+      const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+      
+      if (authError || !user) return new Response(JSON.stringify({ error: 'Invalid token' }), { status: 200, headers: corsHeaders });
 
-    if (!roleData) return new Response(JSON.stringify({ error: 'Admin access required' }), { status: 200, headers: corsHeaders });
+      const { data: roleData } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.id)
+        .in('role', ['admin', 'owner'])
+        .maybeSingle();
 
-    // ============================================================
-    // THE FIX: Aggressive JSON parsing bypasses Deno strict type errors
-    // ============================================================
+      if (!roleData) return new Response(JSON.stringify({ error: 'Admin access required' }), { status: 200, headers: corsHeaders });
+    }
+
     const rawText = await req.text();
     let body: any = {};
     try {
-      body = JSON.parse(rawText);
+      if (rawText) body = JSON.parse(rawText);
     } catch (e) {
       console.error("Failed to parse body JSON, using empty object");
     }
 
-    const providerId = body.providerId || body.id;
+    const requestedProviderId = body.providerId || body.id;
 
-    if (!providerId) return new Response(JSON.stringify({ error: 'Provider ID missing in payload', received: rawText }), { status: 200, headers: corsHeaders });
-
-    const { data: provider, error: providerError } = await supabase
-      .from('api_providers')
-      .select('*')
-      .eq('id', providerId)
-      .single();
-
-    if (providerError || !provider) return new Response(JSON.stringify({ error: 'Provider not found' }), { status: 200, headers: corsHeaders });
-
-    const providerApiKey = await decryptApiKey(provider.api_key);
-
-    const response = await fetch(provider.api_url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ key: providerApiKey, action: 'services' }),
-      signal: AbortSignal.timeout(60000),
-    });
-
-    // X-RAY: Read the raw text from Mesumax before trying to parse it
-    const rawProviderText = await response.text();
-    console.log("Raw Mesumax Response:", rawProviderText);
-
-    let services;
-    try {
-      services = JSON.parse(rawProviderText);
-    } catch (e) {
-      console.error("Mesumax returned non-JSON (likely Cloudflare or HTML error):", rawProviderText);
-      return new Response(JSON.stringify({ 
-        error: 'Provider API returned non-JSON', 
-        mesumax_reply: rawProviderText.substring(0, 500) 
-      }), { status: 200, headers: corsHeaders });
+    if (!isCron && !requestedProviderId && requestedProviderId !== 'all') {
+      return new Response(JSON.stringify({ error: 'Provider ID missing in payload' }), { status: 200, headers: corsHeaders });
     }
 
-    if (!Array.isArray(services)) {
-      console.error("Mesumax returned JSON, but not a service list:", services);
-      return new Response(JSON.stringify({ 
-        error: 'Invalid response from provider API', 
-        mesumax_reply: services 
-      }), { status: 200, headers: corsHeaders });
+    let providersToSync = [];
+
+    if (requestedProviderId === 'all' || isCron) {
+      const { data, error } = await supabase.from('api_providers').select('*').eq('status', 'active');
+      if (error || !data) return new Response(JSON.stringify({ error: 'Failed to fetch active providers' }), { status: 200, headers: corsHeaders });
+      providersToSync = data;
+    } else {
+      const { data, error } = await supabase.from('api_providers').select('*').eq('id', requestedProviderId).single();
+      if (error || !data) return new Response(JSON.stringify({ error: 'Provider not found' }), { status: 200, headers: corsHeaders });
+      providersToSync = [data];
     }
 
-    let addedCount = 0;
-    let updatedCount = 0;
+    let totalAdded = 0;
+    let totalUpdated = 0;
 
-    const BATCH_SIZE = 50;
-    for (let i = 0; i < services.length; i += BATCH_SIZE) {
-      const batch = services.slice(i, i + BATCH_SIZE) as ProviderServiceRecord[];
-      const batchIds = batch.map((service) => String(service.service));
-      
-      const { data: existingServices } = await supabase
-        .from('services')
-        .select('id, provider_service_id, base_price')
-        .eq('provider_id', providerId)
-        .in('provider_service_id', batchIds);
+    for (const provider of providersToSync) {
+      const providerApiKey = await decryptApiKey(provider.api_key);
 
-      const existingMap = new Map((existingServices || []).map((service) => [service.provider_service_id, service]));
+      try {
+        const response = await fetch(provider.api_url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({ key: providerApiKey, action: 'services' }),
+          signal: AbortSignal.timeout(60000),
+        });
 
-      const toInsert: Array<Record<string, unknown>> = [];
-      const toUpdate: Array<Record<string, unknown>> = [];
-      const currentBatchProviderIds: string[] = [];
-
-      for (const service of batch) {
-        const platform = detectPlatform(service.category || '', service.name || '');
-        const providerPrice = toUsd(service.rate);
+        const rawProviderText = await response.text();
         
-        // STORE PURE WHOLESALE. The 2.0x UI handles the profit dynamically.
-        const basePrice = providerPrice; 
-        const providerServiceId = String(service.service);
-
-        if (providerPrice > MAX_SANE_USD || isNaN(providerPrice)) continue;
-
-        currentBatchProviderIds.push(providerServiceId);
-
-        const serviceData = {
-          name: service.name,
-          description: service.description || service.name || 'No description available',
-          platform,
-          category: service.category || 'General',
-          provider_id: providerId,
-          provider_service_id: providerServiceId,
-          provider_price: providerPrice,
-          base_price: basePrice,
-          min_quantity: parseInt(String(service.min)) || 100,
-          max_quantity: parseInt(String(service.max)) || 50000,
-          refill_supported: service.refill === true || service.refill === 'true',
-          dripfeed_supported: service.dripfeed === true || service.dripfeed === 'true',
-          is_active: true,
-        };
-
-        const existing = existingMap.get(providerServiceId);
-        if (existing) {
-          toUpdate.push({ ...serviceData, id: existing.id });
-        } else {
-          toInsert.push({ ...serviceData, service_id: Math.floor(1000 + Math.random() * 9000) });
+        let services;
+        try {
+          services = JSON.parse(rawProviderText);
+        } catch (e) {
+          console.error(`Provider ${provider.id} returned non-JSON`);
+          continue; // Skip this provider
         }
-      }
 
-      if (toInsert.length > 0) {
-        await supabase.from('services').insert(toInsert);
-        addedCount += toInsert.length;
-      }
-
-      for (const s of toUpdate) {
-        const { id, ...updateData } = s;
-        await supabase.from('services').update(updateData).eq('id', id);
-        updatedCount++;
-      }
-
-      if (currentBatchProviderIds.length > 0) {
-        const { data: syncedServices } = await supabase
-          .from('services')
-          .select('id, service_id, name, description, platform, category, base_price, min_quantity, max_quantity, refill_supported, dripfeed_supported, is_active')
-          .eq('provider_id', providerId)
-          .in('provider_service_id', currentBatchProviderIds);
-
-        if (syncedServices && syncedServices.length > 0) {
-          await syncPanelServicesForProviderServices(supabase, syncedServices);
+        if (!Array.isArray(services)) {
+          console.error(`Provider ${provider.id} returned JSON, but not a service list`);
+          continue;
         }
+
+        const BATCH_SIZE = 50;
+        for (let i = 0; i < services.length; i += BATCH_SIZE) {
+          const batch = services.slice(i, i + BATCH_SIZE) as ProviderServiceRecord[];
+          const batchIds = batch.map((service) => String(service.service));
+          
+          const { data: existingServices } = await supabase
+            .from('services')
+            .select('id, provider_service_id, base_price')
+            .eq('provider_id', provider.id)
+            .in('provider_service_id', batchIds);
+
+          const existingMap = new Map((existingServices || []).map((service) => [service.provider_service_id, service]));
+
+          const toInsert: Array<Record<string, unknown>> = [];
+          const toUpdate: Array<Record<string, unknown>> = [];
+          const currentBatchProviderIds: string[] = [];
+
+          for (const service of batch) {
+            const platform = detectPlatform(service.category || '', service.name || '');
+            const providerPrice = toUsd(service.rate);
+            
+            const basePrice = providerPrice; 
+            const providerServiceId = String(service.service);
+
+            if (providerPrice > MAX_SANE_USD || isNaN(providerPrice)) continue;
+
+            currentBatchProviderIds.push(providerServiceId);
+
+            const serviceData = {
+              name: service.name,
+              description: service.description || service.name || 'No description available',
+              platform,
+              category: service.category || 'General',
+              provider_id: provider.id,
+              provider_service_id: providerServiceId,
+              provider_price: providerPrice,
+              base_price: basePrice,
+              min_quantity: parseInt(String(service.min)) || 100,
+              max_quantity: parseInt(String(service.max)) || 50000,
+              refill_supported: service.refill === true || service.refill === 'true',
+              dripfeed_supported: service.dripfeed === true || service.dripfeed === 'true',
+              is_active: true,
+            };
+
+            const existing = existingMap.get(providerServiceId);
+            if (existing) {
+              toUpdate.push({ ...serviceData, id: existing.id });
+            } else {
+              toInsert.push({ ...serviceData, service_id: Math.floor(1000 + Math.random() * 9000) });
+            }
+          }
+
+          if (toInsert.length > 0) {
+            await supabase.from('services').insert(toInsert);
+            totalAdded += toInsert.length;
+          }
+
+          for (const s of toUpdate) {
+            const { id, ...updateData } = s;
+            await supabase.from('services').update(updateData).eq('id', id);
+            totalUpdated++;
+          }
+
+          if (currentBatchProviderIds.length > 0) {
+            const { data: syncedServices } = await supabase
+              .from('services')
+              .select('id, service_id, name, description, platform, category, base_price, min_quantity, max_quantity, refill_supported, dripfeed_supported, is_active')
+              .eq('provider_id', provider.id)
+              .in('provider_service_id', currentBatchProviderIds);
+
+            if (syncedServices && syncedServices.length > 0) {
+              await syncPanelServicesForProviderServices(supabase, syncedServices);
+            }
+          }
+        }
+      } catch (err) {
+        console.error(`Failed to sync provider ${provider.id}:`, err);
       }
     }
 
-    return new Response(JSON.stringify({ success: true, added: addedCount, updated: updatedCount }), { headers: corsHeaders });
+    return new Response(JSON.stringify({ success: true, added: totalAdded, updated: totalUpdated }), { headers: corsHeaders });
 
   } catch (error: any) {
     return new Response(JSON.stringify({ error: error.message }), { status: 200, headers: corsHeaders });
