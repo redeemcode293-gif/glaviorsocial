@@ -223,6 +223,7 @@ const AddFunds = () => {
         payment_method: methodLabel,
         description: `${t("Deposit via")} ${methodLabel}`,
         reference_id: upiTransactionId || null,
+        admin_visible: true,
       });
       if (error) throw error;
       toast({

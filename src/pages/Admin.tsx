@@ -186,7 +186,7 @@ const Admin = () => {
       .from('profiles')
       .select('*')
       .order('created_at', { ascending: false })
-      .limit(100);
+      .limit(5000);
     setUsers(usersData || []);
 
     // Fetch wallets for all users
@@ -246,7 +246,7 @@ const Admin = () => {
     setOrders(ordersData || []);
 
     // Fetch deposits — owner sees all, admin only sees admin_visible ones
-    let depositsQuery = supabase.from('transactions').select('*').eq('type', 'deposit').order('created_at', { ascending: false }).limit(50);
+    let depositsQuery = supabase.from('transactions').select('*').eq('type', 'deposit').order('created_at', { ascending: false }).limit(1000);
     // RLS already filters for admin; for owner we get everything
     const { data: depositsData } = await depositsQuery;
     setDeposits(depositsData || []);
@@ -547,6 +547,10 @@ const Admin = () => {
 
       if (response.error) {
         throw new Error(response.error.message);
+      }
+      
+      if (response.data && response.data.error) {
+        throw new Error(response.data.error);
       }
 
       if (action === 'services') {

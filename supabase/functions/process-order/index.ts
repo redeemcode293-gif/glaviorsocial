@@ -68,6 +68,25 @@ serve(async (req) => {
     // 5. Handle the Provider's Reality
     if (result.error) {
       console.error("Provider Rejected Order:", result.error);
+      
+      // Send Telegram Notification
+      try {
+        const telegramUrl = `https://api.telegram.org/bot8242890760:AAHprQbKGMKRplUHWpMcnG1j6tcAZ2tnvDU/sendMessage`;
+        const text = `⚠️ *Order Failed at Provider*\n\n*Order Number*: \`${order.order_number}\`\n*Link*: ${order.link}\n*Quantity*: ${order.quantity}\n*Amount*: $${order.price}\n\n*Provider Error*: ${result.error}`;
+        
+        await fetch(telegramUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chat_id: "7619588053",
+            text: text,
+            parse_mode: "Markdown"
+          })
+        });
+      } catch (tgError) {
+        console.error("Failed to send Telegram notification:", tgError);
+      }
+
       // Leave status as pending so you can manually review, but log the error
       return new Response(JSON.stringify({ success: false, error: result.error }), { headers: corsHeaders });
     }

@@ -164,12 +164,12 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const authHeader = req.headers.get('Authorization');
-    if (!authHeader) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders });
+    if (!authHeader) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 200, headers: corsHeaders });
 
     const token = authHeader.replace('Bearer ', '');
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
     
-    if (authError || !user) return new Response(JSON.stringify({ error: 'Invalid token' }), { status: 401, headers: corsHeaders });
+    if (authError || !user) return new Response(JSON.stringify({ error: 'Invalid token' }), { status: 200, headers: corsHeaders });
 
     const { data: roleData } = await supabase
       .from('user_roles')
@@ -178,7 +178,7 @@ serve(async (req) => {
       .in('role', ['admin', 'owner'])
       .maybeSingle();
 
-    if (!roleData) return new Response(JSON.stringify({ error: 'Admin access required' }), { status: 403, headers: corsHeaders });
+    if (!roleData) return new Response(JSON.stringify({ error: 'Admin access required' }), { status: 200, headers: corsHeaders });
 
     // ============================================================
     // THE FIX: Aggressive JSON parsing bypasses Deno strict type errors
@@ -193,7 +193,7 @@ serve(async (req) => {
 
     const providerId = body.providerId || body.id;
 
-    if (!providerId) return new Response(JSON.stringify({ error: 'Provider ID missing in payload', received: rawText }), { status: 400, headers: corsHeaders });
+    if (!providerId) return new Response(JSON.stringify({ error: 'Provider ID missing in payload', received: rawText }), { status: 200, headers: corsHeaders });
 
     const { data: provider, error: providerError } = await supabase
       .from('api_providers')
@@ -201,7 +201,7 @@ serve(async (req) => {
       .eq('id', providerId)
       .single();
 
-    if (providerError || !provider) return new Response(JSON.stringify({ error: 'Provider not found' }), { status: 404, headers: corsHeaders });
+    if (providerError || !provider) return new Response(JSON.stringify({ error: 'Provider not found' }), { status: 200, headers: corsHeaders });
 
     const providerApiKey = await decryptApiKey(provider.api_key);
 
@@ -224,7 +224,7 @@ serve(async (req) => {
       return new Response(JSON.stringify({ 
         error: 'Provider API returned non-JSON', 
         mesumax_reply: rawProviderText.substring(0, 500) 
-      }), { status: 400, headers: corsHeaders });
+      }), { status: 200, headers: corsHeaders });
     }
 
     if (!Array.isArray(services)) {
@@ -232,7 +232,7 @@ serve(async (req) => {
       return new Response(JSON.stringify({ 
         error: 'Invalid response from provider API', 
         mesumax_reply: services 
-      }), { status: 400, headers: corsHeaders });
+      }), { status: 200, headers: corsHeaders });
     }
 
     let addedCount = 0;
@@ -318,6 +318,6 @@ serve(async (req) => {
     return new Response(JSON.stringify({ success: true, added: addedCount, updated: updatedCount }), { headers: corsHeaders });
 
   } catch (error: any) {
-    return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders });
+    return new Response(JSON.stringify({ error: error.message }), { status: 200, headers: corsHeaders });
   }
 });

@@ -68,12 +68,12 @@ export const DashboardLayout = ({ children, title, subtitle }: DashboardLayoutPr
   const checkAdminStatus = async () => {
     if (!user) return;
 
-    // Check if user has admin role
+    // Check if user has admin or owner role
     const { data: roles } = await supabase
       .from('user_roles')
       .select('role')
       .eq('user_id', user.id)
-      .eq('role', 'admin')
+      .in('role', ['admin', 'owner'])
       .maybeSingle();
 
     setIsAdmin(!!roles);
