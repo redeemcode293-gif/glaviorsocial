@@ -96,16 +96,21 @@ async function syncPanelServicesForProviderServices(supabase: ReturnType<typeof 
     supabase.from('panel_services').select('service_id').in('service_id', panelIds),
   ]);
 
-  const panelByProvider = new Map((existingPanels || []).map((panel) => [panel.provider_service_uuid, panel as PanelServiceRecord]));
-  const usedPanelIds = new Set<number>((collidingPanels || []).map((panel) => Number(panel.service_id)));
+  const panelByProvider = new Map<string, any>((existingPanels || []).map((panel: any) => [panel.provider_service_uuid, panel]));
+  const usedPanelIds = new Set<number>((collidingPanels || []).map((panel: any) => Number(panel.service_id)));
   const inserts: Array<Record<string, unknown>> = [];
+  const updates: Array<Record<string, unknown>> = [];
 
   for (const service of services) {
     const existingPanel = panelByProvider.get(service.id);
     const payload = buildPanelServicePayload(service);
 
     if (existingPanel) {
-      await supabase.from('panel_services').update(payload).eq('id', existingPanel.id);
+      updates.push({
+        id: existingPanel.id,
+        service_id: existingPanel.service_id,
+        ...payload
+      });
       continue;
     }
 
@@ -121,9 +126,18 @@ async function syncPanelServicesForProviderServices(supabase: ReturnType<typeof 
     });
   }
 
+  const promises = [];
   if (inserts.length > 0) {
-    const { error } = await supabase.from('panel_services').insert(inserts);
-    if (error) console.error('Panel service sync insert error:', error);
+    promises.push(supabase.from('panel_services').insert(inserts));
+  }
+  if (updates.length > 0) {
+    promises.push(supabase.from('panel_services').upsert(updates));
+  }
+  if (promises.length > 0) {
+    const results = await Promise.all(promises);
+    for (const { error } of results) {
+      if (error) console.error('Panel service sync error:', error);
+    }
   }
 }
 
@@ -197,6 +211,7 @@ serve(async (req) => {
     }
 
     const requestedProviderId = body.providerId || body.id;
+    const action = body.action || 'services';
 
     if (!isCron && !requestedProviderId && requestedProviderId !== 'all') {
       return new Response(JSON.stringify({ error: 'Provider ID missing in payload' }), { status: 200, headers: corsHeaders });
@@ -221,6 +236,31 @@ serve(async (req) => {
       const providerApiKey = await decryptApiKey(provider.api_key);
 
       try {
+        if (action === 'balance') {
+          const response = await fetch(provider.api_url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({ key: providerApiKey, action: 'balance' }),
+            signal: AbortSignal.timeout(30000),
+          });
+          const rawProviderText = await response.text();
+          let parsed;
+          try {
+            parsed = JSON.parse(rawProviderText);
+          } catch(e) {
+            console.error(`Provider ${provider.id} returned non-JSON for balance`);
+            continue;
+          }
+          if (parsed && typeof parsed.balance !== 'undefined') {
+            const balanceVal = parseFloat(parsed.balance) || parseFloat(parsed.currency) || 0;
+            await supabase.from('api_providers').update({ balance: balanceVal }).eq('id', provider.id);
+            if (providersToSync.length === 1) {
+              return new Response(JSON.stringify({ success: true, balance: balanceVal.toFixed(2) }), { headers: corsHeaders });
+            }
+          }
+          continue;
+        }
+
         const response = await fetch(provider.api_url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -250,11 +290,11 @@ serve(async (req) => {
           
           const { data: existingServices } = await supabase
             .from('services')
-            .select('id, provider_service_id, base_price')
+            .select('id, provider_service_id, base_price, service_id')
             .eq('provider_id', provider.id)
             .in('provider_service_id', batchIds);
 
-          const existingMap = new Map((existingServices || []).map((service) => [service.provider_service_id, service]));
+          const existingMap = new Map<string, any>((existingServices || []).map((service: any) => [service.provider_service_id, service]));
 
           const toInsert: Array<Record<string, unknown>> = [];
           const toUpdate: Array<Record<string, unknown>> = [];
@@ -289,21 +329,23 @@ serve(async (req) => {
 
             const existing = existingMap.get(providerServiceId);
             if (existing) {
-              toUpdate.push({ ...serviceData, id: existing.id });
+              toUpdate.push({ ...serviceData, id: existing.id, service_id: existing.service_id });
             } else {
               toInsert.push({ ...serviceData, service_id: Math.floor(1000 + Math.random() * 9000) });
             }
           }
 
+          const promises = [];
           if (toInsert.length > 0) {
-            await supabase.from('services').insert(toInsert);
+            promises.push(supabase.from('services').insert(toInsert));
             totalAdded += toInsert.length;
           }
-
-          for (const s of toUpdate) {
-            const { id, ...updateData } = s;
-            await supabase.from('services').update(updateData).eq('id', id);
-            totalUpdated++;
+          if (toUpdate.length > 0) {
+            promises.push(supabase.from('services').upsert(toUpdate));
+            totalUpdated += toUpdate.length;
+          }
+          if (promises.length > 0) {
+            await Promise.all(promises);
           }
 
           if (currentBatchProviderIds.length > 0) {
