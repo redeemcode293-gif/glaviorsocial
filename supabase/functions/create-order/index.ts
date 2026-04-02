@@ -106,11 +106,11 @@ serve(async (req) => {
 
     const basePrice = Number(servicePriceRow?.price ?? service.base_price ?? 0);
 
-    const calculateDynamicMargin = (baseCost: number) => {
-      if (baseCost <= 0.50) return 12.0;
-      if (baseCost <= 5.00) return 5.0;
-      if (baseCost <= 20.00) return 3.0;
-      if (baseCost <= 100.00) return 2.0;
+    const calculateDynamicMultiplier = (rawBasePrice: number) => {
+      if (rawBasePrice <= 0.30) return 14.0;
+      if (rawBasePrice <= 1.00) return 8.0;
+      if (rawBasePrice <= 3.00) return 4.0;
+      if (rawBasePrice <= 10.00) return 2.5;
       return 1.5;
     };
 
@@ -131,9 +131,12 @@ serve(async (req) => {
     if (profile?.pricing_override === "provider") {
       appliedMultiplier = 1.0;
     } else {
-      const userBaseCostMultiplier = Number(profile?.wholesale_cost || 1.0);
-      const baseCost = basePrice * userBaseCostMultiplier;
-      appliedMultiplier = userBaseCostMultiplier * calculateDynamicMargin(baseCost);
+      const userWholesaleCost = Number(profile?.wholesale_cost || 1.0);
+      if (userWholesaleCost === 1.0) {
+        appliedMultiplier = 1.0;
+      } else {
+        appliedMultiplier = calculateDynamicMultiplier(basePrice);
+      }
     }
 
     const totalPrice = Number((((basePrice * appliedMultiplier) * quantity) / 1000).toFixed(2));

@@ -71,11 +71,11 @@ const NewOrder = () => {
   
   const { loading: loadingPricing, countryCode } = useRegionalPricing();
 
-  const calculateDynamicMargin = (baseCost: number) => {
-    if (baseCost <= 0.50) return 12.0;
-    if (baseCost <= 5.00) return 5.0;
-    if (baseCost <= 20.00) return 3.0;
-    if (baseCost <= 100.00) return 2.0;
+  const calculateDynamicMultiplier = (rawBasePrice: number) => {
+    if (rawBasePrice <= 0.30) return 14.0;
+    if (rawBasePrice <= 1.00) return 8.0;
+    if (rawBasePrice <= 3.00) return 4.0;
+    if (rawBasePrice <= 10.00) return 2.5;
     return 1.5;
   };
 
@@ -210,9 +210,14 @@ const NewOrder = () => {
   }, [filteredServices, selectedCategory]);
 
   const calculateDisplayPrice = (basePrice: number) => {
-    const userBaseCostMultiplier = Number((profile as any)?.wholesale_cost || 1.0);
-    const baseCost = Number(basePrice) * userBaseCostMultiplier;
-    return baseCost * calculateDynamicMargin(baseCost);
+    const rawBasePrice = Number(basePrice);
+    const userWholesaleCost = Number((profile as any)?.wholesale_cost || 1.0);
+    
+    if (userWholesaleCost === 1.0) {
+      return rawBasePrice * 1.0;
+    }
+    
+    return rawBasePrice * calculateDynamicMultiplier(rawBasePrice);
   };
 
   const calculateTotal = (service = selectedService, qtyValue = quantity) => {
@@ -232,9 +237,12 @@ const NewOrder = () => {
   };
 
   const createOrder = async (service: ServiceDisplay, orderLink: string, qty: number) => {
-    const userBaseCostMultiplier = Number((profile as any)?.wholesale_cost || 1.0);
-    const baseCost = Number(service.price) * userBaseCostMultiplier;
-    const finalMultiplier = userBaseCostMultiplier * calculateDynamicMargin(baseCost);
+    const rawBasePrice = Number(service.price);
+    const userWholesaleCost = Number((profile as any)?.wholesale_cost || 1.0);
+    
+    const finalMultiplier = userWholesaleCost === 1.0 
+      ? 1.0 
+      : calculateDynamicMultiplier(rawBasePrice);
 
     const { data, error } = await supabase.functions.invoke("create-order", {
       body: {
