@@ -24,7 +24,8 @@ serve(async (req) => {
       });
     }
 
-    const message = `🔔 *New Deposit Request*\n\nUser: ${email}\nAmount: *$${deposit.amount.toFixed(2)} USD* (₹${(deposit.amount * 92).toFixed(2)})\nMethod: ${deposit.payment_method}\nRef: ${deposit.reference_id || 'N/A'}\n\nDo you want to approve or reject this deposit?`;
+    const amount = typeof deposit.amount === 'string' ? parseFloat(deposit.amount) : deposit.amount;
+    const message = `🔔 *New Deposit Request*\n\nUser: ${email}\nAmount: *$${amount.toFixed(2)} USD* (₹${(amount * 92).toFixed(2)})\nMethod: ${deposit.payment_method}\nRef: ${deposit.reference_id || 'N/A'}\n\nDo you want to approve or reject this deposit?`;
 
     const telegramApi = `https://api.telegram.org/bot${botToken}/sendMessage`;
     

@@ -288,6 +288,36 @@ const Admin = () => {
     }
   };
 
+  const updateUserPricingOverride = async (userId: string, value: string) => {
+    const { error } = await supabase
+      .from('profiles')
+      .update({ pricing_override: value })
+      .eq('user_id', userId);
+    if (error) {
+      toast({ title: "Failed to update pricing strategy", variant: "destructive", description: error.message });
+    } else {
+      toast({ title: "Pricing override updated" });
+      fetchAdminData();
+    }
+  };
+
+  const updateUserMultiplier = async (userId: string, multiplier: string) => {
+    const val = parseFloat(multiplier);
+    if (isNaN(val) || val < 0) {
+      toast({ title: "Invalid multiplier", variant: "destructive" });
+      return;
+    }
+    const { error } = await supabase
+      .from('profiles')
+      .update({ custom_multiplier: val })
+      .eq('user_id', userId);
+    if (error) {
+      toast({ title: "Failed to update multiplier", variant: "destructive", description: error.message });
+    } else {
+      toast({ title: "Multiplier updated successfully" });
+      fetchAdminData();
+    }
+  };
   const adjustUserBalance = async () => {
     if (!selectedUser || !balanceAdjustment) return;
 
@@ -830,18 +860,35 @@ const Admin = () => {
                                 <span className="font-mono text-success">₹{(Number(userWallet?.balance || 0) * 92).toFixed(2)}</span>
                               </td>
                               <td className="p-3">
-                                <Select 
-                                  defaultValue={user.pricing_override || 'none'}
-                                  onValueChange={(value) => updateUserPricingOverride(user.user_id, value)}
-                                >
-                                  <SelectTrigger className="w-28 h-7 text-xs bg-secondary/30">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="none">Regional</SelectItem>
-                                    <SelectItem value="provider">Provider</SelectItem>
-                                  </SelectContent>
-                                </Select>
+                                <div className="flex items-center gap-2">
+                                  <Select 
+                                    defaultValue={user.pricing_override || 'none'}
+                                    onValueChange={(value) => updateUserPricingOverride(user.user_id, value)}
+                                  >
+                                    <SelectTrigger className="w-28 h-7 text-xs bg-secondary/30">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="none">Regional</SelectItem>
+                                      <SelectItem value="provider">Provider</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                  
+                                  {isOwner && (
+                                    <div className="flex items-center gap-1 bg-secondary/30 rounded-md border border-border/50 px-2 h-7 w-20">
+                                      <Input 
+                                        defaultValue={user.custom_multiplier || 1}
+                                        onBlur={(e) => {
+                                          if (String(user.custom_multiplier || 1) !== e.target.value) {
+                                            updateUserMultiplier(user.user_id, e.target.value);
+                                          }
+                                        }}
+                                        className="h-5 w-full bg-transparent border-0 p-0 text-xs text-right focus-visible:ring-0"
+                                      />
+                                      <span className="text-xs text-muted-foreground font-mono">x</span>
+                                    </div>
+                                  )}
+                                </div>
                               </td>
                               <td className="p-3">
                                 <span className="text-sm text-muted-foreground">
