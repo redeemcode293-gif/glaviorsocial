@@ -215,7 +215,7 @@ const AddFunds = () => {
           ? `${selectedCoin!.symbol} — ${selectedChain!.label}`
           : "UPI";
 
-      const { error } = await supabase.from("transactions").insert({
+      const { data: depositData, error } = await supabase.from("transactions").insert({
         user_id: user.id,
         type: "deposit",
         amount: parseFloat(amount),
@@ -224,8 +224,16 @@ const AddFunds = () => {
         description: `${t("Deposit via")} ${methodLabel}`,
         reference_id: upiTransactionId || null,
         admin_visible: true,
-      });
+      }).select().single();
       if (error) throw error;
+      
+      try {
+        await supabase.functions.invoke("notify-telegram", {
+          body: { deposit: depositData, email: user.email }
+        });
+      } catch (tgErr) {
+        console.error("Failed to notify Telegram:", tgErr);
+      }
       toast({
         title: t("Deposit Initiated"),
         description: t("Your deposit request is pending admin verification."),

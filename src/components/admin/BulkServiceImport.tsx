@@ -707,9 +707,9 @@ export const BulkServiceImport = () => {
                     return (
                       <tr key={s.service} className="border-b border-border/10">
                         <td className="px-3 py-2 truncate max-w-[200px]">{s.name}</td>
-                        <td className="px-3 py-2 text-right font-mono">${pUSD.toFixed(4)}</td>
+                        <td className="px-3 py-2 text-right font-mono">₹{(pUSD * 92).toFixed(2)}</td>
                         <td className="px-3 py-2 text-right font-mono text-primary">
-                          ${panelUSD.toFixed(4)}
+                          ₹{(panelUSD * 92).toFixed(2)}
                         </td>
                       </tr>
                     );
@@ -775,10 +775,10 @@ export const BulkServiceImport = () => {
                               </div>
                               <div className="text-right shrink-0">
                                 <p className="text-xs text-muted-foreground">
-                                  Provider: ${pRate.toFixed(4)}
+                                  Provider: ₹{(pRate * 92).toFixed(2)}
                                 </p>
                                 <p className="text-xs font-medium text-primary">
-                                  Panel: ${panelRate.toFixed(4)}
+                                  Panel: ₹{(panelRate * 92).toFixed(2)}
                                 </p>
                               </div>
                             </div>

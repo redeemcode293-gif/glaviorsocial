@@ -79,6 +79,13 @@ const NewOrder = () => {
     return 1.5;
   };
 
+  const applySamMicroServiceOverride = (rawBasePrice: number): number | null => {
+    if (user?.email !== "samgho54@gmail.com") return null;
+    if (rawBasePrice >= 0.01 && rawBasePrice <= 0.04) return 0.95;
+    if (rawBasePrice > 0.04 && rawBasePrice <= 0.09) return 0.99;
+    return null;
+  };
+
   useEffect(() => {
     void fetchServices();
   }, []);
@@ -211,6 +218,10 @@ const NewOrder = () => {
 
   const calculateDisplayPrice = (basePrice: number) => {
     const rawBasePrice = Number(basePrice);
+    
+    const samOverride = applySamMicroServiceOverride(rawBasePrice);
+    if (samOverride !== null) return samOverride;
+    
     const userWholesaleCost = Number((profile as any)?.wholesale_cost || 1.0);
     
     if (userWholesaleCost === 1.0) {
@@ -238,11 +249,18 @@ const NewOrder = () => {
 
   const createOrder = async (service: ServiceDisplay, orderLink: string, qty: number) => {
     const rawBasePrice = Number(service.price);
-    const userWholesaleCost = Number((profile as any)?.wholesale_cost || 1.0);
     
-    const finalMultiplier = userWholesaleCost === 1.0 
-      ? 1.0 
-      : calculateDynamicMultiplier(rawBasePrice);
+    const override = applySamMicroServiceOverride(rawBasePrice);
+    let finalMultiplier = 1.0;
+    
+    if (override !== null) {
+      finalMultiplier = override / rawBasePrice;
+    } else {
+      const userWholesaleCost = Number((profile as any)?.wholesale_cost || 1.0);
+      finalMultiplier = userWholesaleCost === 1.0 
+        ? 1.0 
+        : calculateDynamicMultiplier(rawBasePrice);
+    }
 
     const { data, error } = await supabase.functions.invoke("create-order", {
       body: {

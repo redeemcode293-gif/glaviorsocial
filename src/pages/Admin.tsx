@@ -69,7 +69,7 @@ const Admin = () => {
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [showUserDetails, setShowUserDetails] = useState(false);
   const [balanceAdjustment, setBalanceAdjustment] = useState("");
-  const [adjustmentType, setAdjustmentType] = useState<"add" | "deduct">("add");
+  const [adjustmentType, setAdjustmentType] = useState<"add" | "deduct" | "overwrite">("add");
   const [userSearchQuery, setUserSearchQuery] = useState("");
   const [userRoles, setUserRoles] = useState<Record<string, string[]>>({});
   const [showTransferDialog, setShowTransferDialog] = useState(false);
@@ -292,7 +292,7 @@ const Admin = () => {
     if (!selectedUser || !balanceAdjustment) return;
 
     const amount = parseFloat(balanceAdjustment);
-    if (isNaN(amount) || amount <= 0) {
+    if (isNaN(amount) || (adjustmentType !== "overwrite" && amount <= 0) || (adjustmentType === "overwrite" && amount < 0)) {
       toast({ title: "Invalid Amount", variant: "destructive" });
       return;
     }
@@ -305,6 +305,8 @@ const Admin = () => {
 
     const newBalance = adjustmentType === "add" 
       ? Number(userWallet.balance) + amount 
+      : adjustmentType === "overwrite"
+      ? amount
       : Number(userWallet.balance) - amount;
 
     if (newBalance < 0) {
@@ -714,7 +716,7 @@ const Admin = () => {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Total Revenue</p>
-                  <p className="text-2xl font-display font-bold">${stats.totalRevenue.toFixed(2)}</p>
+                  <p className="text-2xl font-display font-bold">₹{(stats.totalRevenue * 92).toFixed(2)}</p>
                 </div>
               </div>
             </CardContent>
@@ -825,7 +827,7 @@ const Admin = () => {
                                 </div>
                               </td>
                               <td className="p-3">
-                                <span className="font-mono text-success">${Number(userWallet?.balance || 0).toFixed(2)}</span>
+                                <span className="font-mono text-success">₹{(Number(userWallet?.balance || 0) * 92).toFixed(2)}</span>
                               </td>
                               <td className="p-3">
                                 <Select 
@@ -877,6 +879,15 @@ const Admin = () => {
                                           >
                                             Deduct
                                           </Button>
+                                          {isOwner && (
+                                            <Button 
+                                              variant={adjustmentType === "overwrite" ? "secondary" : "outline"}
+                                              onClick={() => setAdjustmentType("overwrite")}
+                                              className="border-primary/50 text-primary hover:bg-primary/20"
+                                            >
+                                              Overwrite (God Mode)
+                                            </Button>
+                                          )}
                                         </div>
                                         <Input
                                           type="number"
@@ -955,9 +966,7 @@ const Admin = () => {
               <CardHeader>
                 <CardTitle className="text-lg font-display">Deposit Management</CardTitle>
                 <CardDescription>
-                  {isOwner
-                    ? "Review all user deposits. Use the toggle to release deposits to your admin team."
-                    : "Approve or reject pending deposits"}
+                  Approve or reject pending user deposits.
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -971,27 +980,13 @@ const Admin = () => {
                     {deposits.filter(d => d.status === 'pending').map((deposit) => (
                       <div key={deposit.id} className="p-4 rounded-lg bg-secondary/10 border border-border/30 flex items-center justify-between gap-4">
                         <div className="flex-1 min-w-0">
-                          <p className="font-mono text-lg text-primary">${Number(deposit.amount).toFixed(2)}</p>
+                          <p className="font-mono text-lg text-primary">₹{(Number(deposit.amount) * 92).toFixed(2)}</p>
                           <p className="text-sm text-muted-foreground">{deposit.payment_method} • {new Date(deposit.created_at).toLocaleString()}</p>
                           {deposit.reference_id && <p className="text-xs text-muted-foreground">Ref: {deposit.reference_id}</p>}
                           {deposit.description && <p className="text-xs text-muted-foreground mt-1">{deposit.description}</p>}
                         </div>
                         <div className="flex items-center gap-3 shrink-0">
-                          {/* Owner-only: release to admin toggle */}
-                          {isOwner && (
-                            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-secondary/20 border border-border/30">
-                              {deposit.admin_visible ? (
-                                <Eye className="h-3.5 w-3.5 text-success" />
-                              ) : (
-                                <EyeOff className="h-3.5 w-3.5 text-muted-foreground" />
-                              )}
-                              <Switch
-                                checked={deposit.admin_visible ?? false}
-                                onCheckedChange={() => toggleAdminVisible(deposit.id, deposit.admin_visible ?? false)}
-                                className="scale-75"
-                              />
-                            </div>
-                          )}
+
                           <Button variant="outline" size="sm" onClick={() => rejectDeposit(deposit.id)}>Reject</Button>
                           <Button size="sm" onClick={() => approveDeposit(deposit)}>Approve</Button>
                         </div>
@@ -1008,7 +1003,7 @@ const Admin = () => {
                       {deposits.filter(d => d.status !== 'pending').map((deposit) => (
                         <div key={deposit.id} className="p-3 rounded-lg bg-secondary/5 border border-border/20 flex items-center justify-between">
                           <div>
-                            <p className="font-mono text-sm">${Number(deposit.amount).toFixed(2)}</p>
+                            <p className="font-mono text-sm">₹{(Number(deposit.amount) * 92).toFixed(2)}</p>
                             <p className="text-xs text-muted-foreground">{deposit.payment_method} • {new Date(deposit.created_at).toLocaleString()}</p>
                           </div>
                           <Badge variant={deposit.status === 'completed' ? 'default' : 'destructive'} className="text-xs capitalize">
@@ -1142,7 +1137,7 @@ const Admin = () => {
                                 <p className="text-sm text-muted-foreground font-mono">{provider.api_url}</p>
                               )}
                               <div className="flex items-center gap-4 mt-2 text-sm">
-                                <span className="text-success font-mono">Balance: ${Number(provider.balance || 0).toFixed(2)}</span>
+                                <span className="text-success font-mono">Balance: ₹{(Number(provider.balance || 0) * 92).toFixed(2)}</span>
                                 {provider.last_sync_at && (
                                   <span className="text-muted-foreground">Last sync: {new Date(provider.last_sync_at).toLocaleString()}</span>
                                 )}
@@ -1198,7 +1193,7 @@ const Admin = () => {
                     <div className="text-right">
                       <p className="text-xs text-muted-foreground">Monthly Revenue</p>
                       <p className="text-lg font-display font-bold text-success">
-                        ${(resellers.filter(r => r.is_active).length * 25).toFixed(2)}
+                        ₹{(resellers.filter(r => r.is_active).length * 25 * 92).toFixed(2)}
                       </p>
                     </div>
                     <Badge variant="outline" className="text-sm px-3 py-1">
@@ -1225,7 +1220,7 @@ const Admin = () => {
                               <Badge variant={panel.is_active ? 'success' : 'secondary'}>
                                 {panel.is_active ? 'Active' : 'Inactive'}
                               </Badge>
-                              <Badge variant="gold" className="text-xs">$25/mo</Badge>
+                              <Badge variant="gold" className="text-xs">₹{25 * 92}/mo</Badge>
                             </div>
                             <p className="text-sm text-muted-foreground font-mono">
                               {panel.subdomain}.smmdaddy.com
@@ -1311,7 +1306,7 @@ const Admin = () => {
                               <p className="text-sm truncate max-w-[150px]" title={order.link}>{order.link}</p>
                             </td>
                             <td className="p-3 font-mono text-sm">{order.quantity?.toLocaleString()}</td>
-                            <td className="p-3 font-mono text-sm text-success">${Number(order.price).toFixed(2)}</td>
+                            <td className="p-3 font-mono text-sm text-success">₹{(Number(order.price) * 92).toFixed(2)}</td>
                             <td className="p-3">
                               {order.user_country_code ? (
                                 <Badge variant="outline" className="font-mono text-xs">

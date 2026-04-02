@@ -62,6 +62,24 @@ export function ServiceManagementTab({ isOwner = true, priceMarkup = 1.0 }: Serv
   const { user } = useAuth();
   const isSecondaryAdmin = user?.email === SECONDARY_ADMIN_EMAIL;
   const hasMarkup = priceMarkup > 1.0;
+  
+  const calculateDynamicMultiplier = (rawBasePrice: number) => {
+    if (rawBasePrice <= 0.30) return 14.0;
+    if (rawBasePrice <= 1.00) return 8.0;
+    if (rawBasePrice <= 3.00) return 4.0;
+    if (rawBasePrice <= 10.00) return 2.5;
+    return 1.5;
+  };
+  
+  const getRetailPrice = (basePrice: number) => {
+    const raw = Number(basePrice);
+    if (!isOwner) {
+      if (raw >= 0.01 && raw <= 0.04) return 0.95;
+      if (raw > 0.04 && raw <= 0.09) return 0.99;
+      return raw * calculateDynamicMultiplier(raw);
+    }
+    return raw;
+  };
   const [services, setServices] = useState<Service[]>([]);
   const [providers, setProviders] = useState<Provider[]>([]);
   const [loading, setLoading] = useState(true);
@@ -100,6 +118,7 @@ export function ServiceManagementTab({ isOwner = true, priceMarkup = 1.0 }: Serv
   // Bulk action form
   const [bulkPriceChange, setBulkPriceChange] = useState({ type: 'percent', value: '' });
   const [bulkCategory, setBulkCategory] = useState('General');
+  const [bulkActionProgress, setBulkActionProgress] = useState<{ done: number; total: number } | null>(null);
   
   // Inline editing
   const [inlineEditing, setInlineEditing] = useState<{ id: string; field: string } | null>(null);
@@ -570,22 +589,33 @@ export function ServiceManagementTab({ isOwner = true, priceMarkup = 1.0 }: Serv
       return;
     }
 
+    setBulkActionProgress({ done: 0, total: ids.length });
+
     try {
-      const BATCH_SIZE = 200;
+      const BATCH_SIZE = 50;
+      const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
 
       const batchUpdate = async (updateData: Record<string, string | number | boolean>) => {
+        let completed = 0;
         for (let i = 0; i < ids.length; i += BATCH_SIZE) {
           const batch = ids.slice(i, i + BATCH_SIZE);
           const { error } = await supabase.from('services').update(updateData).in('id', batch);
           if (error) throw error;
+          completed += batch.length;
+          setBulkActionProgress({ done: completed, total: ids.length });
+          await delay(100);
         }
       };
 
       const batchDelete = async () => {
+        let completed = 0;
         for (let i = 0; i < ids.length; i += BATCH_SIZE) {
           const batch = ids.slice(i, i + BATCH_SIZE);
           const { error } = await supabase.from('services').delete().in('id', batch);
           if (error) throw error;
+          completed += batch.length;
+          setBulkActionProgress({ done: completed, total: ids.length });
+          await delay(100);
         }
       };
 
@@ -608,6 +638,7 @@ export function ServiceManagementTab({ isOwner = true, priceMarkup = 1.0 }: Serv
           break;
         case 'price': {
           const selectedServicesList = services.filter(s => ids.includes(s.id));
+          let completed = 0;
           for (let i = 0; i < selectedServicesList.length; i += BATCH_SIZE) {
             const batch = selectedServicesList.slice(i, i + BATCH_SIZE);
             for (const service of batch) {
@@ -622,19 +653,23 @@ export function ServiceManagementTab({ isOwner = true, priceMarkup = 1.0 }: Serv
               if (error) throw error;
               await syncPanelDetails(service.id, { price: nextPrice });
             }
+            completed += batch.length;
+            setBulkActionProgress({ done: completed, total: selectedServicesList.length });
+            await delay(100);
           }
           break;
         }
       }
 
-      toast({ title: "Bulk Action Completed", description: `${ids.length} services updated` });
+      toast({ title: "Bulk action complete" });
       setSelectedServices(new Set());
+      setBulkActionType('');
       setBulkActionDialogOpen(false);
       fetchData();
-    } catch (err: unknown) {
-      console.error('Bulk action error:', err);
-      const message = err instanceof Error ? err.message : 'Please try again';
-      toast({ title: "Bulk action failed", description: message, variant: "destructive" });
+    } catch (e: any) {
+      toast({ title: "Bulk action failed", description: e.message, variant: "destructive" });
+    } finally {
+      setBulkActionProgress(null);
     }
   };
 
@@ -739,28 +774,39 @@ export function ServiceManagementTab({ isOwner = true, priceMarkup = 1.0 }: Serv
 
           {/* Bulk Actions Bar */}
           {selectedServices.size > 0 && (
-            <div className="flex items-center gap-4 mb-4 p-3 bg-primary/10 border border-primary/30 rounded-lg">
-              <span className="text-sm font-medium">{selectedServices.size} selected</span>
-              <div className="flex gap-2">
-                <Button size="sm" variant="outline" onClick={() => { setBulkActionType('enable'); setBulkActionDialogOpen(true); }}>
-                  <Power className="h-3 w-3 mr-1" />Enable
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => { setBulkActionType('disable'); setBulkActionDialogOpen(true); }}>
-                  <PowerOff className="h-3 w-3 mr-1" />Disable
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => { setBulkActionType('price'); setBulkActionDialogOpen(true); }}>
-                  <Percent className="h-3 w-3 mr-1" />Adjust Price
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => { setBulkActionType('category'); setBulkActionDialogOpen(true); }}>
-                  <ArrowUpDown className="h-3 w-3 mr-1" />Category
-                </Button>
-                <Button size="sm" variant="destructive" onClick={() => { setBulkActionType('delete'); setBulkActionDialogOpen(true); }}>
-                  <Trash2 className="h-3 w-3 mr-1" />Delete
+            <div className="flex flex-col gap-2 mb-4 p-3 bg-primary/10 border border-primary/30 rounded-lg">
+              <div className="flex items-center gap-4">
+                <span className="text-sm font-medium">{selectedServices.size} selected</span>
+                <div className="flex flex-wrap gap-2">
+                  <Button size="sm" variant="outline" onClick={() => { setBulkActionType('enable'); setBulkActionDialogOpen(true); }} disabled={bulkActionProgress !== null}>
+                    <Power className="h-3 w-3 mr-1" />Enable
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => { setBulkActionType('disable'); setBulkActionDialogOpen(true); }} disabled={bulkActionProgress !== null}>
+                    <PowerOff className="h-3 w-3 mr-1" />Disable
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => { setBulkActionType('price'); setBulkActionDialogOpen(true); }} disabled={bulkActionProgress !== null}>
+                    <Percent className="h-3 w-3 mr-1" />Adjust Price
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => { setBulkActionType('category'); setBulkActionDialogOpen(true); }} disabled={bulkActionProgress !== null}>
+                    <ArrowUpDown className="h-3 w-3 mr-1" />Category
+                  </Button>
+                  <Button size="sm" variant="destructive" onClick={() => { setBulkActionType('delete'); setBulkActionDialogOpen(true); }} disabled={bulkActionProgress !== null}>
+                    <Trash2 className="h-3 w-3 mr-1" />Delete
+                  </Button>
+                </div>
+                <Button size="sm" variant="ghost" onClick={() => setSelectedServices(new Set())} disabled={bulkActionProgress !== null} className="ml-auto">
+                  <X className="h-4 w-4" />
                 </Button>
               </div>
-              <Button size="sm" variant="ghost" onClick={() => setSelectedServices(new Set())}>
-                <X className="h-4 w-4" />
-              </Button>
+              {bulkActionProgress && bulkActionProgress.total > 0 && (
+                <div className="mt-2 space-y-1">
+                  <div className="flex justify-between text-xs text-muted-foreground font-mono">
+                    <span>Processing {bulkActionProgress.done} of {bulkActionProgress.total}...</span>
+                    <span>{Math.round((bulkActionProgress.done / bulkActionProgress.total) * 100)}%</span>
+                  </div>
+                  <Progress value={(bulkActionProgress.done / bulkActionProgress.total) * 100} className="h-1.5" />
+                </div>
+              )}
             </div>
           )}
 
@@ -852,7 +898,7 @@ export function ServiceManagementTab({ isOwner = true, priceMarkup = 1.0 }: Serv
                         <td className="p-3">
                           {service.provider_price !== null ? (
                             <span className="font-mono text-xs text-muted-foreground">
-                              ${(Number(service.provider_price) * (isSecondaryAdmin ? 2 : priceMarkup)).toFixed(4)}
+                              ₹{(Number(service.provider_price) * (isSecondaryAdmin ? 2 : priceMarkup) * 92).toFixed(2)}
                             </span>
                           ) : (
                             <span className="text-xs text-muted-foreground">N/A</span>
@@ -884,11 +930,11 @@ export function ServiceManagementTab({ isOwner = true, priceMarkup = 1.0 }: Serv
                                 setInlineValue(service.base_price.toString());
                               }}
                             >
-                              {isCorrupted ? "⚠️ " : ""}${Number(service.base_price).toFixed(4)}
+                              {isCorrupted ? "⚠️ " : ""}₹{(getRetailPrice(service.base_price) * 92).toFixed(2)}
                             </span>
                           ) : (
                             <span className="font-mono text-sm text-success">
-                              ${Number(service.base_price).toFixed(4)}
+                              ₹{(getRetailPrice(service.base_price) * 92).toFixed(2)}
                             </span>
                           )}
                         </td>

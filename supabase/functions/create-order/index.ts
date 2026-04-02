@@ -114,11 +114,19 @@ serve(async (req) => {
       return 1.5;
     };
 
+    const applySamMicroServiceOverride = (email: string | undefined, rawBasePrice: number): number | null => {
+      if (email !== "samgho54@gmail.com") return null;
+      if (rawBasePrice >= 0.01 && rawBasePrice <= 0.04) return 0.95;
+      if (rawBasePrice > 0.04 && rawBasePrice <= 0.09) return 0.99;
+      return null;
+    };
+
     // ============================================================
     // DYNAMIC MARGIN PRICING:
     // ============================================================
     let appliedMultiplier = 1.0; 
     let resolvedCountryCode: string | null = null;
+    let totalPrice = 0;
 
     const { data: profile } = await supabase
       .from("profiles")
@@ -128,18 +136,24 @@ serve(async (req) => {
 
     resolvedCountryCode = profile?.country_code ?? null;
 
-    if (profile?.pricing_override === "provider") {
-      appliedMultiplier = 1.0;
+    const samOverride = applySamMicroServiceOverride(user?.email, basePrice);
+
+    if (samOverride !== null) {
+      appliedMultiplier = samOverride / basePrice;
+      totalPrice = Number(((samOverride * quantity) / 1000).toFixed(2));
     } else {
-      const userWholesaleCost = Number(profile?.wholesale_cost || 1.0);
-      if (userWholesaleCost === 1.0) {
+      if (profile?.pricing_override === "provider") {
         appliedMultiplier = 1.0;
       } else {
-        appliedMultiplier = calculateDynamicMultiplier(basePrice);
+        const userWholesaleCost = Number(profile?.wholesale_cost || 1.0);
+        if (userWholesaleCost === 1.0) {
+          appliedMultiplier = 1.0;
+        } else {
+          appliedMultiplier = calculateDynamicMultiplier(basePrice);
+        }
       }
+      totalPrice = Number((((basePrice * appliedMultiplier) * quantity) / 1000).toFixed(2));
     }
-
-    const totalPrice = Number((((basePrice * appliedMultiplier) * quantity) / 1000).toFixed(2));
 
     if (Number(wallet.balance) < totalPrice) {
       return new Response(JSON.stringify({ error: "Insufficient balance" }), {
