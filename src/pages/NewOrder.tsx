@@ -70,8 +70,14 @@ const NewOrder = () => {
   const { t, formatPrice } = useLocalization();
   
   const { loading: loadingPricing, countryCode } = useRegionalPricing();
-  // 2.0x MULTIPLIER RESTORED
-  const priceMultiplier = 2.0; 
+
+  const calculateDynamicMargin = (baseCost: number) => {
+    if (baseCost <= 0.50) return 12.0;
+    if (baseCost <= 5.00) return 5.0;
+    if (baseCost <= 20.00) return 3.0;
+    if (baseCost <= 100.00) return 2.0;
+    return 1.5;
+  };
 
   useEffect(() => {
     void fetchServices();
@@ -203,7 +209,11 @@ const NewOrder = () => {
     return groups;
   }, [filteredServices, selectedCategory]);
 
-  const calculateDisplayPrice = (basePrice: number) => Number(basePrice) * priceMultiplier;
+  const calculateDisplayPrice = (basePrice: number) => {
+    const userBaseCostMultiplier = Number((profile as any)?.wholesale_cost || 1.0);
+    const baseCost = Number(basePrice) * userBaseCostMultiplier;
+    return baseCost * calculateDynamicMargin(baseCost);
+  };
 
   const calculateTotal = (service = selectedService, qtyValue = quantity) => {
     if (!service || !qtyValue) return 0;
@@ -222,6 +232,10 @@ const NewOrder = () => {
   };
 
   const createOrder = async (service: ServiceDisplay, orderLink: string, qty: number) => {
+    const userBaseCostMultiplier = Number((profile as any)?.wholesale_cost || 1.0);
+    const baseCost = Number(service.price) * userBaseCostMultiplier;
+    const finalMultiplier = userBaseCostMultiplier * calculateDynamicMargin(baseCost);
+
     const { data, error } = await supabase.functions.invoke("create-order", {
       body: {
         serviceId: service.provider_service_uuid || service.id,
@@ -231,7 +245,7 @@ const NewOrder = () => {
         dripfeedRuns: dripFeed ? parseInt(dripFeedRuns || "0", 10) || null : null,
         dripfeedInterval: dripFeed ? parseInt(dripFeedInterval || "0", 10) || null : null,
         autoRefill,
-        appliedMultiplier: priceMultiplier,
+        appliedMultiplier: finalMultiplier,
         userCountryCode: countryCode || profile?.country_code || null,
       },
     });

@@ -106,31 +106,34 @@ serve(async (req) => {
 
     const basePrice = Number(servicePriceRow?.price ?? service.base_price ?? 0);
 
+    const calculateDynamicMargin = (baseCost: number) => {
+      if (baseCost <= 0.50) return 12.0;
+      if (baseCost <= 5.00) return 5.0;
+      if (baseCost <= 20.00) return 3.0;
+      if (baseCost <= 100.00) return 2.0;
+      return 1.5;
+    };
+
     // ============================================================
-    // THE 2.0x PROFIT LOCK:
+    // DYNAMIC MARGIN PRICING:
     // ============================================================
-    let appliedMultiplier = 2.0; 
+    let appliedMultiplier = 1.0; 
     let resolvedCountryCode: string | null = null;
 
     const { data: profile } = await supabase
       .from("profiles")
-      .select("country_code, pricing_override")
+      .select("country_code, pricing_override, wholesale_cost")
       .eq("user_id", user.id)
       .maybeSingle();
 
+    resolvedCountryCode = profile?.country_code ?? null;
+
     if (profile?.pricing_override === "provider") {
       appliedMultiplier = 1.0;
-      resolvedCountryCode = profile.country_code ?? null;
-    } else if (profile?.country_code) {
-      resolvedCountryCode = profile.country_code;
-      const { data: pricing } = await supabase
-        .from("regional_pricing")
-        .select("multiplier")
-        .contains("countries", [profile.country_code])
-        .maybeSingle();
-      appliedMultiplier = Number(pricing?.multiplier ?? 2.0);
     } else {
-      appliedMultiplier = 2.0;
+      const userBaseCostMultiplier = Number(profile?.wholesale_cost || 1.0);
+      const baseCost = basePrice * userBaseCostMultiplier;
+      appliedMultiplier = userBaseCostMultiplier * calculateDynamicMargin(baseCost);
     }
 
     const totalPrice = Number((((basePrice * appliedMultiplier) * quantity) / 1000).toFixed(2));
